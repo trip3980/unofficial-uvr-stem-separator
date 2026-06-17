@@ -1,0 +1,149 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* MATRIX THEME ALIASES */
+  --color-cyan-300: var(--color-emerald-300);
+  --color-cyan-400: var(--color-emerald-400);
+  --color-cyan-500: var(--color-emerald-500);
+  --color-cyan-600: var(--color-emerald-600);
+  --color-blue-300: var(--color-green-300);
+  --color-blue-400: var(--color-green-400);
+  --color-blue-500: var(--color-green-500);
+  --color-blue-600: var(--color-green-600);
+  --color-purple-300: var(--color-emerald-300);
+  --color-purple-400: var(--color-emerald-400);
+  --color-purple-500: var(--color-emerald-500);
+  --color-indigo-300: var(--color-green-300);
+  --color-indigo-400: var(--color-green-400);
+  --color-indigo-500: var(--color-green-500);
+
+  /* Matrix Dark Mode Overrides */
+  --color-glass-bg: rgba(0, 255, 0, 0.02);
+  --color-glass-bg-hover: rgba(0, 255, 0, 0.05);
+  --color-glass-border: rgba(0, 255, 0, 0.1);
+  --color-glass-border-focus: rgba(16, 185, 129, 0.4);
+  --color-glass-accent: rgba(16, 185, 129, 0.25);
+  --color-glass-card: rgba(0, 5, 2, 0.85);
+  --color-glass-card-dense: rgba(0, 2, 0, 0.95);
+
+  --shadow-glass-shadow: 0 8px 32px 0 rgba(0, 255, 0, 0.15);
+  --shadow-glass-inset: inset 0 1px 1px 0 rgba(0, 255, 0, 0.2);
+  --shadow-glass-neon-blue: 0 0 15px rgba(16, 185, 129, 0.35);
+  --shadow-glass-neon-purple: 0 0 15px rgba(16, 185, 129, 0.35);
+  --shadow-glass-neon-emerald: 0 0 15px rgba(52, 211, 153, 0.35);
+}
+
+/* Custom Scrollbars for Frosted Glass Theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.01);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/* Smooth ambient floating animation helper */
+@keyframes float-slow {
+  0% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-15px) scale(1.03);
+  }
+  100% {
+    transform: translateY(0px) scale(1);
+  }
+}
+
+@keyframes float-slower {
+  0% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(15px) scale(0.97);
+  }
+  100% {
+    transform: translateY(0px) scale(1);
+  }
+}
+
+.animate-float-slow {
+  animation: float-slow 12s ease-in-out infinite;
+}
+
+.animate-float-slower {
+  animation: float-slower 16s ease-in-out infinite;
+}
+
+/* Interactive custom styled sliders for glassmorphism */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+input[type="range"]:focus {
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  background: rgba(0, 255, 0, 0.15);
+  height: 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 255, 0, 0.1);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -5px; /* Centers the thumb on the track */
+  background-color: #34d399;
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  border: 2px solid #000;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.6);
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  background-color: #10b981;
+  transform: scale(1.15);
+  box-shadow:
+    0 0 15px rgba(16, 185, 129, 0.8),
+    0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+input[type="range"]::-moz-range-track {
+  background: rgba(0, 255, 0, 0.15);
+  height: 6px;
+  border-radius: 3px;
+}
+
+input[type="range"]::-moz-range-thumb {
+  background-color: #34d399;
+  height: 14px;
+  width: 14px;
+  border-radius: 50%;
+  border: 2px solid #000;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.6);
+  cursor: pointer;
+}
