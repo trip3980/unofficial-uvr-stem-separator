@@ -15,7 +15,7 @@
  *    - Treated as our Web UI Reference (Gradio grids).
  *    - High-velocity proof of web operations; but limited by Gradio rigid layouts.
  * 4. facebookresearch (demucs):
- *    - Treated as our Official Stem-Separation Model Reference.
+ *    - Treated as our Configured Stem-Separation Model Reference.
  *    - Highly intensive memory demands; requires isolated submixes and split chunk protection.
  * 5. ZFTurbo (Music-Source-Separation-Training) & lucidrains (BS-RoFormer):
  *    - Treated as our Modern Model-Expansion Reference.
@@ -94,10 +94,11 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     stemType: "vocals",
     gpuSupport: false, // VR runs extremely fast on standard CPUs
     memoryRisk: "low",
-    downloaded: true,
+    downloaded: false,
     description:
       "Excels at removing backup chants and maintaining transients, but lacks deep multi-stem separation.",
     fileSize: "148 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/VR_Models/5_HP-Karaoke-UVR.pth"
   },
   {
     id: "vr_8_hp2_vocal",
@@ -111,6 +112,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     description:
       "Excels at filtering mid-frequency instruments, but lacks precision for extreme vocal artifact suppression.",
     fileSize: "290 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/VR_Models/8_HP2-UVR.pth"
   },
   {
     id: "vr_1_hp",
@@ -123,6 +125,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     downloaded: false,
     description: "Excels at standard instrumental extraction, but lacks fine artifact control on complex tracks.",
     fileSize: "145 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/VR_Models/1_HP-UVR.pth"
   },
   {
     id: "vr_2_hp",
@@ -135,6 +138,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     downloaded: false,
     description: "Excels at heavy-duty instrumental extraction, but lacks vocal preservation, often bleeding frequencies.",
     fileSize: "145 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/VR_Models/2_HP-UVR.pth"
   },
   {
     id: "vr_uvr_de_echo_normal",
@@ -147,6 +151,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     downloaded: false,
     description: "Excels at removing echo/reverb from vocals, but lacks capability for heavy instrument separation.",
     fileSize: "155 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/VR_Models/UVR-De-Echo-Normal.pth"
   },
   {
     id: "vr_uvr_denoise",
@@ -159,6 +164,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     downloaded: false,
     description: "Excels at denoising artifact removal, but lacks primary vocal separation capability.",
     fileSize: "150 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/VR_Models/UVR-DeNoise.pth"
   },
   // MDX-Net Models
   {
@@ -169,10 +175,11 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     stemType: "vocals",
     gpuSupport: true,
     memoryRisk: "med",
-    downloaded: true,
+    downloaded: false,
     description:
       "Excels at superb vocal isolation with minimal bleeding, but lacks support for multi-stem instrument outputs.",
     fileSize: "310 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/MDX_Net_Models/Kim_Vocal_2.onnx"
   },
   {
     id: "uvr_mdx_net_kara",
@@ -186,6 +193,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     description:
       "Excels at removing extreme reverb for karaoke, but lacks dedicated bass and drum separation.",
     fileSize: "280 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/MDX_Net_Models/UVR_MDX_NET_KARA.onnx"
   },
   {
     id: "uvr_mdx_net_main",
@@ -198,6 +206,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     downloaded: false,
     description: "Excels as a solid main all-around separator, but lacks the extreme detail of specialized models.",
     fileSize: "284 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/MDX_Net_Models/UVR_MDXNET_Main.onnx"
   },
   {
     id: "uvr_mdx_net_inst_hq_1",
@@ -210,6 +219,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     downloaded: false,
     description: "Excels at extracting high-quality instrumentals, but lacks focus on vocal clarity.",
     fileSize: "320 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/MDX_Net_Models/UVR-MDX-NET-Inst_HQ_1.onnx"
   },
   {
     id: "mdx_reverb_hq",
@@ -222,6 +232,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     downloaded: false,
     description: "Excels at reverb removal (FoxJoy tuning), but lacks multi-stem bass and drum tracking.",
     fileSize: "290 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/MDX_Net_Models/Reverb_HQ_By_FoxJoy.onnx"
   },
   {
     id: "mdx_kuielab_a_vocal",
@@ -234,6 +245,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     downloaded: false,
     description: "Excels at accurate vocal separation for pop genres, but lacks stability on low-quality MP3s.",
     fileSize: "330 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/MDX_Net_Models/Kuielab_a_vocals.onnx"
   },
   // Demucs Models
   {
@@ -244,10 +256,11 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     stemType: "4stem",
     gpuSupport: true,
     memoryRisk: "high", // Requires safe OOM boundaries!
-    downloaded: true,
+    downloaded: false,
     description:
       "Excels at resolving clean 4-stems (drums/bass/vocals/other), but lacks efficiency, demanding high GPU RAM.",
     fileSize: "680 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/Demucs_Models/htdemucs_v4.pt"
   },
   {
     id: "mdx_extra_q_demucs",
@@ -261,6 +274,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     description:
       "Excels at high-fidelity bass and sub-frequency separation, but lacks speed due to large quantized sizes.",
     fileSize: "820 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/Demucs_Models/mdx_extra_q.pt"
   },
   {
     id: "htdemucs_6s_pt",
@@ -273,6 +287,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     downloaded: false,
     description: "Excels at 6-stem separation (incl. piano/guitar), but lacks low-memory compatibility.",
     fileSize: "750 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/Demucs_Models/htdemucs_6s.pt"
   },
   {
     id: "hdemucs_mmi",
@@ -285,6 +300,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     downloaded: false,
     description: "Excels at optimizing instrument integrity, but lacks the aggressive vocal isolation of MDX-Net.",
     fileSize: "860 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/Demucs_Models/hdemucs_mmi.pt"
   },
   // RoFormer Models
   {
@@ -295,10 +311,11 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     stemType: "vocals",
     gpuSupport: true,
     memoryRisk: "high",
-    downloaded: true,
+    downloaded: false,
     description:
       "Excels at removing heavy autotune artifacts, but lacks general instrumental multi-stem capability.",
     fileSize: "450 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/RoFormer_Models/mel_band_roformer_karaoke_sg.onnx"
   },
   {
     id: "bs_roformer_vocal_hq",
@@ -312,6 +329,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     description:
       "Excels at solo dry acapellas on high-res audio, but lacks tolerance for low-res or distorted inputs.",
     fileSize: "512 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/RoFormer_Models/bs_roformer_vocal_by_vocal_remover.onnx"
   },
   {
     id: "bs_roformer_ep_317",
@@ -324,6 +342,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     downloaded: false,
     description: "Excels at high SDR validation score separation, but lacks low-end system compatibility.",
     fileSize: "490 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/RoFormer_Models/bs_roformer_ep_317_sdr_12.9755.ckpt"
   },
   {
     id: "viperx_roformer",
@@ -336,6 +355,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     downloaded: false,
     description: "Excels at custom targeted drum separation, but lacks vocal isolation features.",
     fileSize: "505 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/RoFormer_Models/viperx_roformer.ckpt"
   },
   {
     id: "mel_band_roformer_srd_11_43",
@@ -348,6 +368,96 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     downloaded: false,
     description: "Excels at cutting-edge Mel-Band vocal isolation, but lacks fast processing speeds.",
     fileSize: "460 MB",
+    downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/RoFormer_Models/mel_band_roformer_ep_3005_sdr_11.4360.ckpt"
+  },
+  {
+    id: "manual_only_vr_model",
+    name: "Manual_Import_Acapella.pth",
+    architecture: "VR",
+    filePath: "models/VR/Manual_Import_Acapella.pth",
+    stemType: "vocals",
+    gpuSupport: false,
+    memoryRisk: "low",
+    downloaded: false,
+    description: "Specialized Vocals fine-tuning. Private weights - manual physical import required.",
+    fileSize: "148 MB",
+    sourceType: "manual_import",
+    requiredBackend: "python-pytorch",
+    supportedExtensions: [".pth"],
+    verifiedStatus: "unverified"
+  },
+  {
+    id: "unknown_source_roformer",
+    name: "Unknown_RoFormer_v2.ckpt",
+    architecture: "RoFormer",
+    filePath: "models/RoFormer/Unknown_RoFormer_v2.ckpt",
+    stemType: "variable",
+    gpuSupport: true,
+    memoryRisk: "high",
+    downloaded: false,
+    description: "Experimental community checkpoint. Source URL is unregistered or lost.",
+    fileSize: "500 MB",
+    sourceType: "unknown",
+    requiredBackend: "python-pytorch",
+    supportedExtensions: [".ckpt", ".onnx"],
+    verifiedStatus: "unverified"
+  },
+  {
+    id: "github_release_mdxc",
+    name: "MDXC_V1_Drums.onnx",
+    architecture: "MDXC",
+    filePath: "models/MDXC/MDXC_V1_Drums.onnx",
+    stemType: "variable",
+    gpuSupport: true,
+    memoryRisk: "high",
+    downloaded: false,
+    description: "High-integrity drum/percussion extractor from configured GitHub Releases repository.",
+    fileSize: "380 MB",
+    downloadUrl: "https://github.com/Anjok07/ultimatevocalremovergui/releases/download/v5.6/MDXC_V1_Drums.onnx",
+    sourceUrl: "https://github.com/Anjok07/ultimatevocalremovergui/releases/download/v5.6/MDXC_V1_Drums.onnx",
+    sourceType: "github_release",
+    checksum: "sha256_bd54cf94812aefcc8386121a",
+    requiredBackend: "onnxruntime",
+    supportedExtensions: [".onnx"],
+    verifiedStatus: "unverified"
+  },
+  {
+    id: "github_raw_demucs_config",
+    name: "demucs_custom_routing.yaml",
+    architecture: "Demucs",
+    filePath: "models/Demucs/demucs_custom_routing.yaml",
+    stemType: "4stem",
+    gpuSupport: true,
+    memoryRisk: "med",
+    downloaded: false,
+    description: "Custom Routing YAML configuration from raw GitHub repository.",
+    fileSize: "4 KB",
+    downloadUrl: "https://raw.githubusercontent.com/facebookresearch/demucs/main/demucs/remote/demucs_custom_routing.yaml",
+    sourceUrl: "https://raw.githubusercontent.com/facebookresearch/demucs/main/demucs/remote/demucs_custom_routing.yaml",
+    sourceType: "github_raw",
+    checksum: "sha256_ab422f16ee0a1",
+    requiredBackend: "python-pytorch",
+    supportedExtensions: [".yaml"],
+    verifiedStatus: "unverified"
+  },
+  {
+    id: "hf_space_demucs_mmi",
+    name: "hdemucs_mmi_space.pt",
+    architecture: "Demucs",
+    filePath: "models/Demucs/hdemucs_mmi_space.pt",
+    stemType: "4stem",
+    gpuSupport: true,
+    memoryRisk: "high",
+    downloaded: false,
+    description: "Demucs fine-tuned weights pulled from Hugging Face Space persistent storage assets.",
+    fileSize: "860 MB",
+    downloadUrl: "https://huggingface.co/spaces/MusicSeparation/DemucsUVR/resolve/main/models/hdemucs_mmi.pt",
+    sourceUrl: "https://huggingface.co/spaces/MusicSeparation/DemucsUVR/resolve/main/models/hdemucs_mmi.pt",
+    sourceType: "hugging_face_space",
+    checksum: "sha256_9a4fe3bfa821c9987fac",
+    requiredBackend: "python-pytorch",
+    supportedExtensions: [".pt"],
+    verifiedStatus: "unverified"
   },
   // Ensemble Presets
   {
@@ -382,6 +492,71 @@ export function addModelToRegistry(model: ModelRegistryEntry) {
   MODEL_REGISTRY.push(model);
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("modelRegistryChanged"));
+  }
+}
+
+export async function initializeModelRegistry() {
+  const uvr = typeof window !== "undefined" && (window as any).uvr;
+  if (uvr) {
+    let localFilesList: any[] = [];
+    if (typeof uvr.listLocalModelsCustom === "function") {
+      try {
+        localFilesList = await uvr.listLocalModelsCustom();
+      } catch (err) {
+        console.error("listLocalModelsCustom error:", err);
+      }
+    }
+
+    const scannedNames = new Set(localFilesList.map(f => `${f.architecture}:${f.name}`));
+
+    for (const model of MODEL_REGISTRY) {
+      if (model.id === "manual_ensemble_preset" || model.id === "ensemble_preset_default" || model.id === "multi_ai_ensemble_preset") {
+        model.downloaded = true;
+        continue;
+      }
+      
+      const key = `${model.architecture}:${model.name}`;
+      if (scannedNames.has(key)) {
+        model.downloaded = true;
+      } else {
+        if (typeof uvr.checkModelFileExists === "function") {
+          try {
+            const res = await uvr.checkModelFileExists(model.architecture, model.name);
+            model.downloaded = res.exists;
+          } catch {
+            model.downloaded = false;
+          }
+        } else {
+          model.downloaded = false;
+        }
+      }
+    }
+
+    // Discover and register untracked local model weights on disk
+    for (const localFile of localFilesList) {
+      const alreadyRegistered = MODEL_REGISTRY.some(
+        m => m.name === localFile.name && m.architecture === localFile.architecture
+      );
+      if (!alreadyRegistered) {
+        const customModel: ModelRegistryEntry = {
+          id: `custom_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          name: localFile.name,
+          architecture: localFile.architecture,
+          filePath: localFile.absolutePath,
+          stemType: "variable",
+          gpuSupport: true,
+          memoryRisk: "med",
+          downloaded: true,
+          description: `Discovered local weight file: ${localFile.name}`,
+          fileSize: localFile.fileSize,
+        };
+        MODEL_REGISTRY.push(customModel);
+      }
+    }
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("modelRegistryChanged"));
+    }
   }
 }
 
@@ -543,7 +718,7 @@ export class AudioSeparatorAdapter implements BackendAdapter {
 
   buildCLICommand(request: ProcessingRequest): string {
     const inputStr = request.inputs.map((i) => `"${i}"`).join(" ");
-    const dev = request.parameters.executionDevice === "cpu" ? "cpu" : "cuda";
+    const dev = request.parameters.executionDevice || "cpu";
 
     let extraArgs = "";
     if (request.model.architecture === "MDX-Net") {

@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('uvr', {
+  isElectron: () => true,
   selectInputFiles: (options) => ipcRenderer.invoke('select-input-files', options),
   selectOutputFolder: () => ipcRenderer.invoke('select-output-folder'),
   openOutputFolder: (folderPath) => ipcRenderer.invoke('open-output-folder', folderPath),
@@ -8,8 +9,19 @@ contextBridge.exposeInMainWorld('uvr', {
   readModelDirectory: (dirPath) => ipcRenderer.invoke('read-model-directory', dirPath),
   startProcessing: (config) => ipcRenderer.invoke('start-processing', config),
   cancelProcessing: () => ipcRenderer.invoke('cancel-processing'),
+  haltProcessing: () => ipcRenderer.invoke('cancel-processing'),
   
-  // Future hook for backend updates (Python/FFmpeg to React)
+  // Real Local Model Manager APIs (Task 1 & 4)
+  getModelLibraryPath: () => ipcRenderer.invoke('get-model-library-path'),
+  listLocalModelsCustom: () => ipcRenderer.invoke('list-local-models-custom'),
+  checkModelFileExists: (architecture, fileName) => ipcRenderer.invoke('check-model-file-exists', architecture, fileName),
+  importModelFile: (architecture) => ipcRenderer.invoke('import-model-file', architecture),
+  downloadModel: (modelId, url, architecture, fileName) => ipcRenderer.invoke('download-model', modelId, url, architecture, fileName),
+  checkFFmpegReady: () => ipcRenderer.invoke('check-ffmpeg-ready'),
+  checkBackendDetails: (customPythonPath) => ipcRenderer.invoke('check-backend-details', customPythonPath),
+  selectPythonPath: () => ipcRenderer.invoke('select-python-path'),
+
+  // Listening to real progress logs (Task 3)
   onBackendProgress: (callback) => {
     const handler = (event, update) => callback(update);
     ipcRenderer.on('backend-progress', handler);

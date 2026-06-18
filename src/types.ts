@@ -22,6 +22,16 @@ export interface ModelRegistryEntry {
   downloaded: boolean;
   description: string;
   fileSize: string;
+  downloadUrl?: string;
+  
+  // Model Source Registry metadata
+  sourceType?: "hugging_face_repo" | "hugging_face_space" | "github_release" | "github_raw" | "manual_import" | "unknown";
+  sourceUrl?: string;
+  checksum?: string;
+  requiredBackend?: "python-pytorch" | "onnxruntime" | "audio-separator" | "cpu-dsp";
+  supportedExtensions?: string[];
+  verifiedStatus?: 'verified' | 'unverified' | 'failed' | 'not_checked';
+  updateAvailable?: boolean;
 }
 
 export interface ProcessMethod {
@@ -64,7 +74,7 @@ export interface AppState {
   dropdownSettings: {
     chunks: string;
     noiseReduction: string;
-    executionDevice: "cpu" | "cuda" | "directml";
+    executionDevice: "cpu" | "cuda" | "directml" | "auto" | "mps" | "dml";
     cpuThreads: number;
     segmentSize: string;
   };
@@ -95,10 +105,12 @@ export interface ProcessingRequest {
   format: OutputFormat;
   model: ModelRegistryEntry;
   method: ProcessMethod;
+  userSelectedMode?: "ai" | "ffmpeg";
+  customPythonPath?: string;
   parameters: {
     chunks: string;
     noiseReduction: string;
-    executionDevice: "cpu" | "cuda" | "directml";
+    executionDevice: "cpu" | "cuda" | "directml" | "auto" | "mps" | "dml";
     cpuThreads: number;
     segmentSize: string;
   };
