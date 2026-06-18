@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Cpu, Zap, Layers, Sparkles, AlertCircle, HelpCircle, FileCode, Search, CheckCircle2, XCircle } from "lucide-react";
+import { HelpToggle, HelpText, HelpTooltipIcon, AccessibleTooltipWrapper } from "./HelpSystem";
 
 interface ArchDetail {
   id: string;
@@ -132,19 +133,27 @@ export const ModelCompatibilityWizard: React.FC = () => {
   return (
     <div className="p-4 bg-slate-900/40 border border-slate-800/80 rounded-xl space-y-4 font-sans text-xs text-slate-300">
       {/* Title */}
-      <div className="flex items-center justify-between border-b border-white/5 pb-2.5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5 pb-2.5">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-cyan-400" />
-          <span className="font-bold text-slate-100 uppercase tracking-wide font-mono text-[11px]">Model Compatibility Wizard</span>
+          <span className="font-bold text-slate-100 uppercase tracking-wide font-mono text-[11px]">Backend Hardware Compatibility Database</span>
         </div>
-        <span className="text-[9px] text-[#38bdf8] uppercase font-mono bg-[#001f3f]/50 px-2 py-0.5 rounded border border-cyan-500/20">
-          Interactive Architecture Database
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <HelpToggle sectionId="model_compatibility" label="Show Help" />
+          <span className="text-[9px] text-[#38bdf8] uppercase font-mono bg-[#001f3f]/50 px-2 py-0.5 rounded border border-cyan-500/20">
+            Interactive Architecture Database
+          </span>
+        </div>
       </div>
 
       <p className="text-slate-400 leading-relaxed text-[11px] font-sans">
         UVR models utilize diverse underlying machine-learning framework architectures. Use this matrix to inspect structural hardware acceleration, required packages, and optimal environment configurations.
       </p>
+
+      <HelpText
+        sectionId="model_compatibility"
+        text="Help: This database acts as a reference directory for UVR's underlying machine learning blocks. Select an architecture from the left menu to view verified file format structures, accelerator profiles, known runtime blockers, and command terminal copy shortcuts."
+      />
 
       {/* Modern Search Row */}
       <div className="relative">
@@ -249,39 +258,50 @@ export const ModelCompatibilityWizard: React.FC = () => {
           <div className="space-y-1.5 pt-1">
             <span className="text-slate-500 font-mono uppercase text-[9px] font-bold block tracking-wider">Compatible Hardware Accelerators</span>
             <div className="flex flex-wrap gap-2 pt-0.5">
-              <span className="bg-slate-900/60 text-slate-300 px-2.5 py-1 rounded-md border border-white/5 flex items-center gap-1.5 text-[10px] font-mono">
-                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                CPU (Core)
-              </span>
-              <span className={`px-2.5 py-1 rounded-md border flex items-center gap-1.5 text-[10px] font-mono
-                ${activeArch.cudaSupport 
-                  ? "bg-emerald-950/20 border-emerald-500/20 text-emerald-300" 
-                  : "bg-slate-950/40 border-white/[0.03] text-slate-600"}`}>
-                {activeArch.cudaSupport ? (
+              <AccessibleTooltipWrapper content="Runs separation models on host CPU cores. Universally supported, but speed is slower. Recommended only for basic tests.">
+                <span className="bg-slate-900/60 text-slate-300 px-2.5 py-1 rounded-md border border-white/5 flex items-center gap-1.5 text-[10px] font-mono hover:border-green-500/30 transition-all">
                   <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                ) : (
-                  <XCircle className="w-3 h-3 text-slate-600" />
-                )}
-                NVIDIA CUDA
-              </span>
-              <span className={`px-2.5 py-1 rounded-md border flex items-center gap-1.5 text-[10px] font-mono
-                ${activeArch.mpsSupport 
-                  ? "bg-emerald-950/20 border-emerald-500/20 text-emerald-300" 
-                  : "bg-slate-950/40 border-white/[0.03] text-slate-600"}`}>
-                {activeArch.mpsSupport ? (
-                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                ) : (
-                  <XCircle className="w-3 h-3 text-slate-600" />
-                )}
-                Apple MPS
-              </span>
-              <span className={`px-2.5 py-1 rounded-md border flex items-center gap-1.5 text-[10px] font-mono
-                ${activeArch.dmlSupport === "experimental" 
-                  ? "bg-cyan-950/20 border-cyan-500/20 text-cyan-300" 
-                  : "bg-slate-950/40 border-white/[0.03] text-slate-600"}`}>
-                <CheckCircle2 className={activeArch.dmlSupport === "experimental" ? "w-3 h-3 text-cyan-400" : "w-3 h-3 text-slate-600"} />
-                DirectML Mode {activeArch.dmlSupport === "experimental" && "(Experimental / Delegated / Not locally proven)"}
-              </span>
+                  CPU (Core)
+                </span>
+              </AccessibleTooltipWrapper>
+
+              <AccessibleTooltipWrapper content="GPU Acceleration: Structurally supported, but not locally proven until a CUDA E2E proof run passes.">
+                <span className={`px-2.5 py-1 rounded-md border flex items-center gap-1.5 text-[10px] font-mono hover:border-green-500/30 transition-all
+                  ${activeArch.cudaSupport 
+                    ? "bg-emerald-950/20 border-emerald-500/20 text-emerald-300" 
+                    : "bg-slate-950/40 border-white/[0.03] text-slate-600"}`}>
+                  {activeArch.cudaSupport ? (
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                  ) : (
+                    <XCircle className="w-3 h-3 text-slate-600" />
+                  )}
+                  NVIDIA CUDA
+                </span>
+              </AccessibleTooltipWrapper>
+
+              <AccessibleTooltipWrapper content="GPU Acceleration: Experimental and delegated to host device framework. Not locally proven.">
+                <span className={`px-2.5 py-1 rounded-md border flex items-center gap-1.5 text-[10px] font-mono hover:border-green-500/30 transition-all
+                  ${activeArch.mpsSupport 
+                    ? "bg-emerald-950/20 border-emerald-500/20 text-emerald-300" 
+                    : "bg-slate-950/40 border-white/[0.03] text-slate-600"}`}>
+                  {activeArch.mpsSupport ? (
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                  ) : (
+                    <XCircle className="w-3 h-3 text-slate-600" />
+                  )}
+                  Apple MPS
+                </span>
+              </AccessibleTooltipWrapper>
+
+              <AccessibleTooltipWrapper content="GPU Acceleration: Experimental and delegated to the backend. Not locally proven.">
+                <span className={`px-2.5 py-1 rounded-md border flex items-center gap-1.5 text-[10px] font-mono hover:border-cyan-500/30 transition-all
+                  ${activeArch.dmlSupport === "experimental" 
+                    ? "bg-cyan-950/20 border-cyan-500/20 text-cyan-300" 
+                    : "bg-slate-950/40 border-white/[0.03] text-slate-600"}`}>
+                  <CheckCircle2 className={activeArch.dmlSupport === "experimental" ? "w-3 h-3 text-cyan-400" : "w-3 h-3 text-slate-600"} />
+                  DirectML Mode {activeArch.dmlSupport === "experimental" && "(Experimental / Delegated / Not locally proven)"}
+                </span>
+              </AccessibleTooltipWrapper>
             </div>
           </div>
 

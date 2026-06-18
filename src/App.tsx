@@ -34,6 +34,8 @@ import {
   GitFork,
   Music,
   FileAudio,
+  Disc,
+  Binary,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -43,6 +45,10 @@ import EnsemblePipelinePlanner from "./components/EnsemblePipelinePlanner";
 import ClassicConsole from "./components/ClassicConsole";
 import BatchEncoder from "./components/BatchEncoder";
 import GlobalSettings from "./components/GlobalSettings";
+import SubmenuManual from "./components/SubmenuManual";
+import SunoMusicLab from "./components/SunoMusicLab";
+import BasicPitchMidiLab from "./components/BasicPitchMidiLab";
+import { HelpToggle, HelpText, AccessibleTooltipWrapper } from "./components/HelpSystem";
 import { initializeModelRegistry } from "./services/audioEngine";
 
 // --- Types & Interfaces ---
@@ -56,6 +62,9 @@ export default function App() {
     | "downloads"
     | "batch_encoder"
     | "global_settings"
+    | "hardware_db"
+    | "suno_api"
+    | "basic_pitch"
   >("classic_console");
 
   // --- Separation Simulator State ---
@@ -128,9 +137,10 @@ export default function App() {
         <nav className="space-y-1.5 flex-1">
           {(
             [
-              { id: "about_project", label: "About the Project", icon: Info },
               { id: "classic_console", label: "Audio Separator", icon: Play },
               { id: "mixer", label: "Stem Mixer", icon: Music },
+              { id: "suno_api", label: "Generative AI Music Lab", icon: Disc },
+              { id: "basic_pitch", label: "Basic Pitch MIDI Lab", icon: Binary },
               { id: "ensemble", label: "Ensemble Manager", icon: Workflow },
               { id: "batch_encoder", label: "Batch Encoder", icon: FileAudio },
               { id: "downloads", label: "Model Manager", icon: DownloadCloud },
@@ -139,6 +149,8 @@ export default function App() {
                 label: "Global Settings",
                 icon: Settings,
               },
+              { id: "hardware_db", label: "Hardware Database", icon: Cpu },
+              { id: "about_project", label: "About the Project", icon: Info },
             ] as const
           ).map(({ id, label, icon: IconIcon }) => {
             const isActive = activeTab === id;
@@ -232,16 +244,25 @@ export default function App() {
         {/* TAB 0: ABOUT THE PROJECT */}
         {activeTab === "about_project" && (
           <div className="space-y-6 animate-fade-in">
+            <SubmenuManual sectionId="about_project" />
             <div className="p-6 rounded-2xl bg-[#080a13]/85 border border-green-500/15 shadow-2xl relative space-y-5 backdrop-blur-3xl overflow-hidden text-slate-200">
-              <div className="border-b border-green-500/20 pb-4">
-                <h2 className="text-2xl font-bold text-green-300 font-display flex items-center gap-2.5">
-                  <Info className="w-5 h-5 text-green-400" />
-                  About the Project
-                </h2>
-                <p className="text-lg font-bold text-slate-100 font-display mt-2">
-                  UVR Stem Separator (Unofficial)
-                </p>
+              <div className="border-b border-green-500/20 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-2xl font-bold text-green-300 font-display flex items-center gap-2.5">
+                    <Info className="w-5 h-5 text-green-400" />
+                    About the Project
+                  </h2>
+                  <p className="text-lg font-bold text-slate-100 font-display mt-2">
+                    UVR Stem Separator (Unofficial)
+                  </p>
+                </div>
+                <HelpToggle sectionId="about_project" label="Show Help" />
               </div>
+
+              <HelpText
+                sectionId="about_project"
+                text="Help: This section outlines the background, architectural inspiration, and disclaimer for the Unofficial UVR Stem Separator project. Features labeled as Planned / Not active are designated for reference."
+              />
 
               <div className="space-y-4 text-sm leading-relaxed">
                 <p className="text-slate-300 font-sans text-base">
@@ -281,197 +302,212 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* HARDWARE EXECUTION COMPATIBILITY MAP */}
-                  <div className="space-y-4 pt-4 border-t border-green-500/10">
-                    <div className="flex flex-col gap-0.5">
-                      <h3 className="text-sm font-bold text-green-300 uppercase tracking-widest font-mono">
-                        Backend Hardware Compatibility Database
-                      </h3>
-                      <p className="text-xs text-slate-400">
-                        Detailed diagnostic matrix mapping PyTorch source-separation model architectures to system-level physical accelerators.
-                      </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 7: HARDWARE COMPATIBILITY DATABASE */}
+        {activeTab === "hardware_db" && (
+          <div className="space-y-6 animate-fade-in">
+            <SubmenuManual sectionId="hardware_db" />
+            <div className="p-6 rounded-2xl bg-[#080a13]/85 border border-green-500/15 shadow-2xl relative space-y-5 backdrop-blur-3xl overflow-hidden text-slate-200">
+              <div className="border-b border-green-500/20 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-2xl font-bold text-green-300 font-display flex items-center gap-2.5">
+                    <Cpu className="w-5 h-5 text-green-400" />
+                    Backend Hardware Compatibility Database
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-2">
+                    Detailed diagnostic matrix mapping PyTorch source-separation model architectures to system-level physical accelerators.
+                  </p>
+                </div>
+                <HelpToggle sectionId="hardware_db" label="Show Help" />
+              </div>
+
+              <HelpText
+                sectionId="hardware_db"
+                text="Help: This database logs core deep-learning architectures of separator algorithms. Look up your target model category to determine package prerequisites, supported run flags, and whether specific hardware accelerators like NVIDIA CUDA or Apple MPS are structurally supported versus locally proven."
+              />
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                {[
+                  {
+                    name: "VR Architecture",
+                    backend: "audio-separator VR",
+                    ext: ".pth, .ckpt (onnx only if supported by adapter)",
+                    overallState: "Supported",
+                    stateColor: "border-green-500/30 text-green-400 bg-green-950/20",
+                    cpu: "Supported",
+                    cpuColor: "text-green-400",
+                    cuda: "Structurally supported / Not locally proven",
+                    cudaColor: "text-amber-300",
+                    mps: "Structurally supported / Not locally proven",
+                    mpsColor: "text-amber-300",
+                    dml: "Experimental / Delegated / Not locally proven",
+                    dmlColor: "text-pink-400",
+                    onnxProvider: "Delegated to audio-separator backend, if applicable",
+                    packages: ["audio-separator", "torch", "onnxruntime-gpu (where applicable)"],
+                    flags: ["--device cpu", "--device cuda", "--device mps", "--device dml"],
+                    notes: "Requires local validation. DirectML acceleration is highly experimental and carries performance overheads on low-VRAM GPUs."
+                  },
+                  {
+                    name: "MDX-Net / MDXC",
+                    backend: "audio-separator MDX",
+                    ext: ".onnx",
+                    overallState: "Supported",
+                    stateColor: "border-green-500/30 text-green-400 bg-green-950/20",
+                    cpu: "Supported",
+                    cpuColor: "text-green-400",
+                    cuda: "Structurally supported / Not locally proven",
+                    cudaColor: "text-amber-300",
+                    mps: "Structurally supported / Not locally proven",
+                    mpsColor: "text-amber-300",
+                    dml: "Experimental / Delegated / Not locally proven",
+                    dmlColor: "text-pink-400",
+                    onnxProvider: "Delegated to audio-separator backend",
+                    packages: ["audio-separator", "torch", "onnxruntime-gpu"],
+                    flags: ["--device cpu", "--device cuda", "--device mps", "--device dml"],
+                    notes: "Execution runtime delegated entirely to active audio-separator instance. ONNX acceleration requires specific CUDA and cuDNN dll file matching."
+                  },
+                  {
+                    name: "Demucs",
+                    backend: "audio-separator Demucs / PyTorch native",
+                    ext: ".pt, .yaml (config-driven)",
+                    overallState: "Partial",
+                    stateColor: "border-amber-500/30 text-amber-400 bg-amber-950/20",
+                    cpu: "Supported",
+                    cpuColor: "text-green-400",
+                    cuda: "Structurally supported / Not locally proven",
+                    cudaColor: "text-amber-300",
+                    mps: "Partial / framework-dependent / not locally proven",
+                    mpsColor: "text-amber-500",
+                    dml: "Not supported unless proven",
+                    dmlColor: "text-rose-500",
+                    onnxProvider: "N/A — PyTorch native",
+                    packages: ["audio-separator", "torch"],
+                    flags: ["--device cpu", "--device cuda"],
+                    notes: "Relies heavily on native PyTorch tensors. Demucs is GPU-intensive and does not natively support DirectML without conversion."
+                  },
+                  {
+                    name: "RoFormer / Mel-Band / BS",
+                    backend: "audio-separator RoFormer",
+                    ext: ".ckpt, .pth (.onnx only if supported)",
+                    overallState: "Supported",
+                    stateColor: "border-green-500/30 text-green-400 bg-green-950/20",
+                    cpu: "Supported",
+                    cpuColor: "text-green-400",
+                    cuda: "Structurally supported / Not locally proven",
+                    cudaColor: "text-amber-300",
+                    mps: "Structurally supported / Not locally proven",
+                    mpsColor: "text-amber-300",
+                    dml: "Experimental / Delegated / Not locally proven",
+                    dmlColor: "text-pink-400",
+                    onnxProvider: "Delegated to audio-separator backend where applicable",
+                    packages: ["audio-separator", "torch", "onnxruntime (where applicable)"],
+                    flags: ["--device cpu", "--device cuda", "--device mps", "--device dml"],
+                    notes: "RoFormer pipelines use mixed model weights. CUDA requires torch-cuda compatibility."
+                  },
+                  {
+                    name: "Custom / Imported Models",
+                    backend: "custom-adapter",
+                    ext: "Varies (model-dependent)",
+                    overallState: "Unknown",
+                    stateColor: "border-slate-500/30 text-slate-400 bg-slate-950/20",
+                    cpu: "Supported only if compatible",
+                    cpuColor: "text-amber-400",
+                    cuda: "Unknown / model-dependent",
+                    cudaColor: "text-slate-400",
+                    mps: "Unknown / model-dependent",
+                    mpsColor: "text-slate-400",
+                    dml: "Unknown / not proven",
+                    dmlColor: "text-slate-400",
+                    onnxProvider: "Model-dependent / delegated",
+                    packages: ["Depends on model architecture"],
+                    flags: ["Auto fallback"],
+                    notes: "No predefined execution adapter is active. Requires local validation and custom adapter bindings."
+                  }
+                ].map((arch, idx) => (
+                  <div key={idx} className="p-4 rounded-xl bg-black/45 border border-white/5 hover:border-green-500/10 transition-all flex flex-col justify-between space-y-4">
+                    {/* Header section with Name and Overall State */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-100">{arch.name}</h4>
+                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                          <span className="text-green-400">Backend:</span> {arch.backend}
+                        </div>
+                      </div>
+                      <span className={`px-2 py-0.5 text-[9px] uppercase font-mono font-bold rounded-md border ${arch.stateColor} shrink-0`}>
+                        State: {arch.overallState}
+                      </span>
                     </div>
 
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                      {[
-                        {
-                          name: "VR Architecture",
-                          backend: "audio-separator VR",
-                          ext: ".pth, .ckpt (onnx only if supported by adapter)",
-                          overallState: "Supported",
-                          stateColor: "border-green-500/30 text-green-400 bg-green-950/20",
-                          cpu: "Supported",
-                          cpuColor: "text-green-400",
-                          cuda: "Structurally supported / Not locally proven",
-                          cudaColor: "text-amber-300",
-                          mps: "Structurally supported / Not locally proven",
-                          mpsColor: "text-amber-300",
-                          dml: "Experimental / Delegated / Not locally proven",
-                          dmlColor: "text-pink-400",
-                          onnxProvider: "Delegated to audio-separator backend, if applicable",
-                          packages: ["audio-separator", "torch", "onnxruntime-gpu (where applicable)"],
-                          flags: ["--device cpu", "--device cuda", "--device mps", "--device dml"],
-                          notes: "Requires local validation. DirectML acceleration is highly experimental and carries performance overheads on low-VRAM GPUs."
-                        },
-                        {
-                          name: "MDX-Net / MDXC",
-                          backend: "audio-separator MDX",
-                          ext: ".onnx",
-                          overallState: "Supported",
-                          stateColor: "border-green-500/30 text-green-400 bg-green-950/20",
-                          cpu: "Supported",
-                          cpuColor: "text-green-400",
-                          cuda: "Structurally supported / Not locally proven",
-                          cudaColor: "text-amber-300",
-                          mps: "Structurally supported / Not locally proven",
-                          mpsColor: "text-amber-300",
-                          dml: "Experimental / Delegated / Not locally proven",
-                          dmlColor: "text-pink-400",
-                          onnxProvider: "Delegated to audio-separator backend",
-                          packages: ["audio-separator", "torch", "onnxruntime-gpu"],
-                          flags: ["--device cpu", "--device cuda", "--device mps", "--device dml"],
-                          notes: "Execution runtime delegated entirely to active audio-separator instance. ONNX acceleration requires specific CUDA and cuDNN dll file matching."
-                        },
-                        {
-                          name: "Demucs",
-                          backend: "audio-separator Demucs / PyTorch native",
-                          ext: ".pt, .yaml (config-driven)",
-                          overallState: "Partial",
-                          stateColor: "border-amber-500/30 text-amber-400 bg-amber-950/20",
-                          cpu: "Supported",
-                          cpuColor: "text-green-400",
-                          cuda: "Structurally supported / Not locally proven",
-                          cudaColor: "text-amber-300",
-                          mps: "Partial / framework-dependent / not locally proven",
-                          mpsColor: "text-amber-500",
-                          dml: "Not supported unless proven",
-                          dmlColor: "text-rose-500",
-                          onnxProvider: "N/A — PyTorch native",
-                          packages: ["audio-separator", "torch"],
-                          flags: ["--device cpu", "--device cuda"],
-                          notes: "Relies heavily on native PyTorch tensors. Demucs is GPU-intensive and does not natively support DirectML without conversion."
-                        },
-                        {
-                          name: "RoFormer / Mel-Band / BS",
-                          backend: "audio-separator RoFormer",
-                          ext: ".ckpt, .pth (.onnx only if supported)",
-                          overallState: "Supported",
-                          stateColor: "border-green-500/30 text-green-400 bg-green-950/20",
-                          cpu: "Supported",
-                          cpuColor: "text-green-400",
-                          cuda: "Structurally supported / Not locally proven",
-                          cudaColor: "text-amber-300",
-                          mps: "Structurally supported / Not locally proven",
-                          mpsColor: "text-amber-300",
-                          dml: "Experimental / Delegated / Not locally proven",
-                          dmlColor: "text-pink-400",
-                          onnxProvider: "Delegated to audio-separator backend where applicable",
-                          packages: ["audio-separator", "torch", "onnxruntime (where applicable)"],
-                          flags: ["--device cpu", "--device cuda", "--device mps", "--device dml"],
-                          notes: "RoFormer pipelines use mixed model weights. CUDA requires torch-cuda compatibility."
-                        },
-                        {
-                          name: "Custom / Imported Models",
-                          backend: "custom-adapter",
-                          ext: "Varies (model-dependent)",
-                          overallState: "Unknown",
-                          stateColor: "border-slate-500/30 text-slate-400 bg-slate-950/20",
-                          cpu: "Supported only if compatible",
-                          cpuColor: "text-amber-400",
-                          cuda: "Unknown / model-dependent",
-                          cudaColor: "text-slate-400",
-                          mps: "Unknown / model-dependent",
-                          mpsColor: "text-slate-400",
-                          dml: "Unknown / not proven",
-                          dmlColor: "text-slate-400",
-                          onnxProvider: "Model-dependent / delegated",
-                          packages: ["Depends on model architecture"],
-                          flags: ["Auto fallback"],
-                          notes: "No predefined execution adapter is active. Requires local validation and custom adapter bindings."
-                        }
-                      ].map((arch, idx) => (
-                        <div key={idx} className="p-4 rounded-xl bg-black/45 border border-white/5 hover:border-green-500/10 transition-all flex flex-col justify-between space-y-4">
-                          {/* Header section with Name and Overall State */}
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <h4 className="text-sm font-bold text-slate-100">{arch.name}</h4>
-                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                                <span className="text-green-400">Backend:</span> {arch.backend}
-                              </div>
-                            </div>
-                            <span className={`px-2 py-0.5 text-[9px] uppercase font-mono font-bold rounded-md border ${arch.stateColor} shrink-0`}>
-                              State: {arch.overallState}
-                            </span>
-                          </div>
+                    {/* Extensions */}
+                    <div className="text-[11px] font-mono text-slate-300 border-t border-white/5 pt-2">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Extensions:</span>
+                      {arch.ext}
+                    </div>
 
-                          {/* Extensions */}
-                          <div className="text-[11px] font-mono text-slate-300 border-t border-white/5 pt-2">
-                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Extensions:</span>
-                            {arch.ext}
-                          </div>
-
-                          {/* Accelerators Status Grid */}
-                          <div className="space-y-1.5">
-                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Accelerators Status:</span>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div className="bg-black/30 border border-white/5 rounded-lg p-2 flex flex-col justify-between min-h-[48px]">
-                                <span className="text-[9px] uppercase font-bold text-slate-500 font-mono">CPU</span>
-                                <span className={`text-[10px] font-medium font-mono leading-tight ${arch.cpuColor}`}>{arch.cpu}</span>
-                              </div>
-                              <div className="bg-black/30 border border-white/5 rounded-lg p-2 flex flex-col justify-between min-h-[48px]">
-                                <span className="text-[9px] uppercase font-bold text-slate-500 font-mono">CUDA</span>
-                                <span className={`text-[10px] font-medium font-mono leading-tight ${arch.cudaColor}`}>{arch.cuda}</span>
-                              </div>
-                              <div className="bg-black/30 border border-white/5 rounded-lg p-2 flex flex-col justify-between min-h-[48px]">
-                                <span className="text-[9px] uppercase font-bold text-slate-500 font-mono">Apple MPS</span>
-                                <span className={`text-[10px] font-medium font-mono leading-tight ${arch.mpsColor}`}>{arch.mps}</span>
-                              </div>
-                              <div className="bg-black/30 border border-white/5 rounded-lg p-2 flex flex-col justify-between min-h-[48px]">
-                                <span className="text-[9px] uppercase font-bold text-slate-500 font-mono">DirectML</span>
-                                <span className={`text-[10px] font-medium font-mono leading-tight ${arch.dmlColor}`}>{arch.dml}</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Details & Packages & Flags */}
-                          <div className="space-y-3.5 bg-black/20 p-3 rounded-lg border border-white/5 text-xs">
-                            <div>
-                              <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">ONNX Provider:</span>
-                              <span className="font-mono text-[10px] text-slate-300 leading-normal">{arch.onnxProvider}</span>
-                            </div>
-
-                            <div>
-                              <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block mb-1">Required Packages:</span>
-                              <div className="flex flex-wrap gap-1.5">
-                                {arch.packages.map((pkg, pIdx) => (
-                                  <span key={pIdx} className="px-1.5 py-0.5 rounded bg-purple-950/30 border border-purple-500/10 text-purple-300 font-mono text-[9px] whitespace-normal">
-                                    {pkg}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-
-                            <div>
-                              <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block mb-1">Command Flags:</span>
-                              <div className="flex flex-wrap gap-1.5">
-                                {arch.flags.map((flag, fIdx) => (
-                                  <span key={fIdx} className="px-1.5 py-0.5 rounded bg-[#090d16] border border-cyan-500/10 text-cyan-300 font-mono text-[9px] break-all whitespace-normal">
-                                    {flag}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-
-                            <div className="border-t border-white/5 pt-2">
-                              <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Notes:</span>
-                              <p className="text-[11px] text-slate-400 leading-relaxed font-sans">{arch.notes}</p>
-                            </div>
-                          </div>
+                    {/* Accelerators Status Grid */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Accelerators Status:</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-black/30 border border-white/5 rounded-lg p-2 flex flex-col justify-between min-h-[48px]">
+                          <span className="text-[9px] uppercase font-bold text-slate-500 font-mono">CPU</span>
+                          <span className={`text-[10px] font-medium font-mono leading-tight ${arch.cpuColor}`}>{arch.cpu}</span>
                         </div>
-                      ))}
+                        <div className="bg-black/30 border border-white/5 rounded-lg p-2 flex flex-col justify-between min-h-[48px]">
+                          <span className="text-[9px] uppercase font-bold text-slate-500 font-mono">CUDA</span>
+                          <span className={`text-[10px] font-medium font-mono leading-tight ${arch.cudaColor}`}>{arch.cuda}</span>
+                        </div>
+                        <div className="bg-black/30 border border-white/5 rounded-lg p-2 flex flex-col justify-between min-h-[48px]">
+                          <span className="text-[9px] uppercase font-bold text-slate-500 font-mono">Apple MPS</span>
+                          <span className={`text-[10px] font-medium font-mono leading-tight ${arch.mpsColor}`}>{arch.mps}</span>
+                        </div>
+                        <div className="bg-black/30 border border-white/5 rounded-lg p-2 flex flex-col justify-between min-h-[48px]">
+                          <span className="text-[9px] uppercase font-bold text-slate-500 font-mono">DirectML</span>
+                          <span className={`text-[10px] font-medium font-mono leading-tight ${arch.dmlColor}`}>{arch.dml}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Details & Packages & Flags */}
+                    <div className="space-y-3.5 bg-black/20 p-3 rounded-lg border border-white/5 text-xs">
+                      <div>
+                        <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">ONNX Provider:</span>
+                        <span className="font-mono text-[10px] text-slate-300 leading-normal">{arch.onnxProvider}</span>
+                      </div>
+
+                      <div>
+                        <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block mb-1">Required Packages:</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {arch.packages.map((pkg, pIdx) => (
+                            <span key={pIdx} className="px-1.5 py-0.5 rounded bg-purple-950/30 border border-purple-500/10 text-purple-300 font-mono text-[9px] whitespace-normal">
+                              {pkg}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block mb-1">Command Flags:</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {arch.flags.map((flag, fIdx) => (
+                            <span key={fIdx} className="px-1.5 py-0.5 rounded bg-[#090d16] border border-cyan-500/10 text-cyan-300 font-mono text-[9px] break-all whitespace-normal">
+                              {flag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="border-t border-white/5 pt-2">
+                        <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Notes:</span>
+                        <p className="text-[11px] text-slate-400 leading-relaxed font-sans">{arch.notes}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
+                ))}
               </div>
             </div>
           </div>
@@ -480,13 +516,34 @@ export default function App() {
         {/* TAB 3: ENSEMBLE MANAGER */}
         {activeTab === "ensemble" && (
           <div className="space-y-6">
+            <SubmenuManual sectionId="ensemble" />
             <EnsemblePipelinePlanner />
+          </div>
+        )}
+
+        {/* TAB: SUNO AI MUSIC LAB */}
+        {activeTab === "suno_api" && (
+          <div className="space-y-6">
+            <SubmenuManual sectionId="generative_ai_music_lab" />
+            <SunoMusicLab
+              selectedInputs={selectedInputs}
+              setSelectedInputs={setSelectedInputs}
+              setActiveTab={setActiveTab}
+            />
+          </div>
+        )}
+
+        {/* TAB: BASIC PITCH MIDI LAB */}
+        {activeTab === "basic_pitch" && (
+          <div className="space-y-6">
+            <BasicPitchMidiLab />
           </div>
         )}
 
         {/* TAB 4: MODEL MANAGER */}
         {activeTab === "downloads" && (
           <div className="space-y-6">
+            <SubmenuManual sectionId="downloads" />
             <ModelDownloader />
           </div>
         )}
@@ -494,6 +551,7 @@ export default function App() {
         {/* TAB 5: BATCH ENCODER */}
         {activeTab === "batch_encoder" && (
           <div className="space-y-6">
+            <SubmenuManual sectionId="batch_encoder" />
             <BatchEncoder />
           </div>
         )}
@@ -501,6 +559,7 @@ export default function App() {
         {/* TAB 6: GLOBAL SETTINGS */}
         {activeTab === "global_settings" && (
           <div className="space-y-6">
+            <SubmenuManual sectionId="global_settings" />
             <GlobalSettings />
           </div>
         )}
@@ -508,6 +567,7 @@ export default function App() {
         {/* TAB 2: MIXER */}
         {activeTab === "mixer" && (
           <div className="space-y-6">
+            <SubmenuManual sectionId="mixer" />
             <div className="p-5 rounded-2xl bg-glass-card border border-glass-border shadow-glass-shadow shadow-glass-inset backdrop-blur-xl">
               <label className="text-[10px] uppercase text-slate-400 font-bold tracking-wider mb-2 block font-mono">
                 Separation Goal Focus
@@ -539,6 +599,7 @@ export default function App() {
         {/* TAB 1: AUDIO SEPARATOR */}
         {activeTab === "classic_console" && (
           <div className="space-y-6">
+            <SubmenuManual sectionId="classic_console" />
             <ClassicConsole
               selectedInputs={selectedInputs}
               setSelectedInputs={setSelectedInputs}

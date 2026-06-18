@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Copy, Check, Terminal, TerminalSquare, Sparkles, Cpu, Layers, HelpCircle, HardDrive } from "lucide-react";
+import { HelpToggle, HelpText, HelpTooltipIcon, AccessibleTooltipWrapper } from "./HelpSystem";
 
 interface StepItem {
   id: string;
@@ -109,13 +110,21 @@ export const HostSetupGuide: React.FC = () => {
   return (
     <div className="p-4 bg-slate-900/40 border border-slate-800/80 rounded-xl space-y-4 font-sans text-xs text-slate-300">
       {/* Title */}
-      <div className="flex items-center justify-between border-b border-white/5 pb-2.5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5 pb-2.5">
         <div className="flex items-center gap-2">
           <Terminal className="w-4 h-4 text-emerald-400" />
           <span className="font-bold text-slate-100 uppercase tracking-wide font-mono text-[11px]">Terminal Host Setup Environment Guide</span>
         </div>
-        <span className="text-[10px] text-slate-500 font-mono">Setup Workflow Guide</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <HelpToggle sectionId="host_setup_guide" label="Show Help" />
+          <span className="text-[10px] text-slate-500 font-mono">Setup Workflow Guide</span>
+        </div>
       </div>
+
+      <HelpText
+        sectionId="host_setup_guide"
+        text="Help: This setup panel outlines direct bash commands or commands for Windows PowerShell to prepare your host system to run local AI operations safely. Copy each block in order to initialize your sandbox environment."
+      />
 
       <div className="bg-emerald-950/20 px-3 py-2.5 border border-emerald-500/10 rounded-xl text-[11px] text-emerald-300 leading-relaxed space-y-1.5 font-sans">
         <div className="flex items-center gap-1.5 font-bold text-emerald-200 uppercase tracking-wide text-[10px]">
@@ -190,18 +199,22 @@ export const HostSetupGuide: React.FC = () => {
             <pre className="p-3.5 pr-12 overflow-x-auto text-emerald-300 font-mono leading-relaxed select-all max-h-[160px] whitespace-pre-wrap select-text">
               {currentStep.command}
             </pre>
-            <button
-              type="button"
-              onClick={() => handleCopy(currentStep.command, currentStep.id)}
-              className="absolute top-2.5 right-2.5 p-2 rounded-md bg-slate-900 border border-white/10 text-slate-400 hover:text-emerald-300 hover:bg-slate-800 transition-all cursor-pointer flex items-center justify-center shadow-md-indigo hover:border-emerald-500/20"
-              title="Copy Command Block"
-            >
-              {copiedText === currentStep.id ? (
-                <Check className="w-3.5 h-3.5 text-emerald-400 font-bold" />
-              ) : (
-                <Copy className="w-3.5 h-3.5" />
-              )}
-            </button>
+            <div className="absolute top-2.5 right-2.5">
+              <AccessibleTooltipWrapper content="Click to copy this terminal command block to clipboard safely." position="top">
+                <button
+                  type="button"
+                  onClick={() => handleCopy(currentStep.command, currentStep.id)}
+                  className="p-2 rounded-md bg-slate-900 border border-white/10 text-slate-400 hover:text-emerald-300 hover:bg-slate-800 transition-all cursor-pointer flex items-center justify-center shadow-md-indigo hover:border-emerald-500/20"
+                  title="Copy Command Block"
+                >
+                  {copiedText === currentStep.id ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400 font-bold" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </AccessibleTooltipWrapper>
+            </div>
           </div>
 
           <div className="bg-[#0b101c]/40 p-2.5 rounded-lg border border-slate-800/80 text-[10px] text-slate-400 italic">

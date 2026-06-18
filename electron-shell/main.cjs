@@ -459,6 +459,316 @@ ipcMain.handle('select-python-path', async () => {
   return result.filePaths[0] || null;
 });
 
+// Real Local YuE Engine integration processes
+ipcMain.handle('validate-yue-environment', async (event, config) => {
+  const { pythonPath, yueRoot, genreTxt, lyricsTxt, outputDir, deviceRequested, stage1Model, stage2Model } = config;
+  const runnerScript = path.join(__dirname, 'yue-probe.cjs');
+  const args = [
+    runnerScript,
+    '--dry-run',
+    '--python', pythonPath || 'python',
+    '--yue-root', yueRoot || '',
+    '--genre', genreTxt || '',
+    '--lyrics', lyricsTxt || '',
+    '--output', outputDir || '',
+    '--device', deviceRequested || 'cpu',
+    '--stage1-model', stage1Model || '',
+    '--stage2-model', stage2Model || ''
+  ];
+  
+  try {
+    const runString = `node "${args.join('" "')}"`;
+    execSync(runString, { encoding: 'utf8', timeout: 10000 });
+    const reportPath = path.join(outputDir || process.cwd(), 'yue_e2e_proof.json');
+    if (fs.existsSync(reportPath)) {
+      const data = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+      return { success: true, report: data };
+    }
+    return { success: false, error: 'Dry-run finished but proof report was not generated.' };
+  } catch (err) {
+    return { success: false, error: err.message, stderr: err.stderr ? err.stderr.toString() : '' };
+  }
+});
+
+ipcMain.handle('run-yue-generation', async (event, config) => {
+  const { 
+    pythonPath, yueRoot, genreTxt, lyricsTxt, outputDir, deviceRequested, 
+    stage1Model, stage2Model, segments, maxNewTokens, stage2BatchSize, repetitionPenalty,
+    useAudioPrompt, audioPromptPath, useDualTracksPrompt, vocalTrackPromptPath, instrumentalTrackPromptPath,
+    promptStartTime, promptEndTime
+  } = config;
+
+  const runnerScript = path.join(__dirname, 'yue-probe.cjs');
+  const cmdArgs = [
+    runnerScript,
+    '--run',
+    '--python', pythonPath || 'python',
+    '--yue-root', yueRoot || '',
+    '--genre', genreTxt || '',
+    '--lyrics', lyricsTxt || '',
+    '--output', outputDir || '',
+    '--device', deviceRequested || 'cpu',
+    '--stage1-model', stage1Model || '',
+    '--stage2-model', stage2Model || '',
+    '--segments', String(segments || 1),
+    '--max-new-tokens', String(maxNewTokens || 3000),
+    '--stage2-batch-size', String(stage2BatchSize || 1),
+    '--repetition-penalty', String(repetitionPenalty || 1.1)
+  ];
+
+  if (useAudioPrompt && audioPromptPath) {
+    cmdArgs.push('--use-audio-prompt', 'true');
+    cmdArgs.push('--audio-prompt-path', audioPromptPath);
+    if (promptStartTime) cmdArgs.push('--prompt-start-time', String(promptStartTime));
+    if (promptEndTime) cmdArgs.push('--prompt-end-time', String(promptEndTime));
+  } else if (useDualTracksPrompt && vocalTrackPromptPath && instrumentalTrackPromptPath) {
+    cmdArgs.push('--use-dual-tracks-prompt', 'true');
+    cmdArgs.push('--vocal-track-prompt-path', vocalTrackPromptPath);
+    cmdArgs.push('--instrumental-track-prompt-path', instrumentalTrackPromptPath);
+    if (promptStartTime) cmdArgs.push('--prompt-start-time', String(promptStartTime));
+    if (promptEndTime) cmdArgs.push('--prompt-end-time', String(promptEndTime));
+  }
+
+  event.sender.send('backend-progress', { type: 'log', message: '[yue-runner] Launching custom local YuE model generation script' });
+
+  try {
+    const child = spawn('node', cmdArgs);
+    activeChildProcess = child;
+
+    child.stdout.on('data', (data) => {
+      event.sender.send('backend-progress', { type: 'log', message: `[yue-stdout] ${data.toString().trim()}` });
+    });
+
+    child.stderr.on('data', (data) => {
+      event.sender.send('backend-progress', { type: 'log', message: `[yue-stderr] ${data.toString().trim()}` });
+    });
+
+    const exitCode = await new Promise((resolve, reject) => {
+      child.on('close', (code) => {
+        activeChildProcess = null;
+        resolve(code);
+      });
+      child.on('error', (err) => {
+        activeChildProcess = null;
+        reject(err);
+      });
+    });
+
+    const reportPath = path.join(outputDir || process.cwd(), 'yue_e2e_proof.json');
+    let report = null;
+    if (fs.existsSync(reportPath)) {
+      try {
+        report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+      } catch (err) {}
+    }
+
+    if (exitCode === 0 && report && report.proofStatus === 'PASS') {
+      return { success: true, report: report };
+    } else {
+      return { 
+        success: false, 
+        error: `Inference process exited with code ${exitCode}. Check preflight blockers and folder layouts.`, 
+        report: report 
+      };
+    }
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('read-yue-proof-report', async (event, outputFolder) => {
+  try {
+    const reportPath = path.join(outputFolder || process.cwd(), 'yue_e2e_proof.json');
+    if (fs.existsSync(reportPath)) {
+      const data = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+      return { success: true, report: data };
+    }
+    return { success: false, error: 'Proof report file not found.' };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('validate-basic-pitch-environment', async (event, config) => {
+  const {
+    pythonPath,
+    inputAudio,
+    outputDir,
+    saveMidi,
+    sonifyMidi,
+    saveModelOutputs,
+    saveNoteEvents,
+    onsetThreshold,
+    frameThreshold,
+    minNoteLength,
+    minFreq,
+    maxFreq,
+    includePitchBends,
+    multiplePitchBends,
+    midiTempo
+  } = config;
+  const runnerScript = path.join(__dirname, 'basic-pitch-probe.cjs');
+  const args = [
+    runnerScript,
+    '--dry-run',
+    '--python', pythonPath || 'python',
+    '--input', inputAudio || '',
+    '--output', outputDir || '',
+  ];
+  if (saveMidi) args.push('--save-midi');
+  if (sonifyMidi) args.push('--sonify-midi');
+  if (saveModelOutputs) args.push('--save-model-outputs');
+  if (saveNoteEvents) args.push('--save-note-events');
+
+  if (onsetThreshold) args.push('--onset-threshold', String(onsetThreshold));
+  if (frameThreshold) args.push('--frame-threshold', String(frameThreshold));
+  if (minNoteLength) args.push('--minimum-note-length', String(minNoteLength));
+  if (minFreq) args.push('--minimum-frequency', String(minFreq));
+  if (maxFreq) args.push('--maximum-frequency', String(maxFreq));
+  if (includePitchBends) args.push('--include-pitch-bends');
+  if (multiplePitchBends) args.push('--multiple-pitch-bends');
+  if (midiTempo) args.push('--midi-tempo', String(midiTempo));
+  
+  try {
+    const runString = `node "${args.join('" "')}"`;
+    execSync(runString, { encoding: 'utf8', timeout: 15000 });
+    const reportPath = path.join(outputDir || process.cwd(), 'basic_pitch_e2e_proof.json');
+    if (fs.existsSync(reportPath)) {
+      const data = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+      return { success: true, report: data };
+    }
+    return { success: false, error: 'Dry-run finished but Basic Pitch reports were not compiled on disk.' };
+  } catch (err) {
+    return { success: false, error: err.message, stderr: err.stderr ? err.stderr.toString() : '' };
+  }
+});
+
+ipcMain.handle('run-basic-pitch-transcription', async (event, config) => {
+  const {
+    pythonPath,
+    inputAudio,
+    outputDir,
+    saveMidi,
+    sonifyMidi,
+    saveModelOutputs,
+    saveNoteEvents,
+    onsetThreshold,
+    frameThreshold,
+    minNoteLength,
+    minFreq,
+    maxFreq,
+    includePitchBends,
+    multiplePitchBends,
+    midiTempo
+  } = config;
+
+  const runnerScript = path.join(__dirname, 'basic-pitch-probe.cjs');
+  const args = [
+    runnerScript,
+    '--run',
+    '--python', pythonPath || 'python',
+    '--input', inputAudio || '',
+    '--output', outputDir || '',
+  ];
+  if (saveMidi) args.push('--save-midi');
+  if (sonifyMidi) args.push('--sonify-midi');
+  if (saveModelOutputs) args.push('--save-model-outputs');
+  if (saveNoteEvents) args.push('--save-note-events');
+
+  if (onsetThreshold) args.push('--onset-threshold', String(onsetThreshold));
+  if (frameThreshold) args.push('--frame-threshold', String(frameThreshold));
+  if (minNoteLength) args.push('--minimum-note-length', String(minNoteLength));
+  if (minFreq) args.push('--minimum-frequency', String(minFreq));
+  if (maxFreq) args.push('--maximum-frequency', String(maxFreq));
+  if (includePitchBends) args.push('--include-pitch-bends');
+  if (multiplePitchBends) args.push('--multiple-pitch-bends');
+  if (midiTempo) args.push('--midi-tempo', String(midiTempo));
+
+  event.sender.send('backend-progress', { type: 'log', message: '[basic-pitch-runner] Launching custom local Basic Pitch audio-to-MIDI transcription...' });
+
+  try {
+    const child = spawn('node', args);
+    activeChildProcess = child;
+
+    child.stdout.on('data', (data) => {
+      event.sender.send('backend-progress', { type: 'log', message: `[basic-pitch-stdout] ${data.toString().trim()}` });
+    });
+
+    child.stderr.on('data', (data) => {
+      event.sender.send('backend-progress', { type: 'log', message: `[basic-pitch-stderr] ${data.toString().trim()}` });
+    });
+
+    const exitCode = await new Promise((resolve, reject) => {
+      child.on('close', (code) => {
+        activeChildProcess = null;
+        resolve(code);
+      });
+      child.on('error', (err) => {
+        activeChildProcess = null;
+        reject(err);
+      });
+    });
+
+    const reportPath = path.join(outputDir || process.cwd(), 'basic_pitch_e2e_proof.json');
+    let report = null;
+    if (fs.existsSync(reportPath)) {
+      try {
+        report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+      } catch (err) {}
+    }
+
+    if (exitCode === 0 && report && report.proofStatus === 'PASS') {
+      return { success: true, report: report };
+    } else {
+      return {
+        success: false,
+        error: `Basic Pitch execution exited with code ${exitCode}. Check your logs, environment, and preflight blockers.`,
+        report: report
+      };
+    }
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('read-basic-pitch-proof-report', async (event, outputFolder) => {
+  try {
+    const reportPath = path.join(outputFolder || process.cwd(), 'basic_pitch_e2e_proof.json');
+    if (fs.existsSync(reportPath)) {
+      const data = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+      return { success: true, report: data };
+    }
+    return { success: false, error: 'Basic Pitch proof report file not found on disk.' };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('verify-audio-file', async (event, filePath) => {
+  try {
+    if (!filePath) {
+      return { exists: false, error: 'Empty file path' };
+    }
+    const resolvedPath = path.resolve(filePath);
+    if (fs.existsSync(resolvedPath)) {
+      const stats = fs.statSync(resolvedPath);
+      const isFile = stats.isFile();
+      const sizeBytes = stats.size;
+      const ext = path.extname(resolvedPath).toLowerCase();
+      const isAudio = ['.wav', '.mp3', '.flac', '.ogg', '.m4a', '.aac', '.mid', '.midi'].includes(ext);
+      return {
+        exists: isFile,
+        sizeBytes: sizeBytes,
+        extension: ext,
+        isAudio: isAudio
+      };
+    }
+    return { exists: false, error: 'File does not exist' };
+  } catch (err) {
+    return { exists: false, error: err.message };
+  }
+});
+
 // Start processing - executes real separation pipeline using native processes (FFmpeg fallback or Python spawn)
 ipcMain.handle('start-processing', async (event, config) => {
   const { inputs, outputFolder, model, options, format, userSelectedMode, customPythonPath, parameters } = config;

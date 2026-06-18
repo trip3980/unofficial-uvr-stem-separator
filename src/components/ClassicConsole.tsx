@@ -32,6 +32,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import FourTrackMixer from "./FourTrackMixer";
 import InteractiveTooltip from "./InteractiveTooltip";
+import { useHelp, HelpToggle, HelpText, HelpTooltipIcon, AccessibleTooltipWrapper } from "./HelpSystem";
 import { ModelCompatibilityWizard } from "./ModelCompatibilityWizard";
 import { HostSetupGuide } from "./HostSetupGuide";
 
@@ -188,7 +189,7 @@ export default function ClassicConsole({
   const [simulationLog, setSimulationLog] = useState<string[]>([]);
   const [isSimulating, setIsSimulating] = useState(false);
   const [simProgress, setSimProgress] = useState(0);
-  const [showTooltips, setShowTooltips] = useState(true);
+  const { showHelp: showTooltips, toggleSection: toggleHelpSection } = useHelp("classic_console");
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [ffmpegStatus, setFfmpegStatus] = useState<
     "not_checked" | "ready" | "missing"
@@ -618,6 +619,11 @@ export default function ClassicConsole({
     const isModelSupported = ['VR', 'MDX-Net', 'Demucs', 'RoFormer', 'MDXC', 'Custom', 'Ensemble'].includes(activeModel.architecture || '');
     if (!isModelSupported) {
       return "Blocked: Unsupported Model";
+    }
+
+    // 5.5. Ensemble Mode requirements check (Requires 2+ input files)
+    if (appState.processMethodId === "ensemble" && (!appState.selectedInputs || appState.selectedInputs.length < 2)) {
+      return "Blocked: Ensemble lacks 2+ inputs";
     }
 
     // 6. FFmpeg Ready State Check
@@ -1280,7 +1286,7 @@ export default function ClassicConsole({
               </span>
               <div className="flex gap-3 justify-end items-center w-[140px]">
                 <button
-                  onClick={() => setShowTooltips(!showTooltips)}
+                  onClick={() => toggleHelpSection()}
                   title="Toggle Help Tooltips"
                   className={`text-[9px] font-mono font-bold flex items-center gap-1 px-1.5 py-0.5 rounded transition cursor-pointer select-none ${showTooltips ? "text-indigo-300 bg-indigo-500/20" : "text-slate-500 hover:text-slate-300 bg-white/5"}`}
                 >
@@ -1292,6 +1298,11 @@ export default function ClassicConsole({
                 </span>
               </div>
             </div>
+
+            <HelpText
+              sectionId="classic_console"
+              text="Help: Drag and drop files or folders directly into the window, configure your preferred audio-separation model constraints, choose your execution backend, and click 'Run Stem Extraction'."
+            />
 
             <div className="space-y-4">
               {/* FILE QUEUE ZONE: MULTIPLE FILES HANDLING */}
@@ -2411,6 +2422,14 @@ export default function ClassicConsole({
 
                       {showSetupGuide && (
                         <div className="p-4 space-y-4 text-[11px] font-normal text-slate-300 leading-relaxed font-sans bg-[#0c0d15]/50">
+                          <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                            <span className="text-[10px] font-mono uppercase text-slate-400">Setup Guide Help Controls</span>
+                            <HelpToggle sectionId="backend_setup_guide" label="Section Help" className="px-2 py-0.5" />
+                          </div>
+                          <HelpText
+                            sectionId="backend_setup_guide"
+                            text="Help: This section allows specifying custom parameters for local machine learning model configurations. Customize the host Python path override or trigger backend environment compatibility diagnostics."
+                          />
                           
                           {/* PYTHON ENVIRONMENT OVERRIDE */}
                           <div className="p-3.5 bg-slate-950/60 rounded-xl border border-slate-800/85 space-y-2">
@@ -2793,6 +2812,13 @@ export default function ClassicConsole({
                         return (
                           <div>
                             <strong>Block Reason:</strong> Selection queue is empty. Drag & drop or browse for raw stereo audio tracks to process.
+                          </div>
+                        );
+                      }
+                      if (appState.processMethodId === "ensemble" && (!appState.selectedInputs || appState.selectedInputs.length < 2)) {
+                        return (
+                          <div>
+                            <strong>Block Reason:</strong> Ensemble Mode requires at least 2 input tracks in the queue to blend spectral or magnitude averages. Add more files above.
                           </div>
                         );
                       }

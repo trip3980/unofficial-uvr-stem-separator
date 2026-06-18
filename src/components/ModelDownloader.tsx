@@ -27,6 +27,7 @@ import {
 import { motion } from "motion/react";
 import { MODEL_REGISTRY, addModelToRegistry } from "../services/audioEngine";
 import { ModelRegistryEntry } from "../types";
+import { HelpToggle, HelpText, HelpTooltipIcon, AccessibleTooltipWrapper } from "./HelpSystem";
 
 // Static constant for free space (Matches the 4.8 GB from initial system specs)
 const FREE_SPACE_MB = 4.8 * 1024; // 4915.2 MB
@@ -570,29 +571,42 @@ export default function ModelDownloader() {
     <div className="p-6 rounded-2xl bg-[#0a0c14]/40 border border-[#ffffff]/10 shadow-glass-shadow shadow-glass-inset backdrop-blur-xl space-y-6">
       
       {/* Integrity Guard Header Section */}
-      <div>
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h2 className="text-lg font-bold text-white font-display flex items-center gap-2">
-              <DownloadCloud className="w-5 h-5 text-blue-400 animate-pulse" />
-              Preflight Model Download Hub & Integrity Guard
-            </h2>
-            <p className="text-xs text-slate-400 mt-1">
-              Prevent corrupted or unverified model weights from being loaded. UVR-6 isolates weight loads and verifies hashes strictly against security schemas.
+      <div className="min-w-0 w-full overflow-hidden">
+        <div className="flex flex-col lg:flex-row justify-between items-start gap-4 flex-wrap w-full min-w-0">
+          <div className="min-w-0 flex-1 break-words">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <h2 className="text-lg font-bold text-white font-display flex flex-wrap items-center gap-2 whitespace-normal break-words leading-tight">
+                <DownloadCloud className="w-5 h-5 text-blue-400 animate-pulse shrink-0" />
+                <span className="break-words">Preflight Model Download Hub & Integrity Guard</span>
+              </h2>
+              <HelpToggle sectionId="model_downloader" label="Show Help" className="px-2.5 py-1" />
+            </div>
+            <p className="text-xs text-slate-400 mt-1 whitespace-normal break-words">
+              Prevent corrupted or unverified model weights from being loaded. Hash verification is only complete when a real local file hash matches a known checksum.
             </p>
+            <HelpText
+              sectionId="model_downloader"
+              text="Help: The preflight downloader pulls neural weights files safely into your local directory. It prevents running broken files by ensuring checksum compliance. If a model has no download URL, is not checked, or integrity cannot be fully verified, a warning will appear."
+            />
           </div>
           
-          <div className="flex flex-col items-end gap-1 shrink-0 bg-black/40 border border-white/5 p-3 rounded-lg text-xs font-mono">
-            <div className="flex items-center gap-2 text-slate-300">
-              <HardDrive className="w-3.5 h-3.5 text-blue-400" />
-              <span>Disk Space Estimate / Not Live Drive Check: <b>4.8 GB Free</b></span>
-            </div>
+          <div className="flex flex-col items-start sm:items-end gap-1 shrink-0 w-full sm:w-auto bg-black/40 border border-white/5 p-3 rounded-lg text-xs font-mono min-w-0 break-words whitespace-normal border-dashed border-slate-500/20 hover:border-slate-500/40 transition-all">
+            <AccessibleTooltipWrapper content="Disk Space Estimate | Not Checked: This is a static/cached estimate of available container quarters, NOT a physical live filesystem query on the host system." position="top" className="w-full">
+              <div className="flex flex-col sm:items-end gap-1 text-slate-300 w-full cursor-help">
+                <div className="flex items-center gap-2 text-slate-350 justify-between sm:justify-end">
+                  <HardDrive className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                  <span className="font-bold">Disk Space Estimate</span>
+                </div>
+                <div className="text-[11px] text-slate-400 font-bold">4.8 GB cache limit</div>
+                <div className="text-[10px] text-slate-500 italic">Not checked / Static Cache</div>
+              </div>
+            </AccessibleTooltipWrapper>
             {totalSelectedDownloadMB > 0 && (
-              <div className="text-[10px] mt-1 space-y-0.5 border-t border-white/5 pt-1.5 w-full text-right">
+              <div className="text-[10px] mt-1 space-y-0.5 border-t border-white/5 pt-1.5 w-full text-left sm:text-right">
                 <div className="text-slate-400">Selected Size: <span className="text-white font-bold">{(totalSelectedDownloadMB).toFixed(1)} MB</span></div>
                 <div className={isOutOfSpace ? "text-rose-400 font-bold" : "text-green-400"}>
                   {isOutOfSpace ? (
-                    <span className="flex items-center gap-1 justify-end">
+                    <span className="flex items-center gap-1 justify-start sm:justify-end">
                       <AlertTriangle className="w-3 h-3 text-rose-400 inline" />
                       Not enough cache space
                     </span>

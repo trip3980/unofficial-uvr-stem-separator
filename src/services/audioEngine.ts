@@ -59,7 +59,7 @@ export const PROCESS_METHODS: ProcessMethod[] = [
   },
   {
     id: "bs_roformer",
-    name: "BS-Roformer (Neural Transformer)",
+    name: "BS-RoFormer (Neural Transformer)",
     category: "Advanced Models",
     description:
       "Cutting-edge Band-Split Transformer models with Rotary Attention. The absolute benchmark for high-fidelity vocal recovery.",
@@ -84,6 +84,7 @@ export const PROCESS_METHODS: ProcessMethod[] = [
 ];
 
 // --- 2. GLOBAL MODEL REGISTRY (Rule 5) ---
+// Model source metadata only. Do not treat configured URLs as reachable unless source validation has run.
 export const MODEL_REGISTRY: ModelRegistryEntry[] = [
   // VR-Style Models
   {

@@ -20,6 +20,17 @@ contextBridge.exposeInMainWorld('uvr', {
   checkFFmpegReady: () => ipcRenderer.invoke('check-ffmpeg-ready'),
   checkBackendDetails: (customPythonPath) => ipcRenderer.invoke('check-backend-details', customPythonPath),
   selectPythonPath: () => ipcRenderer.invoke('select-python-path'),
+  
+  // Real Local YuE Engine integration APIs
+  validateYuEEnvironment: (config) => ipcRenderer.invoke('validate-yue-environment', config),
+  runYuEGeneration: (config) => ipcRenderer.invoke('run-yue-generation', config),
+  readYuEProofReport: (outputFolder) => ipcRenderer.invoke('read-yue-proof-report', outputFolder),
+  verifyAudioFile: (filePath) => ipcRenderer.invoke('verify-audio-file', filePath),
+
+  // Real Local Basic Pitch integration APIs
+  validateBasicPitchEnvironment: (config) => ipcRenderer.invoke('validate-basic-pitch-environment', config),
+  runBasicPitchTranscription: (config) => ipcRenderer.invoke('run-basic-pitch-transcription', config),
+  readBasicPitchProofReport: (outputFolder) => ipcRenderer.invoke('read-basic-pitch-proof-report', outputFolder),
 
   // Listening to real progress logs (Task 3)
   onBackendProgress: (callback) => {
