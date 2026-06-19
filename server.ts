@@ -159,7 +159,7 @@ Your response MUST be wrapped in a clean JSON structure:
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[UVR Server] Running on http://localhost:${PORT}`);
+    console.log(`[OpenStem Server] Running on http://localhost:${PORT}`);
   });
 }
 

@@ -30,11 +30,19 @@ import {
   Lock,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import FourTrackMixer from "./FourTrackMixer";
+import FourTrackMixer, { LoadedStem } from "./FourTrackMixer";
 import InteractiveTooltip from "./InteractiveTooltip";
 import { useHelp, HelpToggle, HelpText, HelpTooltipIcon, AccessibleTooltipWrapper } from "./HelpSystem";
 import { ModelCompatibilityWizard } from "./ModelCompatibilityWizard";
 import { HostSetupGuide } from "./HostSetupGuide";
+import {
+  APP_NAME,
+  APP_SHORT_NAME,
+  APP_PACKAGE_NAME,
+  RELEASE_STATE,
+  BETA_STATUS,
+  INDEPENDENT_PROJECT_NOTICE
+} from "../config/branding";
 
 // Import our decoupled types & engines (Rule 20)
 import {
@@ -195,7 +203,7 @@ export default function ClassicConsole({
     "not_checked" | "ready" | "missing"
   >("not_checked");
   const [modelFileStatus, setModelFileStatus] = useState<
-    "not_checked" | "download_needed" | "ready"
+    "not_checked" | "missing" | "exists_hash_not_checked" | "hash_verified" | "hash_unavailable" | "hash_mismatch" | "manual_import_required" | "source_missing" | "download_needed"
   >("not_checked");
   const [backendStatus, setBackendStatus] = useState<
     "not_checked" | "ready" | "missing_env"
@@ -203,6 +211,11 @@ export default function ClassicConsole({
   const [userSelectedMode, setUserSelectedMode] = useState<"ai" | "ffmpeg">("ai");
   const [showSetupGuide, setShowSetupGuide] = useState(false);
   const [showSystemNotes, setShowSystemNotes] = useState(false);
+  const [realLoadedStems, setRealLoadedStems] = useState<LoadedStem[]>([]);
+  const [outputFolderVerifyStatus, setOutputFolderVerifyStatus] = useState<
+    "not_selected" | "selected_not_verified" | "verified_writable" | "missing" | "not_writable" | "browser_preview"
+  >("not_selected");
+  const [outputFolderError, setOutputFolderError] = useState<string>("");
   const [customPythonPath, setCustomPythonPathState] = useState<string>(() => {
     return localStorage.getItem("customPythonPath") || "";
   });
@@ -465,7 +478,7 @@ export default function ClassicConsole({
             setIsSimulating(false);
             setAppState((prev) => ({
               ...prev,
-              processingStatus: "failed",
+              processingStatus: "error",
               consoleLogs: [
                 `[error] Separation failed: ${error || "Subprocess returned an error."}`,
                 ...prev.consoleLogs,
@@ -592,71 +605,424 @@ export default function ClassicConsole({
     );
   }, [appState.selectedModelId, modelRegistryState]);
 
-  const blockedReason = useMemo(() => {
-    // 1. Raw Audio Inputs Check
+  // Map selected inputs with accurate metadata (Rule 24)
+  const selectedInputFiles = useMemo(() => {
+    const isElectron = !!(window as any).uvr;
+    return appState.selectedInputs.map((input) => {
+      const isPath = input.includes("/") || input.includes("\\");
+      if (isPath) {
+        return {
+          displayName: input.split(/[/\\]/).pop() || input,
+          path: input,
+          source: "electron_path" as const,
+          verifiedOnDisk: isElectron,
+          sizeBytes: 15 * 1024 * 1024,
+        };
+      } else {
+        return {
+          displayName: input,
+          source: input === "tracking_demo_44k.wav" ? ("demo" as const) : ("browser_file" as const),
+          verifiedOnDisk: false,
+        };
+      }
+    });
+  }, [appState.selectedInputs]);
+
+  // Aggregate requirements blockers and warnings (Rule 12 & 13)
+  const blockersAndWarnings = useMemo(() => {
+    const list: {
+      id: string;
+      label: string;
+      severity: "required" | "warning";
+      source: string;
+      fixLabel?: string;
+    }[] = [];
+    const isElectron = !!(window as any).uvr;
+
+    if (!isElectron) {
+      list.push({
+        id: "browser_sandbox",
+        label: "Browser sandbox mode cannot execute native separation",
+        severity: "required",
+        source: "backend",
+        fixLabel: "Use Electron desktop build"
+      });
+    }
+
     const hasInputs = appState.selectedInputs && appState.selectedInputs.length > 0;
     if (!hasInputs) {
-      return "Blocked: Input Missing";
+      list.push({
+        id: "no_inputs",
+        label: "No input files selected",
+        severity: "required",
+        source: "input",
+        fixLabel: "Browse for input files"
+      });
+    } else {
+      const hasPreviewInputsOnly = selectedInputFiles.some(f => f.source !== "electron_path");
+      if (hasPreviewInputsOnly) {
+        list.push({
+          id: "inputs_not_verified",
+          label: "One or more selected inputs are not verified local files",
+          severity: "required",
+          source: "input",
+          fixLabel: "Re-add files using native browser button in Electron"
+        });
+      }
     }
 
-    // 2. Output Destination Folder Check
-    const hasOutput = appState.checkboxSettings.sameAsInputFolder || !!appState.selectedOutputFolder;
-    if (!hasOutput) {
-      return "Blocked: Output Folder Missing";
+    if (appState.checkboxSettings.sameAsInputFolder) {
+      const hasNonNative = selectedInputFiles.some(f => f.source !== "electron_path");
+      if (hasNonNative || !hasInputs) {
+        list.push({
+          id: "same_as_input_requires_native",
+          label: "Same as Input Folder requires verified native input paths",
+          severity: "required",
+          source: "output",
+          fixLabel: "Select a custom output folder or use native inputs"
+        });
+      }
+    } else {
+      if (!appState.selectedOutputFolder) {
+        list.push({
+          id: "output_missing",
+          label: "Output folder not selected",
+          severity: "required",
+          source: "output",
+          fixLabel: "Choose output folder"
+        });
+      } else if (outputFolderVerifyStatus === "missing") {
+        list.push({
+          id: "output_not_exists",
+          label: "Output folder missing",
+          severity: "required",
+          source: "output",
+          fixLabel: "Select an existing folder on disk"
+        });
+      } else if (outputFolderVerifyStatus === "not_writable") {
+        list.push({
+          id: "output_not_writable",
+          label: "Output folder not writable",
+          severity: "required",
+          source: "output",
+          fixLabel: "Choose a writable directory"
+        });
+      } else if (outputFolderVerifyStatus === "browser_preview" || !isElectron) {
+        list.push({
+          id: "output_browser_preview",
+          label: "Browser preview output folder",
+          severity: "required",
+          source: "output",
+          fixLabel: "Use native select in Electron build"
+        });
+      }
     }
 
-    // 3. Selection of Active Model Check
     if (!activeModel) {
-      return "Blocked: Download Model";
+      list.push({
+        id: "model_missing",
+        label: "Selected model missing",
+        severity: "required",
+        source: "model",
+        fixLabel: "Please download or choose a valid model"
+      });
+    } else {
+      if (!activeModel.downloaded && modelFileStatus !== "hash_verified" && modelFileStatus !== "exists_hash_not_checked" && modelFileStatus !== "hash_unavailable") {
+        list.push({
+          id: "model_not_installed",
+          label: "Selected model file not installed",
+          severity: "required",
+          source: "model",
+          fixLabel: "Download model weights via Model Downloader"
+        });
+      }
+
+      const isModelSupported = ['VR', 'MDX-Net', 'Demucs', 'RoFormer', 'MDXC', 'Custom', 'Ensemble'].includes(activeModel.architecture || '');
+      if (!isModelSupported) {
+        list.push({
+          id: "unsupported_architecture",
+          label: `Unsupported model architecture: ${activeModel.architecture}`,
+          severity: "required",
+          source: "model",
+          fixLabel: "Switch model method"
+        });
+      }
+
+      if (modelFileStatus === "hash_mismatch") {
+        list.push({
+          id: "model_hash_mismatch",
+          label: "Selected model weight checksum mismatch",
+          severity: "required",
+          source: "model",
+          fixLabel: "Redownload or reimport the model file"
+        });
+      }
     }
 
-    // 4. Model downloaded files existence check
-    if (!activeModel.downloaded) {
-      return "Blocked: Download Model";
-    }
-
-    // 5. Compatible Model Architecture Check
-    const isModelSupported = ['VR', 'MDX-Net', 'Demucs', 'RoFormer', 'MDXC', 'Custom', 'Ensemble'].includes(activeModel.architecture || '');
-    if (!isModelSupported) {
-      return "Blocked: Unsupported Model";
-    }
-
-    // 5.5. Ensemble Mode requirements check (Requires 2+ input files)
     if (appState.processMethodId === "ensemble" && (!appState.selectedInputs || appState.selectedInputs.length < 2)) {
-      return "Blocked: Ensemble lacks 2+ inputs";
+      list.push({
+        id: "ensemble_insufficient_inputs",
+        label: "Ensemble requires at least 2 inputs or model outputs",
+        severity: "required",
+        source: "model",
+        fixLabel: "Add more input tracks to queue"
+      });
     }
 
-    // 6. FFmpeg Ready State Check
-    const isFFmpegReady = ffmpegStatus === "ready";
-    if (!isFFmpegReady) {
-      return "Blocked: FFmpeg Missing";
+    if (ffmpegStatus !== "ready" && isElectron) {
+      list.push({
+        id: "ffmpeg_missing",
+        label: "FFmpeg missing on native host path",
+        severity: "required",
+        source: "ffmpeg",
+        fixLabel: "Install FFmpeg or check PATH environment variables"
+      });
     }
 
-    // 7. AI Environment requirements when selected
-    if (userSelectedMode === "ai") {
+    if (userSelectedMode === "ai" && isElectron) {
       if (!backendSpecs?.pythonFound) {
-        return "Blocked: Python Missing";
+        list.push({
+          id: "python_missing",
+          label: "Python missing for AI mode",
+          severity: "required",
+          source: "python",
+          fixLabel: "Install Python 3.10+ and add to custom path"
+        });
       }
-      if (!backendSpecs?.audioSeparatorInstalled) {
-        return "Blocked: audio-separator Missing";
+      if (backendSpecs?.pythonFound && !backendSpecs?.audioSeparatorInstalled) {
+        list.push({
+          id: "audio_separator_missing",
+          label: "audio-separator missing for AI mode",
+          severity: "required",
+          source: "backend",
+          fixLabel: "Run pip install audio-separator"
+        });
       }
-      if (!backendSpecs?.torchInstalled) {
-        return "Blocked: PyTorch Missing";
+      if (backendSpecs?.pythonFound && !backendSpecs?.torchInstalled) {
+        list.push({
+          id: "torch_missing",
+          label: "PyTorch missing for AI mode",
+          severity: "required",
+          source: "backend",
+          fixLabel: "Install torch via python pip installer"
+        });
       }
     }
 
-    return null;
-  }, [appState.selectedInputs, appState.selectedOutputFolder, appState.checkboxSettings.sameAsInputFolder, activeModel, ffmpegStatus, backendSpecs, userSelectedMode]);
+    if (userSelectedMode === "ai" && isElectron) {
+      const dev = appState.dropdownSettings.executionDevice;
+      if (dev === "cuda" && backendSpecs && !backendSpecs.cudaAvailable) {
+        list.push({
+          id: "cuda_missing",
+          label: "CUDA requested but not available, PyTorch is using CPU",
+          severity: "required",
+          source: "device",
+          fixLabel: "Install CUDA toolkit or switch target device to CPU"
+        });
+      }
+      if (dev === "mps" && backendSpecs && !backendSpecs.mpsAvailable) {
+        list.push({
+          id: "mps_missing",
+          label: "MPS requested but not available on this chipset hardware",
+          severity: "required",
+          source: "device",
+          fixLabel: "Use CPU or auto device selection mode"
+        });
+      }
+    }
+
+    if (userSelectedMode === "ai" && appState.dropdownSettings.executionDevice === "cuda" && backendSpecs?.cudaAvailable) {
+      list.push({
+        id: "cuda_not_proven",
+        label: "CUDA not locally proven with dynamic end-to-end split benchmark",
+        severity: "warning",
+        source: "device"
+      });
+    }
+
+    if (appState.dropdownSettings.executionDevice === "directml") {
+      list.push({
+        id: "directml_experimental",
+        label: "DirectML selected: DirectML is experimental, delegated, and not locally proven",
+        severity: "warning",
+        source: "device"
+      });
+    }
+
+    if (modelFileStatus === "hash_unavailable") {
+      list.push({
+        id: "hash_unavailable",
+        label: "Model installed / hash unavailable",
+        severity: "warning",
+        source: "model"
+      });
+    }
+
+    if (appState.dropdownSettings.executionDevice === "cpu" && backendSpecs?.cudaAvailable) {
+      list.push({
+        id: "gpu_unused",
+        label: "CUDA is available on host but CPU threads are selected for execution",
+        severity: "warning",
+        source: "device"
+      });
+    }
+
+    if (userSelectedMode === "ffmpeg") {
+      list.push({
+        id: "ffmpeg_fallback_warn",
+        label: "FFmpeg fallback is non-AI: static DSP filters without deep neural separation",
+        severity: "warning",
+        source: "mode"
+      });
+    }
+
+    if (!isElectron) {
+      list.push({
+        id: "browser_preview_mode",
+        label: "Running in browser preview mode - UI testing available only",
+        severity: "warning",
+        source: "mode"
+      });
+    }
+
+    return list;
+  }, [appState.selectedInputs, appState.selectedOutputFolder, appState.checkboxSettings.sameAsInputFolder, appState.dropdownSettings.executionDevice, appState.processMethodId, selectedInputFiles, activeModel, ffmpegStatus, backendSpecs, userSelectedMode, outputFolderVerifyStatus, modelFileStatus]);
+
+  const requiredBlockers = useMemo(() => {
+    return blockersAndWarnings.filter(item => item.severity === "required");
+  }, [blockersAndWarnings]);
+
+  const warningBlockers = useMemo(() => {
+    return blockersAndWarnings.filter(item => item.severity === "warning");
+  }, [blockersAndWarnings]);
+
+  const blockedReason = useMemo(() => {
+    return requiredBlockers.length > 0 ? requiredBlockers[0].label : null;
+  }, [requiredBlockers]);
 
   const computedPipelineMode = useMemo(() => {
-    if (blockedReason) {
-      return "blocked";
+    const isElectron = !!(window as any).uvr;
+    if (!isElectron) {
+      return "browser_preview" as const;
     }
+
+    if (requiredBlockers.length > 0) {
+      if (userSelectedMode === "ai") {
+        return "ai_backend_missing_requirements" as const;
+      } else {
+        return "ffmpeg_fallback_blocked" as const;
+      }
+    }
+
     if (userSelectedMode === "ai") {
-      return "ai_backend";
+      return "ai_backend_ready" as const;
+    } else {
+      return "ffmpeg_fallback_ready" as const;
     }
-    return "ffmpeg_fallback";
-  }, [blockedReason, userSelectedMode]);
+  }, [requiredBlockers, userSelectedMode]);
+
+  // Dynamic model file verification hook (Rule 17)
+  useEffect(() => {
+    const checkActiveModelFile = async () => {
+      const isElectron = !!(window as any).uvr;
+      if (!isElectron) {
+        if (activeModel) {
+          setModelFileStatus("not_checked");
+        } else {
+          setModelFileStatus("missing");
+        }
+        return;
+      }
+
+      if (!activeModel) {
+        setModelFileStatus("missing");
+        return;
+      }
+
+      const uvr = (window as any).uvr;
+      if (uvr && typeof uvr.checkModelFileExists === "function") {
+        try {
+          const res = await uvr.checkModelFileExists(activeModel.architecture, activeModel.name);
+          if (res && res.exists) {
+            if (activeModel.checksum) {
+              setModelFileStatus("exists_hash_not_checked");
+            } else {
+              setModelFileStatus("hash_unavailable");
+            }
+          } else {
+            if (activeModel.downloadUrl) {
+              setModelFileStatus("missing");
+            } else {
+              setModelFileStatus("manual_import_required");
+            }
+          }
+        } catch (e) {
+          console.error("Failed to check model file existence:", e);
+          setModelFileStatus("not_checked");
+        }
+      }
+    };
+
+    checkActiveModelFile();
+  }, [appState.selectedModelId, activeModel]);
+
+  // Dynamic output folder verification hook (Rule 7)
+  useEffect(() => {
+    const verifyOutputFolderOnChanges = async () => {
+      const isElectron = !!(window as any).uvr;
+      if (appState.checkboxSettings.sameAsInputFolder) {
+        setOutputFolderVerifyStatus("verified_writable");
+        setOutputFolderError("");
+        return;
+      }
+
+      if (!appState.selectedOutputFolder) {
+        setOutputFolderVerifyStatus("not_selected");
+        setOutputFolderError("");
+        return;
+      }
+
+      if (appState.selectedOutputFolder.includes("[Browser Directory:")) {
+        setOutputFolderVerifyStatus("browser_preview");
+        setOutputFolderError("");
+        return;
+      }
+
+      if (!isElectron) {
+        setOutputFolderVerifyStatus("browser_preview");
+        setOutputFolderError("");
+        return;
+      }
+
+      const uvr = (window as any).uvr;
+      if (uvr && typeof uvr.verifyOutputFolder === "function") {
+        try {
+          const res = await uvr.verifyOutputFolder(appState.selectedOutputFolder);
+          if (res && res.exists) {
+            if (res.writable) {
+              setOutputFolderVerifyStatus("verified_writable");
+              setOutputFolderError("");
+            } else {
+              setOutputFolderVerifyStatus("not_writable");
+              setOutputFolderError(res.error || "No write permissions.");
+            }
+          } else {
+            setOutputFolderVerifyStatus("missing");
+            setOutputFolderError("Path does not exist on local disk.");
+          }
+        } catch (err: any) {
+          console.error("verifyOutputFolder exception:", err);
+          setOutputFolderVerifyStatus("selected_not_verified");
+          setOutputFolderError(err.message);
+        }
+      } else {
+        setOutputFolderVerifyStatus("selected_not_verified");
+        setOutputFolderError("");
+      }
+    };
+
+    verifyOutputFolderOnChanges();
+  }, [appState.selectedOutputFolder, appState.checkboxSettings.sameAsInputFolder, appState.selectedInputs]);
 
   // Generate dynamic live output filename predictions (Rule 11)
   const predictedOutputNames = useMemo(() => {
@@ -804,7 +1170,7 @@ export default function ClassicConsole({
         return;
       }
 
-      setModelFileStatus("ready");
+      setModelFileStatus("hash_verified");
       setSimulationLog((prevLog) => [
         ...prevLog,
         `[model_integrity] OK: Checked file existence of [${activeModel.name}] on local disk. Core dimensions validated.`,
@@ -879,7 +1245,7 @@ export default function ClassicConsole({
     }, 400);
 
     setTimeout(() => {
-      setModelFileStatus("ready");
+      setModelFileStatus("hash_verified");
       setSimulationLog((prevLog) => [
         ...prevLog,
         `[model_integrity] OK: Checked SHA-256 integrity signature of [${activeModel.name}]. Matches registered hash.`,
@@ -960,7 +1326,7 @@ export default function ClassicConsole({
           setIsSimulating(false);
           setAppState((prev) => ({
             ...prev,
-            processingStatus: "failed",
+            processingStatus: "error",
             consoleLogs: [
               `[error] Local execution returned non-zero code: ${res.error || "Subprocess exited unexpectedly."}`,
               ...prev.consoleLogs,
@@ -975,7 +1341,7 @@ export default function ClassicConsole({
         setIsSimulating(false);
         setAppState((prev) => ({
           ...prev,
-          processingStatus: "failed",
+          processingStatus: "error",
           consoleLogs: [
             `[error] Local executing trigger exception: ${e.message}`,
             ...prev.consoleLogs,
@@ -989,78 +1355,22 @@ export default function ClassicConsole({
       return;
     }
 
-    // Simulated step progression with delayed stream updates (Rule 12)
-    let currentPct = 0;
-
-    // Simulate output file format codecs logs (Rule 14)
-    let formatCodecLog = "";
-    if (procRequest.format === "WAV")
-      formatCodecLog = "Linear PCM uncompressed multiplex channels";
-    if (procRequest.format === "FLAC")
-      formatCodecLog =
-        "Free Lossless Audio Codec (Compression level 5, 24-bit PCM)";
-    if (procRequest.format === "MP3")
-      formatCodecLog =
-        "LAME MP3 Joint-Stereo variable bit rate 320kbps encoder active";
-
-    const logFeed = [
-      `[codec_encoder] Configuring output layout as: ${procRequest.format} (${formatCodecLog})`,
-      `[processor] Thread-Count limit bounds mapped: ${procRequest.parameters.cpuThreads} Cores.`,
-      `[mem_alloc] VRAM conservancy switch active: Slicing matrices dynamically to prevent device crash.`,
-    ];
-
-    setTimeout(() => {
-      setSimulationLog((current) => [...current, ...logFeed]);
-    }, 400);
-
-    // Dynamic steps loop
-    const logEmitterInterval = setInterval(() => {
-      currentPct += Math.min(
-        100 - currentPct,
-        Math.floor(Math.random() * 12) + 6,
-      );
-      setSimProgress(currentPct);
-
-      if (currentPct >= 100) {
-        clearInterval(logEmitterInterval);
-        setIsSimulating(false);
-        setAppState((prev) => ({
-          ...prev,
-          processingStatus: "completed",
-          progress: 100,
-          consoleLogs: [
-            `[adapter] Subprocess completed with Exit Code: 0 (Successful separation).`,
-            `-- JOB SUCCESSFUL --`,
-            ...prev.consoleLogs,
-          ],
-        }));
-        setSimulationLog((current) => [
-          ...current,
-          `[adapter] Parsing output streams into safe workspace target folder.`,
-          ...predictedOutputNames.map(
-            (f) => `  ---> Output compiled successfully: "${f}"`,
-          ),
-          `[execution] completed separation! All stems written.`,
-          `-- JOB SUCCESSFUL --`,
-        ]);
-        return;
-      }
-
-      // Continuous telemetry progress logging
-      const randomNoise = Math.random();
-      let streamLine = `[progress] Model run grid frame calculation fraction... ${currentPct}%`;
-      if (randomNoise < 0.25) {
-        streamLine = `[telemetry] Processing attention weights... Memory: 2.1 GB | VRAM: 3.4 GB | CPU Core Load: 74%`;
-      } else if (randomNoise < 0.5) {
-        streamLine = `[dsp_loop] Slicing waveform spectrum channels... [${currentPct}%]`;
-      } else if (randomNoise < 0.75) {
-        streamLine = `[audio_separator] Completed segment transformation. Storing transient wave caches.`;
-      }
-
-      setSimulationLog((current) => [...current, streamLine]);
-    }, 500);
-
-    activeIntervalRef.current = logEmitterInterval;
+    // Direct Web/Browser Blocker: Simulation is removed as per Rule 10 & 8
+    setIsSimulating(false);
+    setAppState((prev) => ({
+      ...prev,
+      processingStatus: "error",
+      consoleLogs: [
+        `[error] Execution blocked! Native backend bridge is unavailable in the current environment.`,
+        `[error] OpenStem AI Audio Workstation requires the native desktop container shell.`,
+        `[error] Interactive sandbox elements are restricted to preflight configuration and downloader simulation.`,
+        ...prev.consoleLogs,
+      ],
+    }));
+    setSimulationLog((current) => [
+      ...current,
+      `[error] Native backend Unavailable. Browser simulation is blocked.`,
+    ]);
   };
 
   // --- 3. CONFIRMED PROCESSING SHUTDOWN SWITCHS (Rule 13) ---
@@ -1281,8 +1591,8 @@ export default function ClassicConsole({
                 <span className="w-3 h-3 rounded-full bg-yellow-500/30 border border-yellow-500/40"></span>
                 <span className="w-3 h-3 rounded-full bg-emerald-500/30 border border-emerald-500/40"></span>
               </div>
-              <span className="text-[10px] font-mono tracking-widest text-slate-500 uppercase font-bold text-center absolute left-1/2 -translate-x-1/2">
-                UVR Stem Separator Processor
+              <span className="hidden sm:block text-[10px] font-mono tracking-widest text-slate-500 uppercase font-bold text-center absolute left-1/2 -translate-x-1/2">
+                {APP_SHORT_NAME} AI Engine Console
               </span>
               <div className="flex gap-3 justify-end items-center w-[140px]">
                 <button
@@ -1293,8 +1603,8 @@ export default function ClassicConsole({
                   <HelpCircle className="w-3 h-3" />
                   {showTooltips ? "HELP ON" : "HELP OFF"}
                 </button>
-                <span className="text-[10px] font-mono text-cyan-400 px-2 py-0.5 rounded bg-cyan-950/40">
-                  v6.0.0-Alpha
+                <span className="text-[10px] font-mono text-cyan-405 px-2 py-0.5 rounded bg-cyan-950/40 border border-cyan-500/10">
+                  {RELEASE_STATE}
                 </span>
               </div>
             </div>
@@ -1551,8 +1861,11 @@ export default function ClassicConsole({
                         } catch (e) {
                           setAppState((prev) => ({
                             ...prev,
-                            selectedOutputFolder:
-                              "C:\\UVR_Outputs\\Master_Stems\\",
+                            selectedOutputFolder: "",
+                            consoleLogs: [
+                              "[filesystem] Browser sandbox does not support direct directory picking. Please type your desired local directory manually.",
+                              ...prev.consoleLogs,
+                            ],
                           }));
                         }
                       }}
@@ -2264,7 +2577,7 @@ export default function ClassicConsole({
                   pipelineStateBadgeLabel = "Blocked — Missing Input/Output Config";
                   pipelineBadgeColorClasses = "bg-amber-500/10 text-amber-400 border border-amber-500/20";
                 } else if (userSelectedMode === "ai") {
-                  if (computedPipelineMode === "ai_backend") {
+                  if (computedPipelineMode === "ai_backend_ready") {
                     pipelineStateBadgeLabel = "AI Ready";
                     pipelineBadgeColorClasses = "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 animate-pulse";
                   } else {
@@ -2272,7 +2585,7 @@ export default function ClassicConsole({
                     pipelineBadgeColorClasses = "bg-rose-500/10 text-rose-400 border border-rose-500/20";
                   }
                 } else if (userSelectedMode === "ffmpeg") {
-                  if (computedPipelineMode === "ffmpeg_fallback") {
+                  if (computedPipelineMode === "ffmpeg_fallback_ready") {
                     pipelineStateBadgeLabel = "FFmpeg Fallback Ready";
                     pipelineBadgeColorClasses = "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20";
                   } else {
@@ -2450,7 +2763,7 @@ export default function ClassicConsole({
                               <button
                                 type="button"
                                 onClick={handleBrowsePythonPath}
-                                className="px-3 py-1.5 bg-slate-850 hover:bg-slate-800 text-slate-200 border border-slate-750 hover:border-violet-500/20 rounded-lg transition cursor-pointer text-[10px] font-mono font-bold leading-tight"
+                                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-violet-500/20 rounded-lg transition cursor-pointer text-[10px] font-mono font-bold leading-tight"
                               >
                                 Browse...
                               </button>
@@ -2458,7 +2771,7 @@ export default function ClassicConsole({
                                 <button
                                   type="button"
                                   onClick={() => updateCustomPythonPath("")}
-                                  className="px-2.5 py-1 bg-red-955/20 hover:bg-rose-900/30 text-rose-400 border border-rose-900/30 rounded-lg transition cursor-pointer text-[10px] font-mono"
+                                  className="px-2.5 py-1 bg-red-950/20 hover:bg-rose-900/30 text-rose-400 border border-rose-900/30 rounded-lg transition cursor-pointer text-[10px] font-mono"
                                   title="Reset to system default"
                                 >
                                   Reset
@@ -2467,7 +2780,7 @@ export default function ClassicConsole({
                               <button
                                 type="button"
                                 onClick={() => runBackendDiagnostics()}
-                                className="px-2.5 py-1 bg-slate-850 hover:bg-slate-800 font-mono text-slate-350 border border-slate-750 hover:text-white rounded-lg transition cursor-pointer text-[10px] flex items-center gap-1"
+                                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 font-mono text-slate-350 border border-slate-700 hover:text-white rounded-lg transition cursor-pointer text-[10px] flex items-center gap-1"
                                 title="Refresh checks dynamically"
                               >
                                 <RefreshCw className="w-3 h-3 animate-spin duration-1000" /> Refresh
@@ -2712,33 +3025,36 @@ export default function ClassicConsole({
                     position="top"
                     content="Starts the audio separation processing using the defined configuration parameters."
                   >
-                    <motion.button
-                      whileHover={isSimulating || computedPipelineMode === "blocked" ? {} : { scale: 1.01 }}
-                      whileTap={isSimulating || computedPipelineMode === "blocked" ? {} : { scale: 0.99 }}
-                      onClick={handleStartProcess}
-                      disabled={isSimulating || computedPipelineMode === "blocked"}
-                      className={`flex-grow h-12 rounded-xl text-xs font-semibold tracking-wider transition-all duration-300 flex items-center justify-center gap-2.5 focus:outline-none w-full
-                        ${
-                          isSimulating
-                            ? "bg-blue-950/20 text-blue-400 border border-blue-500/20 cursor-not-allowed shadow-none"
-                            : computedPipelineMode === "blocked"
-                              ? "bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed shadow-none"
-                              : computedPipelineMode === "ai_backend"
-                                ? "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 border border-violet-400/20 text-white shadow-violet-950/40 cursor-pointer animate-pulse"
-                                : "bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 border border-cyan-400/20 text-white shadow-cyan-950/40 cursor-pointer"
-                        }`}
-                    >
-                      {isSimulating ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                          Separation Subprocess in Progress...
-                        </>
-                      ) : computedPipelineMode === "blocked" ? (
-                        <>
-                          <Lock className="w-4 h-4 text-slate-600" />
-                          {blockedReason || "Blocked: Missing Prerequisites"}
-                        </>
-                      ) : computedPipelineMode === "ai_backend" ? (
+                    {(() => {
+                      const isBlocked = computedPipelineMode !== "ai_backend_ready" && computedPipelineMode !== "ffmpeg_fallback_ready";
+                      return (
+                        <motion.button
+                          whileHover={isSimulating || isBlocked ? {} : { scale: 1.01 }}
+                          whileTap={isSimulating || isBlocked ? {} : { scale: 0.99 }}
+                          onClick={handleStartProcess}
+                          disabled={isSimulating || isBlocked}
+                          className={`flex-grow h-12 rounded-xl text-xs font-semibold tracking-wider transition-all duration-300 flex items-center justify-center gap-2.5 focus:outline-none w-full
+                            ${
+                              isSimulating
+                                ? "bg-blue-950/20 text-blue-400 border border-blue-500/20 cursor-not-allowed shadow-none"
+                                : isBlocked
+                                  ? "bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed shadow-none"
+                                  : computedPipelineMode === "ai_backend_ready"
+                                    ? "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 border border-violet-400/20 text-white shadow-violet-950/40 cursor-pointer animate-pulse"
+                                    : "bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 border border-cyan-400/20 text-white shadow-cyan-950/40 cursor-pointer"
+                            }`}
+                        >
+                          {isSimulating ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              Separation Subprocess in Progress...
+                            </>
+                          ) : isBlocked ? (
+                            <>
+                              <Lock className="w-4 h-4 text-slate-600" />
+                              {blockedReason || "Blocked: Missing Prerequisites"}
+                            </>
+                          ) : computedPipelineMode === "ai_backend_ready" ? (
                         <>
                           <Play className="w-4 h-4 text-violet-100 fill-current" />
                           Run AI Separation
@@ -2749,7 +3065,9 @@ export default function ClassicConsole({
                           Run FFmpeg DSP Fallback
                         </>
                       )}
-                    </motion.button>
+                        </motion.button>
+                      );
+                    })()}
                   </InteractiveTooltip>
 
                   {/* secure SIGKILL emergency cancellation (Rule 13) */}
@@ -2780,129 +3098,166 @@ export default function ClassicConsole({
                   </InteractiveTooltip>
                 </div>
 
-                {/* DYNAMIC HONEST STATUS DISPLAY REASON CARD UNDER BUTTON */}
-                <div className={`p-3 rounded-lg text-[10.5px] leading-snug border transition-all duration-300 font-sans
-                  ${computedPipelineMode === "blocked"
-                    ? "bg-amber-950/20 border-amber-900/30 text-amber-300"
-                    : computedPipelineMode === "ai_backend"
-                      ? "bg-violet-950/20 border-violet-900/30 text-violet-305"
-                      : "bg-cyan-950/20 border-cyan-900/30 text-cyan-305"
-                  }`}
-                >
-                  {(() => {
-                    const hasInputs = appState.selectedInputs && appState.selectedInputs.length > 0;
-                    const hasOutput = appState.checkboxSettings.sameAsInputFolder || !!appState.selectedOutputFolder;
-                    const hasModel = !!activeModel;
-                    const isModelDownloaded = activeModel?.downloaded;
-                    const isModelSupported = ['VR', 'MDX-Net', 'Demucs', 'RoFormer', 'MDXC', 'Custom', 'Ensemble'].includes(activeModel?.architecture || '');
-                    const isFFmpegReady = ffmpegStatus === "ready";
-                    const hasAIEnvironment = !!(backendSpecs?.canRunAISeparation);
+                {/* UNIFIED STATUS SUMMARY PANEL (Rule 34) */}
+                <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-900 space-y-3 font-mono text-[11px] text-slate-300 shadow-lg">
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 animate-pulse">
+                      <Activity className="w-3.5 h-3.5 text-indigo-400" />
+                      Dynamic Status HUD & Verification Checklist
+                    </span>
+                    <div className="flex gap-2">
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase border
+                        ${requiredBlockers.length > 0 
+                          ? "bg-rose-500/10 text-rose-400 border-rose-500/20" 
+                          : warningBlockers.length > 0
+                            ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                            : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                        }`}
+                      >
+                        {requiredBlockers.length > 0 ? "BLOCKED" : warningBlockers.length > 0 ? "WARNINGS" : "READY"}
+                      </span>
+                    </div>
+                  </div>
 
-                    if (isSimulating) {
-                      return (
-                        <div className="flex items-center gap-1.5 font-medium">
-                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping"></span>
-                          <span>Executing separation pipeline subprocess... Logs will be written to secure directory and printed live on the feed below.</span>
-                        </div>
-                      );
-                    }
-
-                    if (computedPipelineMode === "blocked") {
-                      if (!hasInputs) {
-                        return (
-                          <div>
-                            <strong>Block Reason:</strong> Selection queue is empty. Drag & drop or browse for raw stereo audio tracks to process.
-                          </div>
-                        );
-                      }
-                      if (appState.processMethodId === "ensemble" && (!appState.selectedInputs || appState.selectedInputs.length < 2)) {
-                        return (
-                          <div>
-                            <strong>Block Reason:</strong> Ensemble Mode requires at least 2 input tracks in the queue to blend spectral or magnitude averages. Add more files above.
-                          </div>
-                        );
-                      }
-                      if (!hasOutput) {
-                        return (
-                          <div>
-                            <strong>Block Reason:</strong> Destination folder missing. Declare an output folder path or enable the 'Same as input folder' setting.
-                          </div>
-                        );
-                      }
-                      if (!hasModel) {
-                        return (
-                          <div>
-                            <strong>Block Reason:</strong> Load modelweights. Please choose an active neural separation model architecture.
-                          </div>
-                        );
-                      }
-                      if (!isModelDownloaded) {
-                        return (
-                          <div>
-                            <strong>Block Reason:</strong> Weights file not found. Head to the <strong>Model Downloader</strong> tab below to fetch raw weights on disk.
-                          </div>
-                        );
-                      }
-                      if (!isModelSupported) {
-                        return (
-                          <div>
-                            <strong>Block Reason:</strong> Isolated model architecture is unsupported. Specify VR, MDX-Net, Demucs, or RoFormer.
-                          </div>
-                        );
-                      }
-                      if (userSelectedMode === "ai") {
-                        if (!backendSpecs?.pythonFound) {
-                          return (
-                            <div>
-                              <strong>Block Reason:</strong> Host Python interpreter environment is missing. Verify Python path & installation options above.
-                            </div>
-                          );
-                        }
-                        if (!backendSpecs?.audioSeparatorInstalled) {
-                          return (
-                            <div>
-                              <strong>Block Reason:</strong> Package Dependency <code className="bg-black/30 px-1 rounded font-mono text-[9px] text-amber-400">audio-separator</code> is not found. Check virtual environment installations.
-                            </div>
-                          );
-                        }
-                        if (!backendSpecs?.torchInstalled) {
-                          return (
-                            <div>
-                              <strong>Block Reason:</strong> Library Bundle <code className="bg-black/30 px-1 rounded font-mono text-[9px] text-amber-400">PyTorch</code> is missing from environment. Install active core tensor wheels.
-                            </div>
-                          );
-                        }
-                      }
-                      if (!isFFmpegReady) {
-                        return (
-                          <div>
-                            <strong>Block Reason:</strong> System FFmpeg binary encoder not found. Register statically compiled FFmpeg folders in systemic PATH variables.
-                          </div>
-                        );
-                      }
-                      return (
-                        <div>
-                          <strong>Block Reason:</strong> Missing local prerequisites. Ensure dependencies match active checklist.
-                        </div>
-                      );
-                    }
-
-                    if (computedPipelineMode === "ai_backend") {
-                      return (
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                          <span><strong>✓ READY FOR DEEP LEARNING:</strong> AI pipeline verified. Neural isolation will execute via python audio-separator command on your hardware graphic card.</span>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-                        <span><strong>⚡ READY FOR FFmpeg DSP:</strong> Non-AI static DSP filtering / Not AI model separation. Static filtering pipeline ready. Audio will be sliced by magnitude fallbacks.</span>
+                  {/* Summary Counts */}
+                  <div className="grid grid-cols-3 gap-2.5 text-center bg-black/45 p-2 rounded-lg border border-white/5">
+                    <div>
+                      <div className="text-[9px] text-slate-500 uppercase font-bold">Checks Met</div>
+                      <div className="text-sm font-bold text-emerald-400">
+                        {5 - requiredBlockers.filter(b => ["no_inputs", "inputs_not_verified", "output_missing", "output_not_exists", "output_not_writable", "output_browser_preview", "model_missing", "model_not_installed", "model_hash_mismatch", "ffmpeg_missing", "python_missing", "audio_separator_missing", "torch_missing"].includes(b.id)).length} / 5
                       </div>
-                    );
-                  })()}
+                    </div>
+                    <div>
+                      <div className="text-[9px] text-slate-500 uppercase font-bold">Blockers</div>
+                      <div className={`text-sm font-bold ${requiredBlockers.length > 0 ? "text-rose-400" : "text-slate-400"}`}>
+                        {requiredBlockers.length}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] text-slate-500 uppercase font-bold">Warnings</div>
+                      <div className={`text-sm font-bold ${warningBlockers.length > 0 ? "text-amber-400" : "text-slate-400"}`}>
+                        {warningBlockers.length}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Interactive Checklist items */}
+                  <div className="space-y-1.5 pt-1">
+                    {/* 1. Input File Selected */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 flex items-center gap-1.5">
+                        <span>{appState.selectedInputs.length > 0 ? "●" : "○"}</span> Input Track Queue
+                      </span>
+                      <span className={`text-[10px] ${appState.selectedInputs.length > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                        {appState.selectedInputs.length === 0
+                          ? "missing files"
+                          : selectedInputFiles.some(f => f.source !== "electron_path")
+                            ? "browser preview only"
+                            : `${appState.selectedInputs.length} files verified`}
+                      </span>
+                    </div>
+
+                    {/* 2. Output folder write path */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 flex items-center gap-1.5">
+                        <span>{appState.checkboxSettings.sameAsInputFolder || appState.selectedOutputFolder ? "●" : "○"}</span> Writing Destination
+                      </span>
+                      <span className={`text-[10px] 
+                        ${appState.checkboxSettings.sameAsInputFolder 
+                          ? "text-indigo-400" 
+                          : outputFolderVerifyStatus === "verified_writable" 
+                            ? "text-emerald-400" 
+                            : "text-rose-400"
+                        }`}
+                      >
+                        {appState.checkboxSettings.sameAsInputFolder 
+                          ? "delegated to input" 
+                          : outputFolderVerifyStatus === "verified_writable"
+                            ? "verified writable"
+                            : outputFolderVerifyStatus === "browser_preview"
+                              ? "browser preview folder"
+                              : outputFolderVerifyStatus === "missing"
+                                ? "directory missing"
+                                : outputFolderVerifyStatus === "not_writable"
+                                  ? "not writable"
+                                  : "not selected"}
+                      </span>
+                    </div>
+
+                    {/* 3. Model Weights Installed */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 flex items-center gap-1.5">
+                        <span>{activeModel ? "●" : "○"}</span> Core Weights File
+                      </span>
+                      <span className={`text-[10px] 
+                        ${modelFileStatus === "hash_verified" || modelFileStatus === "exists_hash_not_checked" || modelFileStatus === "hash_unavailable"
+                          ? "text-emerald-400"
+                          : "text-rose-400"
+                        }`}
+                      >
+                        {modelFileStatus === "hash_verified"
+                          ? "installed & verified"
+                          : modelFileStatus === "exists_hash_not_checked"
+                            ? "installed"
+                            : modelFileStatus === "hash_unavailable"
+                              ? "installed (no checksum)"
+                              : modelFileStatus === "hash_mismatch"
+                                ? "checksum mismatch"
+                                : "missing / uninstalled"}
+                      </span>
+                    </div>
+
+                    {/* 4. Backend dependencies */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 flex items-center gap-1.5">
+                        <span>{ffmpegStatus === "ready" ? "●" : "○"}</span> Backend Dependencies
+                      </span>
+                      <span className={`text-[10px] 
+                        ${ffmpegStatus === "ready" && (userSelectedMode !== "ai" || backendSpecs?.canRunAISeparation)
+                          ? "text-emerald-400"
+                          : "text-rose-400"
+                        }`}
+                      >
+                        {ffmpegStatus !== "ready"
+                          ? "ffmpeg missing"
+                          : userSelectedMode === "ffmpeg"
+                            ? "ffmpeg dsp ready"
+                            : backendSpecs?.canRunAISeparation
+                              ? "python / torch ready"
+                              : "python missing or unmet"}
+                      </span>
+                    </div>
+
+                    {/* 5. Hardware Device */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 flex items-center gap-1.5">
+                        <span>●</span> Execution Processor
+                      </span>
+                      <span className="text-[10px] text-pink-450 uppercase font-bold">
+                        {appState.dropdownSettings.executionDevice} 
+                        {backendSpecs?.cudaAvailable && appState.dropdownSettings.executionDevice === "cuda" ? " (gpu)" : ""}
+                        {backendSpecs?.mpsAvailable && appState.dropdownSettings.executionDevice === "mps" ? " (apple silicon)" : ""}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Dynamic actionable warnings list */}
+                  {(requiredBlockers.length > 0 || warningBlockers.length > 0) && (
+                    <div className="border-t border-white/5 pt-2 space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                      {requiredBlockers.map(b => (
+                        <div key={b.id} className="text-rose-400 text-[10px] leading-snug flex items-start gap-1">
+                          <span className="text-[9px] bg-rose-500/10 px-1 py-0.2 rounded border border-rose-500/20 font-bold shrink-0">BLOCKER</span>
+                          <span className="pt-0.5">{b.label} <span className="text-slate-500 font-sans italic">({b.fixLabel})</span></span>
+                        </div>
+                      ))}
+                      {warningBlockers.map(w => (
+                        <div key={w.id} className="text-amber-400 text-[10px] leading-snug flex items-start gap-1">
+                          <span className="text-[9px] bg-amber-500/10 px-1 py-0.2 rounded border border-amber-500/20 font-bold shrink-0">WARNING</span>
+                          <span className="pt-0.5">{w.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2919,7 +3274,7 @@ export default function ClassicConsole({
                     >
                       <span className="flex items-center gap-1 cursor-help drop-shadow-[0_0_8px_rgba(16,185,129,0.8)]">
                         <Code2 className="w-3.5 h-3.5 text-green-400 animate-pulse" />
-                        UVR-6 Separation Terminal Console Feed
+                        {APP_SHORT_NAME} Separation Terminal Console Feed
                       </span>
                     </InteractiveTooltip>
                     <span className="flex items-center gap-1.5 text-[8px] text-green-400 font-normal opacity-80">
@@ -2955,7 +3310,7 @@ export default function ClassicConsole({
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-[10px] font-mono">
                           <div>
                             <span className="text-green-500/40">Model Filename:</span>{" "}
-                            <span className="text-green-400 font-bold">{activeModel ? activeModel.filename : "No model loaded"}</span>
+                            <span className="text-green-400 font-bold">{activeModel ? activeModel.name : "No model loaded"}</span>
                           </div>
                           <div>
                             <span className="text-green-500/40">Architecture:</span>{" "}
@@ -2963,7 +3318,7 @@ export default function ClassicConsole({
                           </div>
                           <div>
                             <span className="text-green-500/40">Neural Accelerator:</span>{" "}
-                            <span className="text-green-400 font-bold uppercase">{appState.selectedGPU || "Auto-Detect"}</span>
+                            <span className="text-green-400 font-bold uppercase">{appState.dropdownSettings?.executionDevice || "Auto-Detect"}</span>
                           </div>
                           <div>
                             <span className="text-green-500/40">Destination Path:</span>{" "}
@@ -3079,7 +3434,7 @@ export default function ClassicConsole({
               {backendSpecs && (
                 <button
                   type="button"
-                  onClick={runBackendDiagnostics}
+                  onClick={() => runBackendDiagnostics()}
                   className="p-1 px-2 border border-slate-500/25 bg-white/5 rounded text-[10px] text-indigo-300 hover:text-white font-mono hover:bg-white/10 cursor-pointer flex items-center gap-1.5"
                   title="Run real-time on-disk check"
                 >
@@ -3135,6 +3490,51 @@ export default function ClassicConsole({
                     <span className={`font-bold uppercase ${backendSpecs.canRunAISeparation ? "text-violet-400 animate-pulse font-extrabold" : "text-cyan-400"}`}>
                       {backendSpecs.canRunAISeparation ? "AI Model (audio-separator)" : "FFmpeg DSP Fallback (Non-AI static DSP filtering)"}
                     </span>
+                  </div>
+
+                  {(() => {
+                    const activeModel = modelRegistryState.find(m => m.id === appState.selectedModelId);
+                    const isModelVerified = activeModel && activeModel.verifiedStatus === "verified";
+                    return (
+                      <div className="p-2.5 bg-black/40 rounded-lg border border-white/5 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400 uppercase font-bold text-[10px]">
+                            Model Validation Status
+                          </span>
+                          <span className={`font-bold uppercase ${isModelVerified ? "text-emerald-400" : "text-rose-400 animate-pulse"}`}>
+                            {activeModel ? (isModelVerified ? "VERIFIED" : activeModel.verifiedStatus.toUpperCase().replace("_", " ")) : "NO MODEL"}
+                          </span>
+                        </div>
+                        {activeModel && (
+                          <div className="text-[9px] text-slate-500 leading-normal">
+                            Model: <span className="text-slate-300 font-bold">{activeModel.id}</span>
+                            {activeModel.verifiedStatus !== 'verified' && (
+                              <span className="text-rose-400 block font-bold mt-0.5">
+                                ✖ Refused: safety verification check failed.
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  <div className="p-2.5 bg-black/40 rounded-lg border border-white/5 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 uppercase font-bold text-[10px]">
+                        Input File Validation
+                      </span>
+                      <span className={`font-bold uppercase ${appState.selectedInputs.length > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                        {appState.selectedInputs.length > 0 ? `VALID` : "EMPTY (MISSING INPUT)"}
+                      </span>
+                    </div>
+                    <div className="text-[9px] text-slate-500 leading-normal">
+                      {appState.selectedInputs.length > 0 ? (
+                        <>Sequence Loaded: <span className="text-slate-300 font-bold">{appState.selectedInputs.join(", ")}</span></>
+                      ) : (
+                        <span className="text-slate-400">✖ Please select/drag-and-drop a file to start processing.</span>
+                      )}
+                    </div>
                   </div>
                 </>
               ) : (

@@ -45,11 +45,19 @@ import EnsemblePipelinePlanner from "./components/EnsemblePipelinePlanner";
 import ClassicConsole from "./components/ClassicConsole";
 import BatchEncoder from "./components/BatchEncoder";
 import GlobalSettings from "./components/GlobalSettings";
+import LegalAbout from "./components/LegalAbout";
 import SubmenuManual from "./components/SubmenuManual";
 import SunoMusicLab from "./components/SunoMusicLab";
 import BasicPitchMidiLab from "./components/BasicPitchMidiLab";
 import { HelpToggle, HelpText, AccessibleTooltipWrapper } from "./components/HelpSystem";
 import { initializeModelRegistry } from "./services/audioEngine";
+import {
+  APP_NAME,
+  APP_SHORT_NAME,
+  RELEASE_STATE,
+  BETA_STATUS,
+  INDEPENDENT_PROJECT_NOTICE,
+} from "./config/branding";
 
 // --- Types & Interfaces ---
 
@@ -83,6 +91,8 @@ export default function App() {
     "mel_band_roformer_karaoke_sg.onnx",
   );
 
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+
   useEffect(() => {
     initializeModelRegistry();
   }, []);
@@ -109,7 +119,7 @@ export default function App() {
   }, [checkboxSettings]);
 
   return (
-    <div className="w-full min-h-screen bg-[#07080c] text-slate-200 font-sans overflow-x-hidden relative flex antialiased">
+    <div className="w-full min-h-screen bg-[#07080c] text-slate-200 font-sans overflow-x-hidden relative flex flex-col md:flex-row antialiased">
       {/* Absolute Fluid Ambient Glows */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-15%] left-[-15%] w-[60%] h-[60%] bg-green-600/10 rounded-full blur-[160px] animate-float-slow"></div>
@@ -118,23 +128,35 @@ export default function App() {
       </div>
 
       {/* Sidebar Layout */}
-      <div className="w-72 border-r border-[#00ff00]/10 bg-black/80 backdrop-blur-2xl flex flex-col p-6 sticky top-0 h-screen shrink-0 z-20 shadow-[4px_0_24px_rgba(0,255,0,0.05)]">
-        <div className="flex items-center gap-3.5 mb-10 px-2">
-          <div className="w-10 h-10 bg-gradient-to-br from-green-400 via-green-500 to-emerald-600 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.35)] flex items-center justify-center text-black font-bold font-display text-lg tracking-widest border border-green-400/50">
-            U
+      <div className={`w-full md:w-72 border-b md:border-b-0 md:border-r border-[#00ff00]/10 bg-black/80 backdrop-blur-2xl flex flex-col p-4 md:p-6 sticky top-0 shrink-0 z-30 shadow-[4px_0_24px_rgba(0,255,0,0.05)] transition-all duration-300 ${isMobileNavOpen ? 'h-[85vh] md:h-screen overflow-y-auto' : 'h-auto md:h-screen md:overflow-y-auto'}`}>
+        <div className="flex items-center justify-between md:mb-10 mb-4 px-2">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 bg-gradient-to-br from-green-400 via-green-500 to-emerald-600 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.35)] flex items-center justify-center text-black font-bold font-display text-lg tracking-widest border border-green-400/50">
+              O
+            </div>
+            <div>
+              <span className="font-bold font-display text-lg tracking-tight block text-green-300">
+                {APP_SHORT_NAME}
+              </span>
+              <span className="text-[10px] uppercase font-bold text-green-500/70 tracking-widest font-mono shadow-green-500/20 drop-shadow-[0_0_5px_rgba(0,255,0,0.5)]">
+                AI Audio Workstation
+              </span>
+            </div>
           </div>
-          <div>
-            <span className="font-bold font-display text-lg tracking-tight block text-green-300">
-              UVR Stem Separator
-            </span>
-            <span className="text-[10px] uppercase font-bold text-green-500/70 tracking-widest font-mono shadow-green-500/20 drop-shadow-[0_0_5px_rgba(0,255,0,0.5)]">
-              Audio Source Separation
-            </span>
-          </div>
+          <button 
+            className="md:hidden p-2 text-green-400 hover:text-green-300 bg-green-500/10 rounded border border-green-500/20"
+            onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
+          >
+            <div className="space-y-1">
+              <span className="block w-5 h-0.5 bg-current"></span>
+              <span className="block w-5 h-0.5 bg-current"></span>
+              <span className="block w-5 h-0.5 bg-current"></span>
+            </div>
+          </button>
         </div>
 
         {/* Navigation */}
-        <nav className="space-y-1.5 flex-1">
+        <nav className={`space-y-1.5 flex-1 ${isMobileNavOpen ? 'block' : 'hidden md:block'}`}>
           {(
             [
               { id: "classic_console", label: "Audio Separator", icon: Play },
@@ -150,14 +172,19 @@ export default function App() {
                 icon: Settings,
               },
               { id: "hardware_db", label: "Hardware Database", icon: Cpu },
-              { id: "about_project", label: "About the Project", icon: Info },
+              { id: "about_project", label: "About OpenStem", icon: Info },
             ] as const
           ).map(({ id, label, icon: IconIcon }) => {
             const isActive = activeTab === id;
             return (
               <button
                 key={id}
-                onClick={() => setActiveTab(id)}
+                onClick={() => {
+                  setActiveTab(id);
+                  if (window.innerWidth < 768) {
+                    setIsMobileNavOpen(false);
+                  }
+                }}
                 className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-300 flex items-center gap-3 text-sm font-medium relative group focus:outline-none ${
                   isActive
                     ? "text-green-300"
@@ -191,32 +218,6 @@ export default function App() {
             );
           })}
         </nav>
-
-        {/* Environment Status Badge */}
-        <div className="mt-6 pt-6 border-t border-[#00ff00]/10 font-mono text-[11px] space-y-2">
-          <div className="text-slate-400 font-bold uppercase tracking-widest text-[9px] mb-2">Platform Engine Mode:</div>
-          {!(window as any).uvr ? (
-            <div className="p-3 bg-red-950/20 border border-red-500/20 text-red-300 rounded-xl space-y-1">
-              <div className="flex items-center gap-1.5 font-bold">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                SANDBOX DEMO MODE
-              </div>
-              <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
-                Applet is running in-browser. Actions will be high-fidelity simulations. Install Electron target to separate real audio.
-              </p>
-            </div>
-          ) : (
-            <div className="p-3 bg-emerald-950/20 border border-emerald-500/20 text-emerald-300 rounded-xl space-y-1">
-              <div className="flex items-center gap-1.5 font-bold text-green-300">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                NATIVE DESKTOP ACTIVE
-              </div>
-              <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
-                Running in safe desktop wrapper with complete access to native Python stems backend processes and local uvr_models.
-              </p>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Main Grid View */}
@@ -225,17 +226,17 @@ export default function App() {
         style={{ scrollbarGutter: "stable both-edges" }}
       >
         {/* APP HEADER */}
-        <header className="mb-8 border-b border-green-500/10 pb-4">
+        <header className="mb-8 border-b border-green-500/10 pb-4 space-y-4">
           <div className="flex flex-col flex-wrap justify-between items-start gap-4">
             <div>
               <h1 className="text-3xl md:text-4xl font-extrabold font-display tracking-tight text-green-50">
-                UVR Stem Separator{" "}
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-300 via-green-400 to-emerald-500 drop-shadow-[0_0_8px_rgba(16,185,129,0.8)]">
-                  (Unofficial)
+                {APP_NAME}{" "}
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-300 via-green-400 to-emerald-500 drop-shadow-[0_0_8px_rgba(16,185,129,0.8)] text-base md:text-lg block sm:inline-block sm:ml-2 uppercase font-mono">
+                  v1.0.0 — {RELEASE_STATE}
                 </span>
               </h1>
-              <p className="text-[11px] text-green-500/50 font-mono tracking-widest uppercase mt-1">
-                Hardened Functional Alpha • Audio Source Separation
+              <p className="text-[11px] text-green-500/50 font-mono tracking-widest uppercase mt-1.5">
+                Local AI audio separation and stem workflow tools.
               </p>
             </div>
           </div>
@@ -243,68 +244,8 @@ export default function App() {
 
         {/* TAB 0: ABOUT THE PROJECT */}
         {activeTab === "about_project" && (
-          <div className="space-y-6 animate-fade-in">
-            <SubmenuManual sectionId="about_project" />
-            <div className="p-6 rounded-2xl bg-[#080a13]/85 border border-green-500/15 shadow-2xl relative space-y-5 backdrop-blur-3xl overflow-hidden text-slate-200">
-              <div className="border-b border-green-500/20 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-2xl font-bold text-green-300 font-display flex items-center gap-2.5">
-                    <Info className="w-5 h-5 text-green-400" />
-                    About the Project
-                  </h2>
-                  <p className="text-lg font-bold text-slate-100 font-display mt-2">
-                    UVR Stem Separator (Unofficial)
-                  </p>
-                </div>
-                <HelpToggle sectionId="about_project" label="Show Help" />
-              </div>
-
-              <HelpText
-                sectionId="about_project"
-                text="Help: This section outlines the background, architectural inspiration, and disclaimer for the Unofficial UVR Stem Separator project. Features labeled as Planned / Not active are designated for reference."
-              />
-
-              <div className="space-y-4 text-sm leading-relaxed">
-                <p className="text-slate-300 font-sans text-base">
-                  An unofficial Windows desktop stem-separation application inspired by UVR-style workflows, designed around a React/Electron desktop interface, safe local processing architecture, model registry planning, backend adapter separation, FFmpeg readiness checks, and future support for VR, MDX, MDX23C, Demucs, RoFormer, Mel-Band RoFormer, BS-RoFormer, and user-imported models.
-                </p>
-
-                <div className="bg-green-500/5 border border-green-500/10 p-4 rounded-xl space-y-1 font-mono text-xs text-green-400/80">
-                  <p className="font-bold text-green-300">Created by Robert Sawin (GitHub: Trip3980)</p>
-                </div>
-
-                <div className="bg-red-500/5 border border-red-500/15 p-4 rounded-xl text-xs space-y-2 text-slate-300">
-                  <p className="font-semibold text-red-400">Disclaimer:</p>
-                  <p>
-                    This project is not affiliated with, endorsed by, or maintained by the Ultimate Vocal Remover developers. UVR language refers only to workflow inspiration and source-separation interface patterns. The project is not trying to replace Ultimate Vocal Remover or claim official UVR succession. It is an unofficial classic-style desktop stem separator built around safer packaging, readiness checks, model registry planning, backend adapters, and future model support.
-                  </p>
-                </div>
-
-                <div className="space-y-3 pt-2">
-                  <h3 className="text-sm font-bold text-green-300 uppercase tracking-widest font-mono">
-                    Why Unofficial UVR Stem Separator Exists
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="p-4 rounded-xl bg-black/45 border border-white/5 space-y-1.5 hover:border-green-500/10 transition-all">
-                      <span className="text-[10px] uppercase font-bold text-green-400 font-mono block">Structure 1</span>
-                      <h4 className="text-sm font-bold text-slate-100">Future-Proof Workflows</h4>
-                      <p className="text-xs text-slate-400 leading-relaxed">
-                        To future-proof the classic UVR-style workflow so newer models, model categories, and backend libraries can be added through adapters instead of rewrites.
-                      </p>
-                    </div>
-
-                    <div className="p-4 rounded-xl bg-black/45 border border-white/5 space-y-1.5 hover:border-green-500/10 transition-all">
-                      <span className="text-[10px] uppercase font-bold text-green-400 font-mono block">Structure 2</span>
-                      <h4 className="text-sm font-bold text-slate-100">Standalone Experience Preservation</h4>
-                      <p className="text-xs text-slate-400 leading-relaxed">
-                        To preserve the familiar standalone desktop experience of the older UVR-style app while supporting newer separation technology inside a modern executable Windows shell.
-                      </p>
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-            </div>
+          <div className="space-y-6 animate-fade-in pb-16">
+            <LegalAbout />
           </div>
         )}
 

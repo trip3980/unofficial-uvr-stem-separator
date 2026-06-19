@@ -8,3 +8,21 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Deep learning weights (Rule 1)
+*.pth
+*.onnx
+*.ckpt
+*.pt
+models/
+uvr_models/
+
+# Cache directories (Rule 1)
+.cache/
+sandbox_cache/
+cache/
+
+# OS artifacts
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini

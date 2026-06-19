@@ -20,6 +20,11 @@ contextBridge.exposeInMainWorld('uvr', {
   checkFFmpegReady: () => ipcRenderer.invoke('check-ffmpeg-ready'),
   checkBackendDetails: (customPythonPath) => ipcRenderer.invoke('check-backend-details', customPythonPath),
   selectPythonPath: () => ipcRenderer.invoke('select-python-path'),
+  verifyOutputFolder: (folderPath) => ipcRenderer.invoke('verify-output-folder', folderPath),
+  verifyPythonPath: (pythonPath) => ipcRenderer.invoke('verify-python-path', pythonPath),
+  clearTempFiles: () => ipcRenderer.invoke('clear-temp-files'),
+  clearFailedDownloads: () => ipcRenderer.invoke('clear-failed-downloads'),
+  resetWeightsCache: () => ipcRenderer.invoke('reset-weights-cache'),
   
   // Real Local YuE Engine integration APIs
   validateYuEEnvironment: (config) => ipcRenderer.invoke('validate-yue-environment', config),

@@ -19,7 +19,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs')
     },
     backgroundColor: '#07080c',
-    title: 'Unofficial UVR Stem Separator (Official Release Mode)',
+    title: 'OpenStem AI Audio Workstation (Hardened Functional Alpha)',
     autoHideMenuBar: true
   });
 
@@ -48,14 +48,57 @@ app.on('window-all-closed', function () {
 function getModelLibraryPath() {
   const modelDir = path.join(app.getPath('userData'), 'uvr_models');
   if (!fs.existsSync(modelDir)) {
-    fs.mkdirSync(modelDir, { recursive: true });
-    ['VR', 'MDX-Net', 'Demucs', 'RoFormer', 'MDXC', 'Custom', 'Ensemble'].forEach(sub => {
-      const subPath = path.join(modelDir, sub);
-      if (!fs.existsSync(subPath)) {
-        fs.mkdirSync(subPath, { recursive: true });
+    // Try migrating from old unofficial UVR folder if it exists
+    try {
+      let oldUserData = '';
+      if (process.platform === 'win32') {
+        oldUserData = path.join(process.env.APPDATA || '', 'unofficial-uvr-stem-separator');
+      } else if (process.platform === 'darwin') {
+        oldUserData = path.join(require('os').homedir(), 'Library', 'Application Support', 'unofficial-uvr-stem-separator');
+      } else {
+        oldUserData = path.join(require('os').homedir(), '.config', 'unofficial-uvr-stem-separator');
       }
-    });
+      const oldModelDir = path.join(oldUserData, 'uvr_models');
+      if (fs.existsSync(oldModelDir)) {
+        console.log(`[OpenStem Migration] Found old models folder at: "${oldModelDir}". Migrating models...`);
+        fs.mkdirSync(modelDir, { recursive: true });
+        const subdirs = ['VR', 'MDX-Net', 'Demucs', 'RoFormer', 'MDXC', 'Custom', 'Ensemble'];
+        for (const sub of subdirs) {
+          const oldSubPath = path.join(oldModelDir, sub);
+          const newSubPath = path.join(modelDir, sub);
+          if (!fs.existsSync(newSubPath)) {
+            fs.mkdirSync(newSubPath, { recursive: true });
+          }
+          if (fs.existsSync(oldSubPath)) {
+            const files = fs.readdirSync(oldSubPath);
+            for (const file of files) {
+              const srcFile = path.join(oldSubPath, file);
+              const destFile = path.join(newSubPath, file);
+              if (fs.statSync(srcFile).isFile() && !fs.existsSync(destFile)) {
+                fs.copyFileSync(srcFile, destFile);
+                console.log(`[OpenStem Migration] Copied: ${sub}/${file}`);
+              }
+            }
+          }
+        }
+      }
+    } catch (migErr) {
+      console.warn('[OpenStem Migration] Non-blocking migration warning:', migErr);
+    }
+
+    if (!fs.existsSync(modelDir)) {
+      fs.mkdirSync(modelDir, { recursive: true });
+    }
   }
+
+  // Ensure all framework weight directory trees exist
+  ['VR', 'MDX-Net', 'Demucs', 'RoFormer', 'MDXC', 'Custom', 'Ensemble'].forEach(sub => {
+    const subPath = path.join(modelDir, sub);
+    if (!fs.existsSync(subPath)) {
+      fs.mkdirSync(subPath, { recursive: true });
+    }
+  });
+
   return modelDir;
 }
 
@@ -457,6 +500,79 @@ ipcMain.handle('select-python-path', async () => {
     ]
   });
   return result.filePaths[0] || null;
+});
+
+// Verify output folder exists and is writable
+ipcMain.handle('verify-output-folder', async (event, folderPath) => {
+  if (!folderPath) return { success: false, status: 'missing' };
+  try {
+    if (!fs.existsSync(folderPath)) {
+      return { success: false, status: 'missing' };
+    }
+    const testFile = path.join(folderPath, '.write_test_' + Date.now());
+    fs.writeFileSync(testFile, 'test');
+    fs.unlinkSync(testFile);
+    return { success: true, status: 'writable' };
+  } catch (err) {
+    return { success: false, status: 'invalid', error: err.message };
+  }
+});
+
+// Verify custom python path behaves correctly
+ipcMain.handle('verify-python-path', async (event, pythonPath) => {
+  if (!pythonPath) return { success: false, status: 'system_default' };
+  try {
+    const execCmd = pythonPath.includes(' ') && !pythonPath.startsWith('"') ? `"${pythonPath}"` : pythonPath;
+    const output = execSync(`${execCmd} --version`, { encoding: 'utf8', timeout: 2000 });
+    if (output && (output.toLowerCase().includes('python') || /^[0-9.]+/i.test(output.trim()))) {
+      return { success: true, status: 'verified', version: output.trim() };
+    }
+    return { success: false, status: 'invalid' };
+  } catch (err) {
+    return { success: false, status: 'invalid', error: err.message };
+  }
+});
+
+// Clear temporary processed directories
+ipcMain.handle('clear-temp-files', async () => {
+  try {
+    const tempDir = path.join(app.getPath('userData'), 'temp');
+    if (fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+// Purge incomplete or failed model downloads
+ipcMain.handle('clear-failed-downloads', async () => {
+  try {
+    const libraryPath = getModelLibraryPath();
+    const tempDownloadDir = path.join(libraryPath, 'temp_downloads');
+    if (fs.existsSync(tempDownloadDir)) {
+      fs.rmSync(tempDownloadDir, { recursive: true, force: true });
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+// Flush regional checksum validation cached registries
+ipcMain.handle('reset-weights-cache', async () => {
+  try {
+    const libraryPath = getModelLibraryPath();
+    const cacheFile = path.join(libraryPath, 'verification_cache.json');
+    if (fs.existsSync(cacheFile)) {
+      fs.unlinkSync(cacheFile);
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 });
 
 // Real Local YuE Engine integration processes

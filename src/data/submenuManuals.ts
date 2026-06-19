@@ -288,7 +288,7 @@ export const submenuManuals: Record<string, ManualContent> = {
       "Running massive model configurations on low-VRAM GPUs. Choose smaller chunk sizes to prevent out-of-memory errors."
     ],
     faq: [
-      { q: "Why does CUDA show as not locally proven?", a: "UVR-6 code can run CUDA, but we don't assume your computer has the drivers installed. It is proven once you execute a real local AI separation job on GPU." },
+      { q: "Why does CUDA show as not locally proven?", a: "OpenStem AI Workstation code can run CUDA, but we don't assume your computer has the drivers installed. It is proven once you execute a real local AI separation job on GPU." },
       { q: "Why is DirectML experimental?", a: "DirectML PyTorch library dependencies are active, but Microsoft DirectML has edge-case limitations with memory allocation that can freeze." },
       { q: "Why does ONNX say delegated?", a: "ONNX model translation is handled by the underlying audio-separator package, not directly executed by the React app's local code layers." },
       { q: "Why does CPU work when GPU doesn't?", a: "CPU is standard. It doesn't need external graphics drivers, hardware toolkits, or VRAM checking. It is highly reliable but slow." }
@@ -301,13 +301,13 @@ export const submenuManuals: Record<string, ManualContent> = {
   },
   about_project: {
     sectionId: "about_project",
-    title: "About the Project Manual",
-    subtitle: "Details the architectural goals, release scopes, and disclaimer requirements for the Unofficial UVR-6 GUI. Understand what Hardened Functional Alpha means.",
+    title: "About OpenStem Manual",
+    subtitle: "Details the architectural goals, release scopes, and disclaimer requirements for the OpenStem AI Audio Workstation. Understand what Hardened Functional Alpha means.",
     whatItDoes: "Defines the alpha-grade compliance framework. Documents testing status, explains why Beta is blocked, and provides strict guidelines regarding FFmpeg and local AI capabilities.",
     whenToUse: [
       "Understanding the testing and validation steps required to promote this interface.",
-      "Auditing active compliance standards regarding copyright or local performance.",
-      "Checking version history and architectural goals of this unofficial port."
+      "Auditing active compliance standards regarding local performance.",
+      "Checking version history and architectural goals of this independent workstation."
     ],
     workflow: [
       "Open the About view screen.",
@@ -321,7 +321,7 @@ export const submenuManuals: Record<string, ManualContent> = {
       { name: "FFmpeg Fallback Ruling", desc: "Decrees that FFmpeg fallbacks are auxiliary utilities and do not count towards promoting the system to Beta." }
     ],
     commonMistakes: [
-      "Assuming the app is an official release from ultimatevocalremover. This is an Unofficial port designed for clean and persistent diagnostic flows.",
+      "Assuming the app is the official release from ultimatevocalremover. This is an independent workstation designed for clean and persistent diagnostic flows.",
       "Confusing FFmpeg fallback processing with real AI separation. AI proof must be performed using neural models."
     ],
     faq: [
@@ -331,7 +331,7 @@ export const submenuManuals: Record<string, ManualContent> = {
       { q: "Why does GPU proof require extra steps?", a: "GPU hardware contains different architectures (NVIDIA CUDA, Mac MPS, DirectML). We must verify driver and hardware runtime performance separately from CPU-based AI proof." }
     ],
     limitations: [
-      "This application is an Unofficial educational port and is not affiliated with the official UVR developers.",
+      "This application is an independent audio workstation and is not affiliated with the official UVR developers.",
       "Release state is locked to Hardened Functional Alpha; Beta Candidate remains strictly blocked.",
       "FFmpeg utility processing does not count as AI proof."
     ]

@@ -1,8 +1,8 @@
 {
-  "name": "unofficial-uvr-stem-separator",
+  "name": "openstem-ai-audio-workstation",
   "private": true,
   "version": "1.0.0",
-  "description": "An unofficial Windows desktop stem-separation application inspired by UVR-style workflows.",
+  "description": "Independent AI audio workstation for local stem separation and audio workflow tools.",
   "author": "Robert Sawin (GitHub: Trip3980)",
   "main": "electron-shell/main.cjs",
   "type": "module",
@@ -11,6 +11,8 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
+    "test": "tsx src/scripts/test-app.ts",
+    "validate-registry": "tsx src/scripts/validate-registry.ts",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .\"",
@@ -32,6 +34,8 @@
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.21",
     "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",
@@ -45,8 +49,8 @@
     "wait-on": "^9.0.10"
   },
   "build": {
-    "appId": "com.trip3980.unofficialuvrstemseparator",
-    "productName": "Unofficial UVR Stem Separator",
+    "appId": "com.trip3980.openstem-ai-audio-workstation",
+    "productName": "OpenStem AI Audio Workstation",
     "directories": {
       "output": "dist-electron"
     },
@@ -68,4 +72,3 @@
     }
   }
 }
-

@@ -10,81 +10,154 @@ import {
   Users,
   Drum,
   Guitar,
-  Sparkles,
   Download,
-  Flame,
   RefreshCcw,
-  Merge,
-  Info,
   AlertTriangle,
-  Sliders,
   Folder,
-  CheckCircle,
   XCircle,
 } from "lucide-react";
 
-interface StemTrack {
+export interface LoadedStem {
   id: string;
   name: string;
-  engine: string;
-  icon: React.ElementType;
-  color: string;
-  intensity: number[]; // mock peak data for waveform visualizer
+  stemType: "vocals" | "drums" | "bass" | "other" | "instrumental" | "custom";
+  filePath: string;
+  fileExists: boolean;
+  fileSizeBytes?: number;
+  durationSeconds?: number;
+  sourceModel?: string;
+  sourceEngine?: string;
+  waveformPeaks?: number[];
+  peakDataSource?: "real" | "placeholder" | "not_loaded";
+  isDemo?: boolean;
+  canPlay?: boolean;
+  canExport?: boolean;
+  proofSource?: "real_separation_output" | "demo" | "placeholder" | "unknown";
 }
 
-const STEM_TRACKS: StemTrack[] = [
+const DEMO_STEMS: LoadedStem[] = [
   {
     id: "vocals",
-    name: "Vocals Split",
-    engine: "Prism-RoFormer vocal extractor",
-    icon: Users,
-    color: "from-blue-400 to-indigo-500",
-    intensity: [
+    name: "Vocals Split (Demo)",
+    stemType: "vocals",
+    filePath: "",
+    fileExists: false,
+    fileSizeBytes: 2048500,
+    durationSeconds: 192,
+    sourceModel: "Demo Model v4",
+    sourceEngine: "Prism-RoFormer vocal extractor",
+    waveformPeaks: [
       15, 30, 45, 10, 60, 80, 45, 90, 75, 40, 25, 70, 85, 30, 60, 40, 80, 95,
       20, 50, 65, 30, 45, 20,
     ],
+    peakDataSource: "placeholder",
+    isDemo: true,
+    canPlay: false,
+    canExport: false,
+    proofSource: "demo",
   },
   {
     id: "drums",
-    name: "Drums Stem",
-    engine: "Demucs-v4 Pro drum separator",
-    icon: Drum,
-    color: "from-purple-500 to-pink-500",
-    intensity: [
+    name: "Drums Stem (Demo)",
+    stemType: "drums",
+    filePath: "",
+    fileExists: false,
+    fileSizeBytes: 4194304,
+    durationSeconds: 192,
+    sourceModel: "Demo Model v4",
+    sourceEngine: "Demucs-v4 Pro drum separator",
+    waveformPeaks: [
       40, 80, 20, 90, 30, 85, 40, 75, 20, 85, 45, 90, 15, 80, 30, 85, 40, 80,
       10, 85, 30, 70, 20, 90,
     ],
+    peakDataSource: "placeholder",
+    isDemo: true,
+    canPlay: false,
+    canExport: false,
+    proofSource: "demo",
   },
   {
     id: "bass",
-    name: "Bass Stem",
-    engine: "MDX-23C Sub bass filter",
-    icon: Guitar,
-    color: "from-emerald-400 to-teal-500",
-    intensity: [
+    name: "Bass Stem (Demo)",
+    stemType: "bass",
+    filePath: "",
+    fileExists: false,
+    fileSizeBytes: 3048500,
+    durationSeconds: 192,
+    sourceModel: "Demo Model v4",
+    sourceEngine: "MDX-23C Sub bass filter",
+    waveformPeaks: [
       60, 40, 50, 70, 40, 60, 80, 50, 40, 60, 70, 50, 40, 50, 80, 40, 60, 70,
       50, 40, 62, 45, 55, 30,
     ],
+    peakDataSource: "placeholder",
+    isDemo: true,
+    canPlay: false,
+    canExport: false,
+    proofSource: "demo",
   },
   {
     id: "other",
-    name: "Melody Instrumental",
-    engine: "VR spectral background partition",
-    icon: Music,
-    color: "from-amber-400 to-orange-500",
-    intensity: [
+    name: "Melody Instrumental (Demo)",
+    stemType: "other",
+    filePath: "",
+    fileExists: false,
+    fileSizeBytes: 5242880,
+    durationSeconds: 192,
+    sourceModel: "Demo Model v4",
+    sourceEngine: "VR spectral background partition",
+    waveformPeaks: [
       30, 45, 60, 50, 75, 55, 60, 80, 70, 55, 40, 75, 65, 50, 70, 80, 60, 45,
       50, 65, 40, 55, 35, 45,
     ],
+    peakDataSource: "placeholder",
+    isDemo: true,
+    canPlay: false,
+    canExport: false,
+    proofSource: "demo",
   },
 ];
+
+const getIconForStemType = (stemType: string) => {
+  switch (stemType) {
+    case "vocals":
+      return Users;
+    case "drums":
+      return Drum;
+    case "bass":
+      return Guitar;
+    case "other":
+    case "instrumental":
+      return Music;
+    default:
+      return Music;
+  }
+};
+
+const getColorForStemType = (stemType: string) => {
+  switch (stemType) {
+    case "vocals":
+      return "from-blue-400 to-indigo-500";
+    case "drums":
+      return "from-purple-500 to-pink-500";
+    case "bass":
+      return "from-emerald-400 to-teal-500";
+    case "other":
+    case "instrumental":
+      return "from-amber-400 to-orange-500";
+    default:
+      return "from-slate-400 to-slate-500";
+  }
+};
 
 interface FourTrackMixerProps {
   inputFileName: string;
   separationGoal: string;
   selectedCategory: string;
   selectedModelName: string;
-  parameters: string;
+  parameters?: string;
+  loadedStems?: LoadedStem[];
+  jobId?: string;
 }
 
 export default function FourTrackMixer({
@@ -92,85 +165,75 @@ export default function FourTrackMixer({
   separationGoal,
   selectedCategory,
   selectedModelName,
+  parameters,
+  loadedStems,
+  jobId,
 }: FourTrackMixerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playheadPos, setPlayheadPos] = useState(15);
+  const [playheadPos] = useState(0);
   const [activeSolo, setActiveSolo] = useState<string | null>(null);
   const [mutes, setMutes] = useState<Record<string, boolean>>({});
-  const [volumes, setVolumes] = useState<Record<string, number>>({
-    vocals: 85,
-    drums: 75,
-    bass: 70,
-    other: 65,
-  });
+  const [volumes, setVolumes] = useState<Record<string, number>>({});
+  const [pans, setPans] = useState<Record<string, number>>({});
+  const [exportInclusion, setExportInclusion] = useState<Record<string, boolean>>({});
 
-  // Real controls for Pan & Export Inclusion requested by checklist
-  const [pans, setPans] = useState<Record<string, number>>({
-    vocals: 0,
-    drums: 0,
-    bass: 0,
-    other: 0,
-  });
-
-  const [exportInclusion, setExportInclusion] = useState<Record<string, boolean>>({
-    vocals: true,
-    drums: true,
-    bass: true,
-    other: true,
-  });
-
-  // Export settings config properties
   const [exportFormat, setExportFormat] = useState("wav_16");
-  const [exportDest, setExportDest] = useState("/outputs/stems/mixdown/");
-  const [overwriteExisting, setOverwriteExisting] = useState(true);
+  const [exportDest, setExportDest] = useState("");
+  const [overwriteBehavior, setOverwriteBehavior] = useState<"ask" | "skip" | "replace">("ask");
 
-  // Animation frame for simulation playback & meters
-  const [mockMeters, setMockMeters] = useState<Record<string, number>>({
-    vocals: 0,
-    drums: 0,
-    bass: 0,
-    other: 0,
-  });
+  const [useDemo, setUseDemo] = useState(false);
+  const [verifiedFiles, setVerifiedFiles] = useState<Record<string, {
+    exists: boolean;
+    sizeBytes: number;
+    extension: string;
+    isAudio: boolean;
+    durationSeconds?: number;
+  }>>({});
 
   const timerRef = useRef<number | null>(null);
 
+  const stemsToUse = loadedStems && loadedStems.length > 0
+    ? loadedStems
+    : (useDemo ? DEMO_STEMS : []);
+
   useEffect(() => {
+    // Playback is NOT wired
     if (isPlaying) {
-      timerRef.current = window.setInterval(() => {
-        // Sweep playhead
-        setPlayheadPos((prev) => (prev >= 100 ? 0 : prev + 0.8));
-
-        // Let meters bounce realistically!
-        setMockMeters(() => {
-          const newMeters: Record<string, number> = {};
-          STEM_TRACKS.forEach((track) => {
-            const isMuted = mutes[track.id];
-            const isAnySoloActive = activeSolo !== null;
-            const isSoloed = activeSolo === track.id;
-            const volumeCoeff = volumes[track.id] / 100;
-
-            if (isMuted || (isAnySoloActive && !isSoloed)) {
-              newMeters[track.id] = 0;
-            } else {
-              // Bouncing DB calculations
-              const randVal = Math.floor(Math.random() * 45) + 35;
-              newMeters[track.id] = Math.round(randVal * volumeCoeff);
-            }
-          });
-          return newMeters;
-        });
-      }, 120);
-    } else {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-      setMockMeters({ vocals: 0, drums: 0, bass: 0, other: 0 });
+      setIsPlaying(false);
     }
-
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isPlaying, mutes, activeSolo, volumes]);
+  }, [isPlaying]);
+
+  useEffect(() => {
+    const verifyFiles = async () => {
+      const bridge = (window as any).uvr;
+      const newVerified: typeof verifiedFiles = {};
+      for (const track of stemsToUse) {
+        if (track.filePath && !track.isDemo) {
+          if (bridge && typeof bridge.verifyAudioFile === "function") {
+            try {
+              const res = await bridge.verifyAudioFile(track.filePath);
+              if (res) {
+                newVerified[track.id] = {
+                  exists: !!res.exists,
+                  sizeBytes: Number(res.sizeBytes || 0),
+                  extension: String(res.extension || ""),
+                  isAudio: !!res.isAudio,
+                  durationSeconds: res.durationSeconds,
+                };
+              }
+            } catch (e) {
+              console.error("Verification failed for path:", track.filePath, e);
+            }
+          }
+        }
+      }
+      setVerifiedFiles(newVerified);
+    };
+    verifyFiles();
+  }, [stemsToUse]);
 
   const handleMuteToggle = (id: string) => {
     setMutes((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -192,25 +255,62 @@ export default function FourTrackMixer({
     setExportInclusion((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Convert progress pos to standard display track duration (assume total is 3:12)
   const formatTime = () => {
-    const totalSecs = 192; // 3 minutes 12 seconds
-    const currentSecs = Math.floor((playheadPos / 100) * totalSecs);
-    const mins = Math.floor(currentSecs / 60);
-    const secs = currentSecs % 60;
-    return `${mins}:${secs < 10 ? "0" : ""}${secs} / 3:12`;
+    const durationSecs = stemsToUse.find(t => t.durationSeconds)?.durationSeconds;
+    if (durationSecs === undefined || durationSecs <= 0) {
+      return "Duration not checked";
+    }
+    const mins = Math.floor(durationSecs / 60);
+    const secs = durationSecs % 60;
+    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
 
-  // Determine which tracks are outputted based on separation goal
-  const renderedTracks = STEM_TRACKS.filter((track) => {
-    if (separationGoal === "vocals" && track.id !== "vocals") return false;
-    if (separationGoal === "instrumental" && track.id === "vocals")
-      return false;
+  const renderedTracks = stemsToUse.filter((track) => {
+    if (separationGoal === "vocals" && track.stemType !== "vocals") return false;
+    if (separationGoal === "instrumental" && track.stemType === "vocals") return false;
     if (separationGoal === "karaoke") {
-      return track.id === "vocals" || track.id === "other";
+      return track.stemType === "vocals" || track.stemType === "instrumental" || track.stemType === "other";
     }
     return true; // 4stem shows everything
   });
+
+  const isExporterImplemented = false;
+  const outputFolderSelected = exportDest.trim() !== "";
+  const isOutputFolderWritable = false;
+
+  const activeVerifiedStemsCount = stemsToUse.filter((track) => {
+    if (track.isDemo) return false;
+    if (!track.filePath) return false;
+    if (verifiedFiles[track.id]) {
+      return verifiedFiles[track.id].exists && verifiedFiles[track.id].isAudio;
+    }
+    return track.fileExists === true;
+  }).length;
+
+  const anyMissingStems = stemsToUse.length === 0 || stemsToUse.some(track => {
+    if (track.isDemo) return true;
+    if (!track.filePath) return true;
+    if (verifiedFiles[track.id]) {
+      return !verifiedFiles[track.id].exists;
+    }
+    return track.fileExists !== true;
+  });
+
+  const blockers: string[] = [];
+  blockers.push("Exporter backend not implemented.");
+  if (stemsToUse.length === 0) {
+    blockers.push("No stem session loaded.");
+  } else if (activeVerifiedStemsCount === 0) {
+    blockers.push("No verified local stems loaded.");
+  }
+  if (!outputFolderSelected) {
+    blockers.push("Output folder not selected.");
+  } else if (!isOutputFolderWritable) {
+    blockers.push("Output folder write permission verification pending / not writable.");
+  }
+  if (anyMissingStems) {
+    blockers.push("One or more missing stem files detected (cannot export demo or unverified stems).");
+  }
 
   return (
     <div className="space-y-6">
@@ -223,7 +323,7 @@ export default function FourTrackMixer({
                 Stem Mixer Workspace
               </span>
               <span className="text-[10px] font-mono font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                Mixer Mode: Preview-Only / Post-Separation
+                Mixer Mode: {stemsToUse.length === 0 ? "No Session Loaded" : useDemo ? "Demo Preview Only" : "Real Stem Session Loaded"}
               </span>
             </div>
             <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wider flex items-center gap-1.5">
@@ -235,97 +335,126 @@ export default function FourTrackMixer({
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3 text-xs font-mono bg-black/40 p-3 rounded-xl border border-white/5 w-full lg:w-auto">
-            <div className="min-w-[120px]">
-              <span className="text-slate-500 block text-[9px] uppercase font-bold tracking-wider">
-                Stem Source
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setUseDemo(!useDemo)}
+              disabled={!!(loadedStems && loadedStems.length > 0)}
+              className={`px-3 py-1.5 rounded text-xs font-mono font-bold border transition-colors ${
+                loadedStems && loadedStems.length > 0
+                  ? "bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed"
+                  : useDemo
+                    ? "bg-amber-500/20 text-amber-400 border-amber-500/40 hover:bg-amber-500/30"
+                    : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white"
+              }`}
+            >
+              {useDemo ? "Disable Sandbox Demo Stems" : "Enable Sandbox Demo Stems"}
+            </button>
+          </div>
+        </div>
+
+        {/* PROOF & SOURCE CARD */}
+        <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-900 space-y-3">
+          <div className="flex items-center justify-between border-b border-white/5 pb-2">
+            <span className="text-[10px] font-mono font-bold text-indigo-400 uppercase tracking-wider">
+              AI Proof & Separation Metadata
+            </span>
+            <span className="text-[9px] font-mono text-slate-500">
+              Job ID: {jobId || "No active job context"}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono">
+            <div>
+              <span className="text-slate-500 block text-[9px] uppercase font-bold tracking-wider mb-0.5">
+                Stem Source / Type
               </span>
-              <span className="font-bold text-slate-200">Original separation run</span>
+              <span className={`font-bold ${useDemo ? "text-amber-500" : stemsToUse.length > 0 ? "text-emerald-500" : "text-rose-400"}`}>
+                {stemsToUse.length === 0 ? "No stems available" : useDemo ? "Simulated / Placeholder Demo" : "Verified Real AI Output"}
+              </span>
             </div>
-            <div className="border-l border-white/10 pl-3 min-w-[120px]">
-              <span className="text-slate-500 block text-[9px] uppercase font-bold tracking-wider">
+            <div>
+              <span className="text-slate-500 block text-[9px] uppercase font-bold tracking-wider mb-0.5">
                 Model Source
               </span>
-              <span className="font-bold text-blue-400 truncate max-w-[150px] block">
-                {selectedModelName || "Kim_Vocal_2.onnx"}
+              <span className="font-bold text-blue-400 truncate max-w-[170px] block">
+                {selectedModelName || "Model not reported"}
               </span>
             </div>
-            <div className="border-l border-white/10 pl-3 min-w-[120px]">
-              <span className="text-slate-500 block text-[9px] uppercase font-bold tracking-wider">
-                Runtime Proof
+            <div>
+              <span className="text-slate-500 block text-[9px] uppercase font-bold tracking-wider mb-0.5">
+                Separation Category
               </span>
-              <span className="font-bold text-rose-400">Not active in mixer</span>
+              <span className="font-bold text-purple-400">
+                {selectedCategory || "Not reported"}
+              </span>
             </div>
-            <div className="border-l border-white/10 pl-3 min-w-[120px]">
-              <span className="text-slate-500 block text-[9px] uppercase font-bold tracking-wider">
+            <div>
+              <span className="text-slate-500 block text-[9px] uppercase font-bold tracking-wider mb-0.5">
                 Compute Source
               </span>
-              <span className="font-bold text-slate-400 text-[10px]">No GPU task in mixer</span>
+              <span className="font-bold text-slate-400 text-[10px]">
+                No GPU task active in mixer
+              </span>
             </div>
           </div>
+
+          <p className="text-[10px] text-slate-500 italic mt-1 leading-normal">
+            * Hardware GPU acceleration is strictly confined to backend job processing; browser playback and mixdown utilize zero GPU resources.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono bg-slate-900/40 p-3 rounded-lg border border-slate-800">
           <div>
             <span className="text-slate-500">Separation Input File:</span>
-            <span className="text-slate-200 ml-1.5 break-all">{inputFileName || "Original_Track.wav"}</span>
+            <span className="text-slate-200 ml-1.5 break-all">{inputFileName || "Input file not reported"}</span>
           </div>
           <div>
             <span className="text-slate-500">Loaded Stems Count:</span>
-            <span className="text-slate-200 ml-1.5">{renderedTracks.length} tracks active</span>
+            <span className="text-slate-200 ml-1.5">
+              {stemsToUse.length === 0 ? "0 (No stems)" : `${renderedTracks.length} tracks active`}
+            </span>
           </div>
         </div>
       </div>
 
       {/* SECTION 2: PLAYBACK TIMELINE */}
       <div className="p-4 bg-[#0a0c16]/90 rounded-2xl border border-slate-800 shadow-md space-y-3">
-        <span className="text-[10px] font-mono uppercase text-slate-400 font-bold tracking-wider block">
-          Playback Timeline Controls
-        </span>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1.5">
+          <span className="text-[10px] font-mono uppercase text-slate-400 font-bold tracking-wider block">
+            Playback Timeline Controls
+          </span>
+          <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-950/10 px-2.5 py-1 rounded border border-rose-900/20">
+            Playback preview not wired in custom electron mixer (planned feature)
+          </span>
+        </div>
 
-        <div className="flex flex-col md:flex-row items-center gap-4 justify-between">
+        <div className="flex flex-col md:flex-row items-center gap-4 justify-between opacity-50 pointer-events-none">
           <div className="flex items-center gap-2">
             {/* Play/Pause */}
             <button
-              onClick={() => setIsPlaying(!isPlaying)}
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                isPlaying
-                  ? "bg-amber-500 hover:bg-amber-400 text-black shadow-[0_0_12px_rgba(245,158,11,0.2)]"
-                  : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_12px_rgba(79,70,229,0.2)]"
-              }`}
+              disabled
+              className="w-10 h-10 rounded-full flex items-center justify-center bg-slate-800 text-slate-500 cursor-not-allowed"
             >
-              {isPlaying ? (
-                <Pause className="w-4 h-4 fill-current" />
-              ) : (
-                <Play className="w-4 h-4 fill-current translate-x-0.5" />
-              )}
+              <Play className="w-4 h-4 fill-current translate-x-0.5" />
             </button>
 
             {/* Stop Button */}
             <button
-              onClick={() => {
-                setIsPlaying(false);
-                setPlayheadPos(0);
-              }}
-              className="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center justify-center transition-all"
-              title="Stop and Reset"
+              disabled
+              className="w-10 h-10 rounded-full bg-slate-800 text-slate-500 flex items-center justify-center cursor-not-allowed"
             >
               <Square className="w-4 h-4 fill-current" />
             </button>
 
             {/* Restart Button */}
             <button
-              onClick={() => {
-                setPlayheadPos(0);
-                setIsPlaying(true);
-              }}
-              className="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center justify-center transition-all"
-              title="Restart"
+              disabled
+              className="w-10 h-10 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center cursor-not-allowed"
             >
               <RefreshCcw className="w-4 h-4" />
             </button>
 
-            <span className="text-xs font-mono font-bold text-slate-200 bg-black/50 px-2.5 py-1.5 rounded border border-slate-800 ml-1">
+            <span className="text-xs font-mono font-bold text-slate-500 bg-black/50 px-2.5 py-1.5 rounded border border-slate-800 ml-1">
               {formatTime()}
             </span>
           </div>
@@ -333,24 +462,11 @@ export default function FourTrackMixer({
           {/* Seekbar Slider */}
           <div className="flex-1 w-full relative">
             <div className="h-2 bg-white/5 rounded-full overflow-hidden relative border border-white/5">
-              {/* Play progress highlight */}
               <div
-                className="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 h-full rounded-full"
-                style={{ width: `${playheadPos}%` }}
+                className="bg-slate-700 h-full rounded-full"
+                style={{ width: `0%` }}
               ></div>
-              <div className="absolute top-0 bottom-0 left-1/4 w-[1px] bg-white/10"></div>
-              <div className="absolute top-0 bottom-0 left-1/2 w-[1px] bg-white/10"></div>
-              <div className="absolute top-0 bottom-0 left-3/4 w-[1px] bg-white/10"></div>
             </div>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value={playheadPos}
-              onChange={(e) => setPlayheadPos(Number(e.target.value))}
-              className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer"
-            />
           </div>
         </div>
       </div>
@@ -361,221 +477,225 @@ export default function FourTrackMixer({
           Stem Mixing Console Channels
         </span>
 
-        {renderedTracks.map((track) => {
-          const volume = volumes[track.id];
-          const pan = pans[track.id];
-          const isMuted = mutes[track.id];
-          const isAnySoloActive = activeSolo !== null;
-          const isSoloed = activeSolo === track.id;
+        {renderedTracks.length === 0 ? (
+          <div className="p-8 text-center rounded-xl bg-slate-900/10 border border-slate-800/50 text-slate-500 text-xs font-mono">
+            No active stems loaded or visible for this separation goal.
+          </div>
+        ) : (
+          renderedTracks.map((track) => {
+            const volume = volumes[track.id] !== undefined ? volumes[track.id] : 75;
+            const pan = pans[track.id] !== undefined ? pans[track.id] : 0;
+            const isMuted = mutes[track.id] || false;
+            const isAnySoloActive = activeSolo !== null;
+            const isSoloed = activeSolo === track.id;
 
-          // Determine if track audio is fundamentally silent based on mutes and solo overlays
-          const isSilent = isMuted || (isAnySoloActive && !isSoloed);
-          const isClipping = !isSilent && volume > 90;
+            // Determine if track audio is fundamentally silent based on mutes and solo overlays
+            const isSilent = isMuted || (isAnySoloActive && !isSoloed);
 
-          return (
-            <div
-              key={track.id}
-              className={`p-4 rounded-xl border transition-all duration-300 ${
-                isSilent
-                  ? "bg-black/20 border-slate-900 opacity-60"
-                  : "bg-[#0c0e1a] border-slate-800 hover:border-slate-700 shadow-md"
-              }`}
-            >
-              <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-center">
-                {/* 1. Track Metadata Info (Col 1-3) */}
-                <div className="xl:col-span-3 flex items-start gap-3">
-                  {/* Export inclusion checkbox */}
-                  <div className="mt-1">
-                    <input
-                      type="checkbox"
-                      id={`export-${track.id}`}
-                      checked={exportInclusion[track.id]}
-                      onChange={() => handleExportToggle(track.id)}
-                      className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-indigo-500 focus:ring-indigo-500 cursor-pointer"
-                    />
+            const isDemoOrMissing = track.isDemo || (verifiedFiles[track.id] ? !verifiedFiles[track.id].exists : !track.fileExists);
+            const isExportChecked = !isDemoOrMissing && (exportInclusion[track.id] !== undefined ? exportInclusion[track.id] : true);
+
+            // File status label/color
+            let fileStatusLabel = "";
+            let fileStatusColor = "";
+            let resolvedFilePath = "";
+
+            if (track.isDemo) {
+              fileStatusLabel = "(Demo) Sandbox Preview";
+              fileStatusColor = "text-amber-500";
+              resolvedFilePath = "File: (Demo Mode - No local file)";
+            } else {
+              const checked = verifiedFiles[track.id];
+              if (checked && checked.exists) {
+                fileStatusLabel = "Verified Local Audio";
+                fileStatusColor = "text-emerald-500";
+                resolvedFilePath = `File: ${track.filePath}`;
+              } else {
+                fileStatusLabel = "File missing / unverified";
+                fileStatusColor = "text-rose-400";
+                resolvedFilePath = `File: Not loaded / no verified local path`;
+              }
+            }
+
+            return (
+              <div
+                key={track.id}
+                className={`p-4 rounded-xl border transition-all duration-300 ${
+                  isSilent
+                    ? "bg-black/20 border-slate-900 opacity-60"
+                    : "bg-[#0c0e1a] border-slate-800 hover:border-slate-700 shadow-md"
+                }`}
+              >
+                <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-center">
+                  {/* 1. Track Metadata Info (Col 1-3) */}
+                  <div className="xl:col-span-3 flex items-start gap-3">
+                    {/* Export inclusion checkbox */}
+                    <div className="mt-1" title={isDemoOrMissing ? "Cannot export demo or missing/unverified stems" : "Include in Export mixdown"}>
+                      <input
+                        type="checkbox"
+                        id={`export-${track.id}`}
+                        checked={isExportChecked}
+                        disabled={isDemoOrMissing}
+                        onChange={() => handleExportToggle(track.id)}
+                        className={`w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-500 focus:ring-indigo-500 ${isDemoOrMissing ? "cursor-not-allowed opacity-30" : "cursor-pointer"}`}
+                      />
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-6 h-6 rounded bg-gradient-to-br ${getColorForStemType(track.stemType)} text-white flex items-center justify-center shrink-0`}>
+                          {React.createElement(getIconForStemType(track.stemType), { className: "w-3.5 h-3.5" })}
+                        </div>
+                        <h4 className="text-xs font-bold text-white truncate font-mono">
+                          {track.name}
+                        </h4>
+                      </div>
+
+                      <div className="mt-1.5 space-y-0.5 text-[9px] font-mono text-slate-500 leading-tight">
+                        <div>
+                          <span className="text-slate-600 font-bold">Base Engine:</span> {track.sourceEngine || "No source engine reported"}
+                        </div>
+                        <div>
+                          <span className="text-slate-600 font-bold">Original model mapping:</span> {track.sourceModel || selectedModelName || "Model not reported"}
+                        </div>
+                        <div>
+                          <span className="text-slate-600 font-bold">File status:</span> <span className={`${fileStatusColor} font-semibold`}>{fileStatusLabel}</span>
+                        </div>
+                        <div className="truncate text-slate-600" title={resolvedFilePath}>
+                          {resolvedFilePath}
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <div className={`w-6 h-6 rounded bg-gradient-to-br ${track.color} text-white flex items-center justify-center shrink-0`}>
-                        <track.icon className="w-3.5 h-3.5" />
+                  {/* 2. Waveform Preview & Meters (Col 4-6) */}
+                  <div className="xl:col-span-4 flex items-center gap-3">
+                    {/* Inactive Peak meter */}
+                    <div className="flex flex-col items-center justify-center w-11 shrink-0">
+                      <div className="w-10 h-7 bg-black/45 rounded border border-slate-800 p-0.5 flex flex-col justify-end overflow-hidden">
+                        <div className="flex justify-between items-end gap-[1px] h-full opacity-30">
+                          {Array.from({ length: 8 }).map((_, segmentIndex) => {
+                            return (
+                              <div
+                                key={segmentIndex}
+                                style={{
+                                  height: `${(segmentIndex + 1) * 12.5}%`,
+                                  backgroundColor: "rgba(255,255,255,0.05)",
+                                }}
+                                className="w-1 rounded-sm"
+                              />
+                            );
+                          })}
+                        </div>
                       </div>
-                      <h4 className="text-xs font-bold text-white truncate font-mono">
-                        {track.name}
-                      </h4>
-                    </div>
-
-                    <div className="mt-1.5 space-y-0.5 text-[9px] font-mono text-slate-500 leading-tight">
-                      <div>
-                        <span className="text-slate-600 font-bold">Base Engine:</span> {track.engine}
-                      </div>
-                      <div>
-                        <span className="text-slate-600 font-bold">Original model mapping:</span> {selectedModelName || "Kim_Vocal_2.onnx"}
-                      </div>
-                      <div>
-                        <span className="text-slate-600 font-bold">File status:</span> <span className="text-emerald-500">Active / Loaded</span>
-                      </div>
-                      <div className="truncate text-slate-600" title={`/outputs/stems/${selectedModelName || "Kim_Vocal_2"}_${track.id}.wav`}>
-                        File: .../{selectedModelName || "Kim_Vocal_2"}_{track.id}.wav
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2. Waveform Preview & Meters (Col 4-6) */}
-                <div className="xl:col-span-4 flex items-center gap-3">
-                  {/* Peak meter with CLIPPING warning */}
-                  <div className="flex flex-col items-center justify-center w-11 shrink-0">
-                    <div className="w-10 h-7 bg-black/45 rounded border border-slate-800 p-0.5 flex flex-col justify-end overflow-hidden">
-                      <div className="flex justify-between items-end gap-[1px] h-full">
-                        {Array.from({ length: 8 }).map((_, segmentIndex) => {
-                          const meterDb = mockMeters[track.id] || 0;
-                          const segmentThreshold = (segmentIndex + 1) * 12.5;
-                          const isActive = meterDb >= segmentThreshold;
-
-                          return (
-                            <div
-                              key={segmentIndex}
-                              style={{
-                                height: `${(segmentIndex + 1) * 12.5}%`,
-                                backgroundColor: isSilent
-                                  ? "rgba(255,255,255,0.03)"
-                                  : isActive
-                                    ? segmentIndex > 5
-                                      ? "#ef4444" 
-                                      : segmentIndex > 4
-                                        ? "#f59e0b" 
-                                        : "#10b981" 
-                                    : "rgba(255,255,255,0.03)",
-                              }}
-                              className="w-1 rounded-sm"
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-                    {isClipping ? (
-                      <span className="text-[8px] font-mono font-bold text-rose-500 animate-pulse mt-0.5">
-                        CLIP
+                      <span className="text-[7px] font-mono text-slate-600 mt-1 uppercase text-center block leading-none">
+                        Meter Inactive
                       </span>
-                    ) : (
-                      <span className="text-[8px] font-mono text-slate-600 mt-0.5 uppercase">
-                        {isSilent ? "Idle" : "Signal"}
-                      </span>
-                    )}
+                    </div>
+
+                    {/* Waveform graphic */}
+                    <div className="flex-1 h-9 bg-black/50 rounded-lg relative overflow-hidden border border-slate-900 flex items-center justify-center px-1">
+                      {track.waveformPeaks && track.waveformPeaks.length > 0 ? (
+                        <div className="w-full h-full flex items-center gap-[1px]">
+                          {track.waveformPeaks.map((height, i) => {
+                            const activeBg = isSilent
+                              ? "bg-slate-850"
+                              : "bg-gradient-to-t " + getColorForStemType(track.stemType);
+
+                            return (
+                              <div
+                                key={i}
+                                style={{ height: `${height}%` }}
+                                className={`flex-1 rounded-sm transition-all duration-300 ${activeBg}`}
+                              />
+                            );
+                          })}
+                          <div className="absolute inset-0 bg-black/10 flex items-center justify-center pointer-events-none">
+                            <span className="text-[7.5px] font-mono font-bold tracking-wider text-slate-400 bg-slate-950/90 px-1 py-0.5 rounded border border-white/5 uppercase">
+                              Demo Static Peaks
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-[9px] font-mono text-slate-500 italic block text-center leading-none">
+                          Waveform preview unavailable for unverified file
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Waveform graphic */}
-                  <div className="flex-1 h-9 bg-black/50 rounded-lg relative overflow-hidden border border-slate-900 flex items-center px-1 gap-[1px]">
-                    {track.intensity.map((height, i) => {
-                      const waveIndexPos = (i / track.intensity.length) * 100;
-                      const isPassed = playheadPos >= waveIndexPos;
-                      const activeBg = isSilent
-                        ? "bg-slate-800/30"
-                        : isPassed
-                          ? "bg-gradient-to-t " + track.color
-                          : "bg-slate-700/30";
-
-                      return (
-                        <div
-                          key={i}
-                          style={{ height: `${height}%` }}
-                          className={`flex-1 rounded-sm transition-all duration-300 ${activeBg}`}
+                  {/* 3. Audio Console Controls [Volume/Pan/Mute/Solo] (Col 7-12) */}
+                  <div className="xl:col-span-5 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                    {/* Volume Slider */}
+                    <div className="sm:col-span-5 space-y-1">
+                      <div className="flex items-center justify-between text-[9px] font-mono text-slate-500 font-bold">
+                        <span>VOLUME</span>
+                        <span className="text-slate-300">{isMuted ? "MUTE" : `${volume}%`}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-black/20 p-1.5 rounded border border-slate-900 opacity-50 cursor-not-allowed">
+                        <button disabled className="text-slate-600 focus:outline-none shrink-0">
+                          <Volume2 className="w-3.5 h-3.5 text-slate-600" />
+                        </button>
+                        <input
+                          type="range"
+                          disabled
+                          min="0"
+                          max="100"
+                          step="5"
+                          value={isMuted ? 0 : volume}
+                          className="w-full h-1 bg-slate-800 rounded-full cursor-not-allowed appearance-none accent-indigo-500"
                         />
-                      );
-                    })}
-                    {isPlaying && (
-                      <div
-                        className="absolute top-0 bottom-0 w-[1.5px] bg-white/80 pointer-events-none transition-all duration-100"
-                        style={{ left: `${playheadPos}%` }}
-                      />
-                    )}
-                  </div>
-                </div>
-
-                {/* 3. Audio Console Controls [Volume/Pan/Mute/Solo] (Col 7-12) */}
-                <div className="xl:col-span-5 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
-                  {/* Volume Slider (4 cols) */}
-                  <div className="sm:col-span-5 space-y-1">
-                    <div className="flex items-center justify-between text-[9px] font-mono text-slate-500">
-                      <span>VOLUME</span>
-                      <span className="font-bold text-slate-300">{isMuted ? "MUTE" : `${volume}%`}</span>
+                      </div>
+                      <p className="text-[8px] font-mono text-slate-600 text-center uppercase tracking-wider leading-none">
+                        Preview control not wired
+                      </p>
                     </div>
-                    <div className="flex items-center gap-1.5 bg-black/20 p-1.5 rounded border border-slate-900">
+
+                    {/* Pan Slider */}
+                    <div className="sm:col-span-4 space-y-1">
+                      <div className="flex items-center justify-between text-[9px] font-mono text-slate-500 font-bold">
+                        <span>PANNING</span>
+                        <span className="text-slate-400">
+                          {pan === 0 ? "C" : pan < 0 ? `L${Math.abs(pan)}` : `R${pan}`}
+                        </span>
+                      </div>
+                      <div className="bg-black/20 p-1.5 rounded border border-slate-900 flex items-center opacity-50 cursor-not-allowed">
+                        <input
+                          type="range"
+                          disabled
+                          min="-50"
+                          max="50"
+                          step="5"
+                          value={pan}
+                          className="w-full h-1 bg-slate-800 rounded-full cursor-not-allowed appearance-none accent-indigo-500"
+                        />
+                      </div>
+                      <p className="text-[8px] font-mono text-slate-600 text-center uppercase tracking-wider leading-none">
+                        Preview-only / Not wired
+                      </p>
+                    </div>
+
+                    {/* Mute / Solo Buttons */}
+                    <div className="sm:col-span-3 flex gap-1 justify-end opacity-50 cursor-not-allowed">
                       <button
-                        onClick={() => handleVolumeChange(track.id, volume === 0 ? 80 : 0)}
-                        className="text-slate-500 hover:text-white transition-all focus:outline-none"
+                        disabled
+                        className="flex-1 sm:flex-none px-2 py-1.5 rounded text-[9px] font-bold tracking-wider uppercase transition-all border bg-slate-950 text-slate-600 border-slate-900"
                       >
-                        {volume === 0 || isMuted ? (
-                          <VolumeX className="w-3.5 h-3.5 text-rose-500 animate-pulse" />
-                        ) : (
-                          <Volume2 className="w-3.5 h-3.5 text-slate-400" />
-                        )}
+                        Mute
                       </button>
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        step="5"
-                        value={isMuted ? 0 : volume}
-                        onChange={(e) => handleVolumeChange(track.id, Number(e.target.value))}
-                        className="w-full h-1 bg-slate-800 rounded-full cursor-pointer appearance-none outline-none accent-indigo-500"
-                      />
+                      <button
+                        disabled
+                        className="flex-1 sm:flex-none px-2 py-1.5 rounded text-[9px] font-bold tracking-wider uppercase transition-all border bg-slate-950 text-slate-600 border-slate-900"
+                      >
+                        Solo
+                      </button>
                     </div>
-                  </div>
-
-                  {/* Pan Slider (4 cols) - L-C-R slider */}
-                  <div className="sm:col-span-4 space-y-1">
-                    <div className="flex items-center justify-between text-[9px] font-mono text-slate-500">
-                      <span>PANNING</span>
-                      <span className="text-amber-500 font-bold hover:underline cursor-help" title="Unwired preview feature">
-                        {pan === 0 ? "C" : pan < 0 ? `L${Math.abs(pan)}` : `R${pan}`}
-                      </span>
-                    </div>
-                    <div className="bg-black/20 p-1.5 rounded border border-slate-900 flex items-center">
-                      <input
-                        type="range"
-                        min="-50"
-                        max="50"
-                        step="5"
-                        value={pan}
-                        onChange={(e) => handlePanChange(track.id, Number(e.target.value))}
-                        className="w-full h-1 bg-slate-800 rounded-full cursor-pointer appearance-none outline-none accent-indigo-500"
-                      />
-                    </div>
-                    <p className="text-[8px] font-mono text-slate-600 text-center uppercase tracking-wider">
-                      Preview-only / Not wired
-                    </p>
-                  </div>
-
-                  {/* Mute / Solo Buttons (3 cols) */}
-                  <div className="sm:col-span-3 flex gap-1 justify-end">
-                    <button
-                      onClick={() => handleMuteToggle(track.id)}
-                      className={`flex-1 sm:flex-none px-2 py-1.5 rounded text-[9px] font-bold tracking-wider uppercase transition-all border ${
-                        isMuted
-                          ? "bg-rose-500/10 text-rose-400 border-rose-500/35"
-                          : "bg-slate-950/60 text-slate-400 border-slate-800 hover:bg-slate-800"
-                      }`}
-                    >
-                      Mute
-                    </button>
-                    <button
-                      onClick={() => handleSoloToggle(track.id)}
-                      className={`flex-1 sm:flex-none px-2 py-1.5 rounded text-[9px] font-bold tracking-wider uppercase transition-all border ${
-                        isSoloed
-                          ? "bg-amber-500/10 text-amber-500 border-amber-500/35"
-                          : "bg-slate-950/60 text-slate-400 border-slate-800 hover:bg-slate-800"
-                      }`}
-                    >
-                      Solo
-                    </button>
                   </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
 
       {/* SECTION 4: MIX PROCESSING */}
@@ -590,33 +710,37 @@ export default function FourTrackMixer({
               Phase Cancellation / Bleed Reduction
             </label>
             <p className="text-[11px] text-slate-500 leading-normal">
-              Attempts to reduce overlapping bleed between stems. Results vary and may introduce phase artifacts.
+              Attempts to cancel overlapping bleed frequencies between adjacent stems using adaptive isolation models (not a simple 180° static phase inversion). Results vary and may introduce structural frequency comb filters or phase artifacts.
             </p>
-            <span className="text-blue-400 font-mono text-[10px] bg-blue-950/20 px-2 py-0.5 rounded border border-blue-950/40 block w-max">
-              Phase Invert: 180° — Legacy reference / Not wired
+            <span className="text-slate-500 font-mono text-[10px] bg-slate-950/60 px-2 py-0.5 rounded border border-slate-800 block w-max mt-auto">
+              Passive Isolation — Legacy reference / Not wired
             </span>
           </div>
 
-          <div className="p-3 bg-black/40 rounded border border-slate-900 space-y-1.5">
-            <label className="text-slate-300 font-bold block text-[10px] uppercase font-mono tracking-wider">
-              High-Frequency Trim
-            </label>
-            <p className="text-[11px] text-slate-500 leading-normal">
-              Reduces very high-frequency artifacts above the selected cutoff using a low-pass filter. Removes content above the cutoff. May reduce brightness.
-            </p>
-            <span className="text-purple-300 font-mono text-[10px] bg-purple-950/20 px-2 py-0.5 rounded border border-purple-950/40 block w-max">
+          <div className="p-3 bg-black/40 rounded border border-slate-900 space-y-1.5 flex flex-col justify-between">
+            <div>
+              <label className="text-slate-300 font-bold block text-[10px] uppercase font-mono tracking-wider">
+                High-Frequency Trim
+              </label>
+              <p className="text-[11px] text-slate-500 leading-normal">
+                Reduces very high-frequency artifacts above the selected cutoff using a low-pass filter. Removes content above the cutoff. May reduce brightness.
+              </p>
+            </div>
+            <span className="text-purple-400/80 font-mono text-[10px] bg-purple-950/20 px-2 py-0.5 rounded border border-purple-900/30 block w-max">
               Cutoff: 16.5 kHz — Planned / Not active
             </span>
           </div>
 
-          <div className="p-3 bg-black/40 rounded border border-slate-900 space-y-1.5">
-            <label className="text-slate-300 font-bold block text-[10px] uppercase font-mono tracking-wider">
-              Playback / Export Normalization
-            </label>
-            <p className="text-[11px] text-slate-500 leading-normal">
-              Balances stem loudness for preview or export. This does not improve AI separation quality. Affects preview playback only.
-            </p>
-            <span className="text-emerald-400 font-mono text-[10px] bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-950/40 block w-max">
+          <div className="p-3 bg-black/40 rounded border border-slate-900 space-y-1.5 flex flex-col justify-between">
+            <div>
+              <label className="text-slate-300 font-bold block text-[10px] uppercase font-mono tracking-wider">
+                Playback / Export Normalization
+              </label>
+              <p className="text-[11px] text-slate-500 leading-normal">
+                Balances stem loudness for preview or export. This does not improve AI separation quality. Affects preview playback only.
+              </p>
+            </div>
+            <span className="text-emerald-400/80 font-mono text-[10px] bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-900/30 block w-max">
               Loudness Normalizer — Planned / Not active
             </span>
           </div>
@@ -626,22 +750,36 @@ export default function FourTrackMixer({
       {/* SECTION 5: EXPORT MIXDOWN */}
       <div className="p-4 rounded-xl bg-[#090b14]/90 border border-slate-800 shadow-md space-y-4">
         <span className="text-[10px] font-mono uppercase text-slate-400 font-bold tracking-wider block">
-          Section 5: Export Mixdown Configuration
+          Section 5: Export Mixdown Configuration (Exporter Disabled)
         </span>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
+        {/* Real Preflight Blocker Alert Container */}
+        {blockers.length > 0 && (
+          <div className="p-3 bg-rose-500/5 border border-rose-500/20 rounded-lg space-y-1.5">
+            <span className="text-[10px] uppercase font-bold text-rose-400 font-mono flex items-center gap-1">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              Required Export Preflight Blockers ({blockers.length})
+            </span>
+            <ul className="list-disc list-inside font-mono text-[10.5px] text-rose-300/80 space-y-0.5 pl-1.5">
+              {blockers.map((blocker, idx) => (
+                <li key={idx}>{blocker}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono opacity-50">
           {/* Format */}
           <div className="space-y-1.5">
             <label className="text-slate-400 block text-[10px] uppercase font-bold">
               Output Render Format
             </label>
             <select
+              disabled
               value={exportFormat}
-              onChange={(e) => setExportFormat(e.target.value)}
-              className="w-full bg-black/50 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 cursor-pointer"
+              className="w-full bg-black/50 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-500 cursor-not-allowed"
             >
               <option value="wav_16">WAV 16-bit Lossless (Original quality)</option>
-              <option value="wav_24">WAV 24-bit Lossless (High headroom)</option>
               <option value="flac">FLAC Lossless (Compressed WAV)</option>
               <option value="mp3">MP3 320kbps (Compact sharing)</option>
             </select>
@@ -655,42 +793,46 @@ export default function FourTrackMixer({
             <div className="flex gap-1">
               <input
                 type="text"
+                disabled
+                placeholder="Export folder not selected"
                 value={exportDest}
-                onChange={(e) => setExportDest(e.target.value)}
-                className="flex-1 bg-black/50 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 font-mono"
+                className="flex-1 bg-black/50 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-500 font-mono cursor-not-allowed"
               />
               <button
-                className="px-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded"
-                onClick={() => alert("Browse folder dialog is simulated in help utility.")}
+                disabled
+                className="px-2.5 bg-slate-800 border border-slate-800 text-slate-500 rounded cursor-not-allowed"
               >
                 <Folder className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
 
-          {/* Toggle */}
-          <div className="space-y-1.5 flex flex-col justify-end">
-            <label className="flex items-center gap-2 cursor-pointer select-none py-2 text-slate-300">
-              <input
-                type="checkbox"
-                checked={overwriteExisting}
-                onChange={(e) => setOverwriteExisting(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-800 bg-slate-900 text-indigo-500 focus:ring-indigo-500"
-              />
-              <span>Overwrite existing files</span>
+          {/* Overwrite Safety Selector */}
+          <div className="space-y-1.5">
+            <label className="text-slate-400 block text-[10px] uppercase font-bold">
+              Conflict Overwrite Safety
             </label>
+            <select
+              disabled
+              value={overwriteBehavior}
+              className="w-full bg-black/50 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-500 cursor-not-allowed"
+            >
+              <option value="ask">Ask behavior (Safest / prompt confirmation)</option>
+              <option value="skip">Skip files already present</option>
+              <option value="replace">Silent replace (Overwrite)</option>
+            </select>
           </div>
         </div>
 
         {/* Stem Inclusion summary */}
         <div className="p-3 rounded bg-black/25 border border-slate-900 text-[11px] font-mono text-slate-400 space-y-1">
           <div>
-            <span className="font-bold text-slate-300">Included Stems in Mixdown:</span>{" "}
-            {renderedTracks.filter(t => exportInclusion[t.id]).map(t => t.name).join(", ") || "(None selected)"}
+            <span className="font-bold text-slate-300">Queued Stems for Mixdown:</span>{" "}
+            {stemsToUse.filter(t => !t.isDemo && (verifiedFiles[t.id] ? verifiedFiles[t.id].exists : t.fileExists) && exportInclusion[t.id] !== false).map(t => t.name).join(", ") || "(No verified real stems selected)"}
           </div>
-          <div className="text-[10px] text-rose-400 flex items-center gap-1.5 font-bold pt-1">
-            <XCircle className="w-3.5 h-3.5" />
-            <span>Export Blocker: Mixer is in simulation mode / Exporter Planned / Not active</span>
+          <div className="text-[10px] text-rose-450 flex items-center gap-1.5 font-bold pt-1">
+            <XCircle className="w-3.5 h-3.5 text-rose-500" />
+            <span>Mixdown Exporter Engine — Planned / Not active</span>
           </div>
         </div>
 
@@ -698,35 +840,14 @@ export default function FourTrackMixer({
         <div className="flex justify-end">
           <button
             disabled
-            className="w-full md:w-auto px-5 py-2.5 bg-slate-800 border border-slate-700 text-slate-500 rounded-xl text-xs font-bold font-mono cursor-not-allowed flex items-center justify-center gap-1.5"
+            className="w-full md:w-auto px-5 py-2.5 bg-slate-900 border border-slate-800 text-slate-600 rounded-xl text-xs font-bold font-mono cursor-not-allowed flex items-center justify-center gap-1.5"
           >
-            <Download className="w-4 h-4" />
+            <Download className="w-4 h-4 text-slate-600" />
             Export Mixdown — Planned / Not active
           </button>
         </div>
       </div>
 
-      {/* SECTION 6: WARNINGS / LIMITATIONS */}
-      <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/10 space-y-2 text-xs leading-normal">
-        <span className="text-[10px] font-mono text-amber-500 font-bold block flex items-center gap-1.5 uppercase">
-          <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-          Section 6: Audio Separation Integrity Disclaimer
-        </span>
-        <ul className="list-disc list-inside space-y-1 text-slate-400 pl-1">
-          <li>
-            <strong className="text-slate-300 font-semibold font-mono">Stems are not perfect originals:</strong> Source-separation splits mathematical frequency bands. Isolated vocals may feature wateriness or metallic phase artifacts.
-          </li>
-          <li>
-            <strong className="text-slate-300 font-semibold font-mono">Model and Song dependency:</strong> Bleed and separation clarity depend highly on mixing density, instrumentation overlap, reverb profiles, and selected models.
-          </li>
-          <li>
-            <strong className="text-slate-300 font-semibold font-mono">Phase and Trim can degrade audio:</strong> Passive Phase Inversion and Treble filters are analytical helpers only and can easily degrade frequency richness if used aggressively.
-          </li>
-          <li>
-            <strong className="text-slate-300 font-semibold font-mono">Hardware Acceleration boundaries:</strong> CUDA/DirectML GPU acceleration is supported for separation jobs, but hardware acceleration plays no part in local web browser mixer previews.
-          </li>
-        </ul>
-      </div>
     </div>
   );
 }

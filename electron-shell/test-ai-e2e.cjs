@@ -45,11 +45,23 @@ if (!fs.existsSync(outputDir)) {
 function getModelLibraryPath() {
   let userData = '';
   if (process.platform === 'win32') {
-    userData = path.join(process.env.APPDATA || '', 'unofficial-uvr-stem-separator');
+    userData = path.join(process.env.APPDATA || '', 'openstem-ai-audio-workstation');
+    if (!fs.existsSync(userData)) {
+      const oldPath = path.join(process.env.APPDATA || '', 'unofficial-uvr-stem-separator');
+      if (fs.existsSync(oldPath)) userData = oldPath;
+    }
   } else if (process.platform === 'darwin') {
-    userData = path.join(os.homedir(), 'Library', 'Application Support', 'unofficial-uvr-stem-separator');
+    userData = path.join(os.homedir(), 'Library', 'Application Support', 'openstem-ai-audio-workstation');
+    if (!fs.existsSync(userData)) {
+      const oldPath = path.join(os.homedir(), 'Library', 'Application Support', 'unofficial-uvr-stem-separator');
+      if (fs.existsSync(oldPath)) userData = oldPath;
+    }
   } else {
-    userData = path.join(os.homedir(), '.config', 'unofficial-uvr-stem-separator');
+    userData = path.join(os.homedir(), '.config', 'openstem-ai-audio-workstation');
+    if (!fs.existsSync(userData)) {
+      const oldPath = path.join(os.homedir(), '.config', 'unofficial-uvr-stem-separator');
+      if (fs.existsSync(oldPath)) userData = oldPath;
+    }
   }
   return path.join(userData, 'uvr_models');
 }

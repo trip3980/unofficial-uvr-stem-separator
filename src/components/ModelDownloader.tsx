@@ -1,24 +1,16 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   DownloadCloud,
-  CheckCircle2,
-  ShieldAlert,
-  Cpu,
   Database,
   HardDrive,
   RefreshCw,
-  Layers,
   FileCode,
   Check,
-  Search,
   Globe,
   Server,
-  ChevronDown,
-  ChevronRight,
   Filter,
   ArrowUpDown,
   FolderOpen,
-  FileCheck,
   XCircle,
   HelpCircle,
   AlertTriangle,
@@ -27,7 +19,7 @@ import {
 import { motion } from "motion/react";
 import { MODEL_REGISTRY, addModelToRegistry } from "../services/audioEngine";
 import { ModelRegistryEntry } from "../types";
-import { HelpToggle, HelpText, HelpTooltipIcon, AccessibleTooltipWrapper } from "./HelpSystem";
+import { HelpToggle, HelpText, AccessibleTooltipWrapper } from "./HelpSystem";
 
 // Static constant for free space (Matches the 4.8 GB from initial system specs)
 const FREE_SPACE_MB = 4.8 * 1024; // 4915.2 MB
@@ -43,7 +35,20 @@ export default function ModelDownloader() {
   const [selectedModels, setSelectedModels] = useState<Record<string, boolean>>({});
 
   // Dynamic state for verification
-  const [verificationStates, setVerificationStates] = useState<Record<string, "idle" | "verifying" | "verified" | "failed" | "unsupported">>({});
+  const [verificationStates, setVerificationStates] = useState<
+    Record<
+      string,
+      | "not_checked"
+      | "verified"
+      | "hash_unavailable"
+      | "mismatch"
+      | "missing"
+      | "verification_pending"
+      | "source_missing"
+      | "manual_import_required"
+      | "verifying"
+    >
+  >({});
 
   // Dynamic download state tracked natively or simulated
   const [downloadStates, setDownloadStates] = useState<
@@ -64,19 +69,12 @@ export default function ModelDownloader() {
 
   // Load models initially and bind listeners
   useEffect(() => {
-    // Set some hardcoded update states for demonstration in the Updates tab
-    const initializedRegistry = MODEL_REGISTRY.map(m => {
-      // Simulate vr_5_hp_karaoke and kim_vocal_2_mdx having updates if they are installed,
-      // or simply set updateAvailable: true to show honesty in the catalog
-      if (m.id === "vr_5_hp_karaoke") {
-        return { ...m, updateAvailable: true };
-      }
-      return m;
-    });
-    setRegistryState([...initializedRegistry]);
+    // Copy initially to local registryState immutably
+    const initializedRegistry = MODEL_REGISTRY.map(m => ({ ...m }));
+    setRegistryState(initializedRegistry);
 
     const handler = () => {
-      setRegistryState([...MODEL_REGISTRY]);
+      setRegistryState(MODEL_REGISTRY.map(m => ({ ...m })));
     };
     window.addEventListener("modelRegistryChanged", handler);
 
@@ -85,23 +83,24 @@ export default function ModelDownloader() {
     if (uvr && typeof uvr.checkModelFileExists === 'function') {
       const initCheck = async () => {
         let changed = false;
-        for (const model of MODEL_REGISTRY) {
+        const checkedList = await Promise.all(MODEL_REGISTRY.map(async (model) => {
           if (model.id === "manual_ensemble_preset" || model.id === "ensemble_preset_default" || model.id === "multi_ai_ensemble_preset") {
-            continue;
+            return { ...model };
           }
           try {
             const res = await uvr.checkModelFileExists(model.architecture, model.name);
             if (model.downloaded !== res.exists) {
-              model.downloaded = res.exists;
               changed = true;
+              return { ...model, downloaded: res.exists };
             }
           } catch (e) {
-            console.error(e);
+            console.error("checkModelFileExists error:", e);
           }
-        }
+          return { ...model };
+        }));
+
         if (changed) {
-          setRegistryState([...MODEL_REGISTRY]);
-          window.dispatchEvent(new Event("modelRegistryChanged"));
+          setRegistryState(checkedList);
         }
       };
       initCheck();
@@ -124,12 +123,9 @@ export default function ModelDownloader() {
           }));
           
           if (status === 'completed') {
-            const target = MODEL_REGISTRY.find(m => m.id === modelId);
-            if (target) {
-              target.downloaded = true;
-              setRegistryState([...MODEL_REGISTRY]);
-              window.dispatchEvent(new Event("modelRegistryChanged"));
-            }
+            setRegistryState((prev) =>
+              prev.map((m) => (m.id === modelId ? { ...m, downloaded: true } : m))
+            );
           }
         }
       });
@@ -162,16 +158,19 @@ export default function ModelDownloader() {
     let locationInfo = "Manual Sideload Folder";
     let fileInfo = item.name;
     let urlStatus = url ? "configured" : "missing";
-    let checksumStatus = item.checksum ? `available (SHA-256 Lock)` : "missing";
+    let checksumStatus = item.checksum ? `available (Expected SHA-256)` : "Expected Expected SHA-256: Not registered";
     let isMutable = false;
+    let sourceStatusLabel = "Source Missing";
 
     if (item.sourceType === "manual_import") {
       sourceName = "Manual Import Only";
       locationInfo = "User's Local Storage Folder";
       urlStatus = "not applicable";
-    } else if (item.sourceType === "unknown") {
+      sourceStatusLabel = "Manual Import";
+    } else if (item.sourceType === "unknown" && !url) {
       sourceName = "Unknown Source";
       locationInfo = "Lost or unregistered community path";
+      sourceStatusLabel = "Source Missing";
     } else if (url) {
       if (url.includes("huggingface.co")) {
         sourceName = item.sourceType === "hugging_face_space" ? "Hugging Face Space" : "Hugging Face Hub";
@@ -189,9 +188,22 @@ export default function ModelDownloader() {
         locationInfo = `${parts[0] || "Anjok07"}/${parts[1] || "ultimatevocalremovergui"}`;
         fileInfo = parts[parts.length - 1] || item.name;
       }
+
+      // Exact Logic from Requirement 9:
+      if (url.includes("/resolve/main/")) {
+        sourceStatusLabel = "Configured Mutable Source / Hash Required";
+      } else {
+        if (item.checksum) {
+          sourceStatusLabel = "Configured Source / Hash Lock Available";
+        } else {
+          sourceStatusLabel = "Configured Source / Hash Unavailable";
+        }
+      }
+    } else {
+      sourceStatusLabel = "Source Missing";
     }
 
-    return { sourceName, locationInfo, fileInfo, urlStatus, checksumStatus, isMutable };
+    return { sourceName, locationInfo, fileInfo, urlStatus, checksumStatus, isMutable, sourceStatusLabel };
   };
 
   // Helper: parse textual weights sizes into float MBs for proper disk calculation
@@ -208,6 +220,7 @@ export default function ModelDownloader() {
 
   // Resolve logical card state cleanly
   const getModelState = (item: ModelRegistryEntry) => {
+    // 1. Check active downloading/verifying transition states first
     const dState = downloadStates[item.id];
     if (dState) {
       if (dState.status === "downloading") return "Downloading";
@@ -215,22 +228,35 @@ export default function ModelDownloader() {
       if (dState.status === "failed") return "Download Failed";
     }
 
-    if (item.downloaded) {
-      const vState = verificationStates[item.id];
-      if (vState === "verified") return "Installed Locally / Hash Verified";
-      if (vState === "failed") return "Hash Mismatch";
-      if (!item.checksum) return "Installed Locally / Hash Unavailable";
-      return "Installed";
+    // 2. Map strict registry status first (Rule 2 & 4)
+    if (item.verifiedStatus && item.verifiedStatus !== "verified") {
+      if (item.verifiedStatus === "needs_verification") return "Needs Verification";
+      if (item.verifiedStatus === "unavailable") return "Unavailable";
+      if (item.verifiedStatus === "broken_link") return "Broken Link";
+      if (item.verifiedStatus === "missing_hash") return "Hash Missing";
+      if (item.verifiedStatus === "hash_mismatch") return "Hash Mismatch";
+      if (item.verifiedStatus === "unsupported_backend") return "Unsupported Backend";
+      if (item.verifiedStatus === "experimental") return "Experimental";
     }
 
+    // 3. Installed locally states
+    if (item.downloaded) {
+      const vState = verificationStates[item.id];
+      if (vState === "missing") return "Local File Missing";
+      if (vState === "verified") return "Installed Locally / Hash Verified";
+      if (vState === "mismatch") return "Hash Mismatch";
+      if (vState === "hash_unavailable" || item.sourceType === "manual_import" || !item.checksum) {
+        return "Installed Locally / Hash Unavailable";
+      }
+      return "Installed Locally / Verification Pending";
+    }
+
+    // 4. Not downloaded states
     if (item.sourceType === "manual_import") {
       return "Manual Import Required";
     }
-    if (item.sourceType === "unknown" || !item.downloadUrl) {
+    if (!item.downloadUrl) {
       return "Source Missing";
-    }
-    if (item.updateAvailable) {
-      return "Update Available";
     }
 
     return "Download Available";
@@ -240,8 +266,33 @@ export default function ModelDownloader() {
   const triggerDownload = async (item: ModelRegistryEntry) => {
     const uvr = (window as any).uvr;
 
+    if (item.sourceType === "manual_import") {
+      alert("Download blocked: weights represent a custom manual import. Direct download cannot be processed.");
+      return;
+    }
+
     if (!item.downloadUrl) {
-      alert("This model has no source URL mapped. Direct download represents an invalid operation. Manual import required.");
+      alert("Download blocked: source URL is missing. Direct download is not possible.");
+      return;
+    }
+
+    if (item.sourceType === "unknown") {
+      alert("Download blocked: unknown source type. Action rejected.");
+      return;
+    }
+
+    // Warnings for checksum & mutability based on Requirement 23
+    const isMutable = item.downloadUrl.includes("/resolve/main/");
+    if (isMutable && !item.checksum) {
+      const proceed = confirm("Warning: mutable source without checksum. Download allowed only as unverified local file. Continue?");
+      if (!proceed) return;
+    } else if (!item.checksum) {
+      const proceed = confirm("Warning: No registered expected checksum for this source. File integrity verification will be unavailable. Continue?");
+      if (!proceed) return;
+    }
+
+    if (!uvr || typeof uvr.downloadModel !== 'function') {
+      alert("Download blocked: native downloader unavailable. Browser Preview Only | Native Electron required for model download.");
       return;
     }
 
@@ -256,103 +307,83 @@ export default function ModelDownloader() {
     }));
 
     // Electron environment
-    if (uvr && typeof uvr.downloadModel === 'function') {
-      try {
-        const res = await uvr.downloadModel(item.id, item.downloadUrl, item.architecture, item.name);
-        if (res.success) {
-          setDownloadStates((prev) => ({
-            ...prev,
-            [item.id]: {
-              ...prev[item.id],
-              progress: 100,
-              status: "completed",
-              hashMatch: true,
-            },
-          }));
-          item.downloaded = true;
-          // Trigger file verification simulation status update automatically
-          if (item.checksum) {
-            setVerificationStates(prev => ({ ...prev, [item.id]: "verified" }));
-          }
-          setRegistryState([...MODEL_REGISTRY]);
-          window.dispatchEvent(new Event("modelRegistryChanged"));
-        } else {
-          setDownloadStates((prev) => ({
-            ...prev,
-            [item.id]: {
-              ...prev[item.id],
-              status: "failed",
-              error: res.error,
-            },
-          }));
-          alert(`Download failed: ${res.error || "Check weights network paths."}`);
-        }
-      } catch (e: any) {
-        setDownloadStates((prev) => ({
-          ...prev,
-          [item.id]: {
-            ...prev[item.id],
-            status: "failed",
-            error: e.message,
-          },
-        }));
-        alert(`Download error: ${e.message}`);
-      }
-      return;
-    }
-
-    // Web preview sandbox simulation
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.floor(Math.random() * 15) + 10;
-      if (progress >= 100) {
-        progress = 100;
-        clearInterval(interval);
-
+    try {
+      const res = await uvr.downloadModel(item.id, item.downloadUrl, item.architecture, item.name);
+      if (res.success) {
         setDownloadStates((prev) => ({
           ...prev,
           [item.id]: {
             ...prev[item.id],
             progress: 100,
-            status: "verifying",
+            status: "completed",
+            hashMatch: false, // Ensure we mark as completion, but verification pending initially
           },
         }));
 
-        setTimeout(() => {
-          setDownloadStates((prev) => ({
-            ...prev,
-            [item.id]: {
-              ...prev[item.id],
-              status: "completed",
-              hashMatch: true,
-            },
-          }));
-          const target = MODEL_REGISTRY.find((m) => m.id === item.id);
-          if (target) {
-            target.downloaded = true;
-            if (target.checksum) {
-              setVerificationStates(prev => ({ ...prev, [target.id]: "verified" }));
-            }
-            setRegistryState([...MODEL_REGISTRY]);
-            window.dispatchEvent(new Event("modelRegistryChanged"));
-          }
-        }, 1200);
+        setRegistryState(prev => prev.map(m => m.id === item.id ? { ...m, downloaded: true } : m));
+
+        // Mark verification state as pending initially or trigger verification
+        if (item.checksum) {
+          setVerificationStates(prev => ({ ...prev, [item.id]: "verification_pending" }));
+          await triggerVerifyHash(item);
+        } else {
+          setVerificationStates(prev => ({ ...prev, [item.id]: "hash_unavailable" }));
+        }
+
+        window.dispatchEvent(new Event("modelRegistryChanged"));
       } else {
-        const speed = (Math.random() * 25 + 10).toFixed(1);
         setDownloadStates((prev) => ({
           ...prev,
           [item.id]: {
-            progress,
-            speed: `${speed} MB/s`,
-            status: "downloading",
-            hashMatch: false,
+            ...prev[item.id],
+            status: "failed",
+            error: res.error,
           },
         }));
+        alert(`Download failed: ${res.error || "Check weights network paths."}`);
       }
-    }, 200);
+    } catch (e: any) {
+      setDownloadStates((prev) => ({
+        ...prev,
+        [item.id]: {
+          ...prev[item.id],
+          status: "failed",
+          error: e.message,
+        },
+      }));
+      alert(`Download error: ${e.message}`);
+    }
   };
 
-  const clearCacheItem = (item: ModelRegistryEntry) => {
+  const clearCacheItem = async (item: ModelRegistryEntry) => {
+    const uvr = (window as any).uvr;
+    
+    const isNativePurge = uvr && (typeof uvr.purgeModel === 'function' || typeof uvr.clearCacheItem === 'function' || typeof uvr.deleteModelFile === 'function');
+    
+    let confirmMsg = "";
+    if (isNativePurge) {
+      confirmMsg = "This removes the local model file from disk. Continue?";
+    } else {
+      confirmMsg = "This removes the model from the local UI registry cache state. Native purge is unavailable to physically delete files from disk. Continue?";
+    }
+    
+    const ok = confirm(confirmMsg);
+    if (!ok) return;
+
+    if (isNativePurge) {
+      try {
+        const purgeFn = uvr.purgeModel || uvr.clearCacheItem || uvr.deleteModelFile;
+        const res = await purgeFn(item.id, item.architecture, item.name);
+        if (!res || !res.success) {
+          alert(`Failed to delete local weights from disk: ${res?.error || "Unknown error"}`);
+          return;
+        }
+      } catch (err: any) {
+        alert(`Failed to delete weights: ${err.message}`);
+        return;
+      }
+    }
+
     setDownloadStates((prev) => {
       const copy = { ...prev };
       delete copy[item.id];
@@ -363,67 +394,56 @@ export default function ModelDownloader() {
       delete copy[item.id];
       return copy;
     });
-    const target = MODEL_REGISTRY.find((m) => m.id === item.id);
-    if (target) {
-      target.downloaded = false;
-      setRegistryState([...MODEL_REGISTRY]);
-      window.dispatchEvent(new Event("modelRegistryChanged"));
-    }
+    
+    setRegistryState(prev => prev.map(m => m.id === item.id ? { ...m, downloaded: false } : m));
+    window.dispatchEvent(new Event("modelRegistryChanged"));
   };
 
-  const triggerVerifyHash = (item: ModelRegistryEntry) => {
-    if (!item.downloaded) return;
+  const triggerVerifyHash = async (item: ModelRegistryEntry) => {
+    if (!item.downloaded) {
+      setVerificationStates(prev => ({ ...prev, [item.id]: "missing" }));
+      return;
+    }
+
+    if (!item.checksum) {
+      setVerificationStates(prev => ({ ...prev, [item.id]: "hash_unavailable" }));
+      return;
+    }
 
     setVerificationStates(prev => ({ ...prev, [item.id]: "verifying" }));
 
-    setTimeout(() => {
-      if (item.checksum) {
-        // Successfully matches local registry locks
-        setVerificationStates(prev => ({ ...prev, [item.id]: "verified" }));
-      } else {
-        setVerificationStates(prev => ({ ...prev, [item.id]: "failed" }));
+    const uvr = (window as any).uvr;
+    if (uvr && typeof uvr.verifyModelHash === "function") {
+      try {
+        const res = await uvr.verifyModelHash(item.architecture, item.name, item.checksum);
+        if (res && res.status) {
+          setVerificationStates(prev => ({ ...prev, [item.id]: res.status }));
+        } else {
+          if (res && res.exists === false) {
+            setVerificationStates(prev => ({ ...prev, [item.id]: "missing" }));
+          } else if (res && res.hashMatch === true) {
+            setVerificationStates(prev => ({ ...prev, [item.id]: "verified" }));
+          } else if (res && res.hashMatch === false) {
+            setVerificationStates(prev => ({ ...prev, [item.id]: "mismatch" }));
+          } else {
+            setVerificationStates(prev => ({ ...prev, [item.id]: "hash_unavailable" }));
+          }
+        }
+      } catch (err) {
+        console.error("Backend hash verification failed:", err);
+        setVerificationStates(prev => ({ ...prev, [item.id]: "mismatch" }));
       }
-    }, 1000);
+    } else {
+      alert("Verify blocked: native hash verifier unavailable. Hash verification unavailable — native verifier missing");
+      setVerificationStates(prev => ({ ...prev, [item.id]: "not_checked" }));
+    }
   };
 
   // Custom weight upload
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      let arch: "VR" | "MDX-Net" | "Demucs" | "RoFormer" | "MDXC" | "Custom" = "Custom";
-      let stemType: "vocals" | "instrumental" | "4stem" | "variable" = "variable";
-
-      if (file.name.endsWith(".pth")) arch = "VR";
-      else if (file.name.endsWith(".yaml") || file.name.endsWith(".pt")) arch = "Demucs";
-      else if (file.name.toLowerCase().includes("roformer")) arch = "RoFormer";
-      else if (file.name.toLowerCase().includes("mdx") || file.name.toLowerCase().includes("onnx")) arch = "MDX-Net";
-
-      if (file.name.toLowerCase().includes("vocal")) stemType = "vocals";
-      else if (arch === "Demucs") stemType = "4stem";
-      else if (file.name.toLowerCase().includes("inst")) stemType = "instrumental";
-
-      const rawPath = file.webkitRelativePath || file.name;
-      const safePath = rawPath.replace(/\.\.\//g, '').replace(/^\/+/, '');
-
-      const customModel: ModelRegistryEntry = {
-        id: `custom_${Date.now()}`,
-        name: file.name,
-        architecture: arch,
-        filePath: `sideloaded_weights/${arch}/${safePath}`,
-        stemType,
-        gpuSupport: true,
-        memoryRisk: "med",
-        downloaded: true,
-        description: "Manually side-loaded custom weight. Verified file existence.",
-        fileSize: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-        sourceType: "manual_import",
-        verifiedStatus: "unverified",
-      };
-
-      addModelToRegistry(customModel);
-      setRegistryState([...MODEL_REGISTRY]);
-      e.target.value = ""; // Clear file selector
-    }
+    // Check missing native block
+    alert("Import blocked: native file import unavailable. Native Electron required for sideloading.");
+    e.target.value = "";
   };
 
   // Check disk calculations based on checkboxes selection
@@ -577,7 +597,7 @@ export default function ModelDownloader() {
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <h2 className="text-lg font-bold text-white font-display flex flex-wrap items-center gap-2 whitespace-normal break-words leading-tight">
                 <DownloadCloud className="w-5 h-5 text-blue-400 animate-pulse shrink-0" />
-                <span className="break-words">Preflight Model Download Hub & Integrity Guard</span>
+                <span className="break-words">OpenStem Model Manager & Integrity Guard</span>
               </h2>
               <HelpToggle sectionId="model_downloader" label="Show Help" className="px-2.5 py-1" />
             </div>
@@ -586,19 +606,19 @@ export default function ModelDownloader() {
             </p>
             <HelpText
               sectionId="model_downloader"
-              text="Help: The preflight downloader pulls neural weights files safely into your local directory. It prevents running broken files by ensuring checksum compliance. If a model has no download URL, is not checked, or integrity cannot be fully verified, a warning will appear."
+              text="Help: The downloader can verify integrity only when a local file exists and a known checksum is registered. If a checksum is unavailable, the app can confirm file presence but not cryptographic integrity."
             />
           </div>
           
           <div className="flex flex-col items-start sm:items-end gap-1 shrink-0 w-full sm:w-auto bg-black/40 border border-white/5 p-3 rounded-lg text-xs font-mono min-w-0 break-words whitespace-normal border-dashed border-slate-500/20 hover:border-slate-500/40 transition-all">
-            <AccessibleTooltipWrapper content="Disk Space Estimate | Not Checked: This is a static/cached estimate of available container quarters, NOT a physical live filesystem query on the host system." position="top" className="w-full">
+            <AccessibleTooltipWrapper content="Static cache planning estimate / Not live disk check" position="top" className="w-full">
               <div className="flex flex-col sm:items-end gap-1 text-slate-300 w-full cursor-help">
                 <div className="flex items-center gap-2 text-slate-350 justify-between sm:justify-end">
                   <HardDrive className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                   <span className="font-bold">Disk Space Estimate</span>
                 </div>
-                <div className="text-[11px] text-slate-400 font-bold">4.8 GB cache limit</div>
-                <div className="text-[10px] text-slate-500 italic">Not checked / Static Cache</div>
+                <div className="text-[11px] text-slate-400 font-bold">4.8 GB Static cache limit</div>
+                <div className="text-[10px] text-slate-500 italic">Not checked / Not live drive check</div>
               </div>
             </AccessibleTooltipWrapper>
             {totalSelectedDownloadMB > 0 && (
@@ -671,21 +691,19 @@ export default function ModelDownloader() {
             </span>
           )}
         </button>
-      </div>
-
-      {/* Registry Status Legend */}
+      </div>      {/* Registry Status Legend */}
       <div className="p-3 bg-[#0c0f1d]/60 border border-white/5 rounded-xl text-[10px] sm:text-xs text-slate-300 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 font-mono leading-relaxed">
         <div className="space-y-1">
           <div className="text-[#38bdf8] font-bold">● Configured Source / Not Checked</div>
-          <div className="text-slate-400 text-[10px]">URL configured in static codebase metadata registry (status holds pending network action).</div>
+          <div className="text-slate-400 text-[10px]">URL declared in static catalog configuration (integrity and presence remain unconfirmed).</div>
         </div>
         <div className="space-y-1">
           <div className="text-purple-400 font-bold">● Configured Mutable Source / Hash Required</div>
           <div className="text-slate-400 text-[10px]">URL points to an active main-branch endpoint (/resolve/main/). Subject to remote changes.</div>
         </div>
         <div className="space-y-1">
-          <div className="text-sky-400 font-bold">● Configured Immutable Source / Hash Lock</div>
-          <div className="text-slate-400 text-[10px]">URL points to stable, dedicated release assets with high permanent structure integrity.</div>
+          <div className="text-sky-400 font-bold">● Configured Source / Hash Lock Available</div>
+          <div className="text-slate-400 text-[10px]">URL points to a tagged release or stable commit. Remote content is unlikely to mutate.</div>
         </div>
         <div className="space-y-1">
           <div className="text-emerald-400 font-bold">● Installed Locally / Hash Verified</div>
@@ -740,23 +758,24 @@ export default function ModelDownloader() {
                           architecture: selectedArchForImport,
                           filePath: res.absolutePath,
                           stemType: "variable",
-                          gpuSupport: true,
+                          gpuSupport: false, // Safest boolean value
+                          gpuSupportStatus: "unknown",
                           memoryRisk: "med",
-                          downloaded: true,
-                          description: `Sideloaded weights file: ${res.name}`,
+                          downloaded: true, // Only if backend confirms it
+                          description: "Manually imported local weight file. Hash not verified unless a checksum is provided.",
                           fileSize: res.fileSize || "Unknown",
                           sourceType: "manual_import",
-                          verifiedStatus: "unverified"
+                          verifiedStatus: "needs_verification"
                         };
                         addModelToRegistry(customModel);
-                        setRegistryState([...MODEL_REGISTRY]);
+                        setRegistryState(prev => [...prev.map(m => ({ ...m })), customModel]);
                         alert("Model weights imported and integrated successfully!");
                       }
                     }).catch((err: any) => {
                       alert(`Import failed: ${err.message}`);
                     });
                   } else {
-                    fileInputRef.current?.click();
+                    alert("Import blocked: native file import unavailable. Native Electron required for sideloading.");
                   }
                 }}
                 className="px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/30 hover:border-purple-400/50 rounded text-xs font-mono transition-all flex items-center gap-1.5 cursor-pointer"
@@ -907,7 +926,7 @@ export default function ModelDownloader() {
                         <div className="truncate">Local Path: <span className="text-slate-300 select-all font-bold">{item.filePath}</span></div>
                         <div>Required Backend Host: <span className="text-purple-300 font-bold">{item.requiredBackend || "python-pytorch (PyTorch v2.3)"}</span></div>
                         <div>Extensions Supported: <span className="text-[#3b82f6] font-bold">{(item.supportedExtensions || [item.name.slice(item.name.lastIndexOf("."))]).join(", ")}</span></div>
-                        <div className="text-amber-300 font-bold">Engine Compatibility Path: Verification Complete ✓ [Local-Proven-DML-Delegated]</div>
+                        <div className="text-amber-300 font-bold">Engine Compatibility Path: Estimated / Execution Pending</div>
                       </div>
                     </div>
 
@@ -932,7 +951,7 @@ export default function ModelDownloader() {
                               <Check className="w-3 h-3" /> Hash Verified
                             </span>
                           )}
-                          {vState === "failed" && (
+                          {vState === "mismatch" && (
                             <span className="text-rose-400 font-bold uppercase flex items-center gap-0.5">
                               <XCircle className="w-3 h-3" /> Hash Mismatch
                             </span>
@@ -942,7 +961,7 @@ export default function ModelDownloader() {
                               <RefreshCw className="w-2.5 h-2.5 animate-spin" /> Checking...
                             </span>
                           )}
-                          {vState === "idle" && (
+                          {(vState === "not_checked" || vState === "verification_pending") && (
                             <span className="text-slate-400 font-bold uppercase">
                               {item.checksum ? "Not Checked" : "Hash Unavailable"}
                             </span>
@@ -983,7 +1002,11 @@ export default function ModelDownloader() {
 
             {localRegistryModels.length === 0 && (
               <div className="text-center py-10 bg-white/[0.02] border border-white/5 rounded-xl text-slate-400 text-xs font-mono">
-                No verified weight files found in local library subdirectory path structure. Please download weights from catalog or copy weights via Sideload box.
+                {baseModels.some(m => m.downloaded) ? (
+                  "No models match current search/filter."
+                ) : (
+                  "No local model files verified yet."
+                )}
               </div>
             )}
           </div>
@@ -1008,7 +1031,7 @@ export default function ModelDownloader() {
                   <div className="flex items-start md:items-center gap-3">
                     
                     {/* Checkbox for batch space protection */}
-                    {!item.downloaded && item.downloadUrl && item.sourceType !== "manual_import" && item.sourceType !== "unknown" && (
+                    {!item.downloaded && item.downloadUrl && item.verifiedStatus === "verified" && item.sourceType !== "manual_import" && item.sourceType !== "unknown" && (
                       <input
                         type="checkbox"
                         checked={isSelected}
@@ -1043,12 +1066,16 @@ export default function ModelDownloader() {
                         </p>
 
                         {/* Interactive Source visibility card based on Requirement 4 */}
-                        <div className="mt-2.5 p-2 bg-black/40 rounded border border-white/5 text-[10px] font-mono space-y-0.5 max-w-full overflow-hidden">
+                        <div className="mt-2.5 p-3 bg-black/40 rounded border border-white/5 text-[10px] font-mono space-y-1 w-full min-w-0 max-w-full overflow-x-auto whitespace-normal break-words">
                           <div>Source Name: <span className="text-purple-300 font-bold">{sourceInfo.sourceName}</span></div>
-                          <div className="truncate">Repository Repository Location: <span className="text-pink-300 select-all font-bold">{sourceInfo.locationInfo}</span></div>
-                          <div className="truncate">File Payload Name: <span className="text-[#a855f7] select-all">{sourceInfo.fileInfo}</span></div>
-                          <div className="truncate">Target Download Endpoint URL: <span className="text-slate-400 break-all select-all font-bold">{item.downloadUrl || "missing"}</span></div>
-                          <div className="truncate">Checksum Definition: <span className="text-slate-400">{item.checksum ? `sha256_${item.checksum}` : "missing"}</span></div>
+                          <div className="break-all">Repository Location: <span className="text-pink-300 select-all font-bold">{sourceInfo.locationInfo}</span></div>
+                          <div className="break-all">File Payload Name: <span className="text-[#a855f7] select-all">{sourceInfo.fileInfo}</span></div>
+                          <div className="break-all">
+                            Target Download Endpoint URL: <code className="text-slate-400 select-all font-bold p-0.5 bg-black/20 rounded break-all">{item.downloadUrl || "missing"}</code>
+                          </div>
+                          <div className="break-all">
+                            Checksum Definition: <code className="text-slate-400 p-0.5 bg-black/20 rounded break-all">{item.checksum ? `sha256:${item.checksum}` : "missing"}</code>
+                          </div>
                           {sourceInfo.isMutable ? (
                             <div className="text-amber-400 font-bold mt-1 text-[9px] uppercase border-t border-white/5 pt-1 flex items-center gap-1">
                               <span>⚠</span> Configured Mutable Source / Hash Required
@@ -1108,6 +1135,36 @@ export default function ModelDownloader() {
                                   No configured Hugging Face source for this model.
                                 </div>
                               </div>
+                            ) : item.verifiedStatus !== "verified" ? (
+                              <div className="space-y-1">
+                                <button
+                                  disabled
+                                  className={`w-full py-1.5 ${
+                                    item.verifiedStatus === 'needs_verification'
+                                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                      : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                                  } border text-xs font-mono rounded cursor-not-allowed uppercase font-bold`}
+                                >
+                                  {item.verifiedStatus === 'needs_verification' ? 'Needs Verification' : 
+                                   item.verifiedStatus === 'unavailable' ? 'Unavailable' :
+                                   item.verifiedStatus === 'broken_link' ? 'Broken Link' :
+                                   item.verifiedStatus === 'missing_hash' ? 'Hash Missing' :
+                                   item.verifiedStatus === 'hash_mismatch' ? 'Hash Mismatch' :
+                                   item.verifiedStatus === 'unsupported_backend' ? 'Unsupported Backend' :
+                                   item.verifiedStatus === 'experimental' ? 'Experimental' : 'Unavailable'}
+                                </button>
+                                <div className={`text-[9px] ${
+                                  item.verifiedStatus === 'needs_verification' ? 'text-amber-400/80' : 'text-rose-400/80'
+                                } font-mono text-center leading-normal`}>
+                                  {item.verifiedStatus === 'needs_verification' ? 'Verification is pending on this model resource.' : 
+                                   item.verifiedStatus === 'unavailable' ? 'Direct download is currently disabled.' :
+                                   item.verifiedStatus === 'broken_link' ? 'Weights link is broken or offline.' :
+                                   item.verifiedStatus === 'missing_hash' ? 'Block: missing required integrity checksum.' :
+                                   item.verifiedStatus === 'hash_mismatch' ? 'Block: hash mismatch on target weights.' :
+                                   item.verifiedStatus === 'unsupported_backend' ? 'Block: target engine backend not supported.' :
+                                   item.verifiedStatus === 'experimental' ? 'Experimental build: source not audited.' : 'Unavailable for direct download.'}
+                                </div>
+                              </div>
                             ) : (
                               <button
                                 onClick={() => triggerDownload(item)}
@@ -1135,7 +1192,7 @@ export default function ModelDownloader() {
 
             {huggingFaceTabModels.length === 0 && (
               <div className="text-center py-10 bg-white/[0.02] border border-white/5 rounded-xl text-slate-400 text-xs font-mono">
-                No configured Hugging Face library sources match search criteria.
+                No models match current search/filter.
               </div>
             )}
           </div>
@@ -1160,7 +1217,7 @@ export default function ModelDownloader() {
                   <div className="flex items-start md:items-center gap-3">
                     
                     {/* Checkbox for space protectors */}
-                    {!item.downloaded && item.downloadUrl && item.sourceType !== "manual_import" && item.sourceType !== "unknown" && (
+                    {!item.downloaded && item.downloadUrl && item.verifiedStatus === "verified" && item.sourceType !== "manual_import" && item.sourceType !== "unknown" && (
                       <input
                         type="checkbox"
                         checked={isSelected}
@@ -1195,12 +1252,16 @@ export default function ModelDownloader() {
                         </p>
 
                         {/* Interactive Source visibility card based on Requirement 4 */}
-                        <div className="mt-2.5 p-2 bg-black/40 rounded border border-white/5 text-[10px] font-mono space-y-0.5 max-w-full overflow-hidden">
+                        <div className="mt-2.5 p-3 bg-black/40 rounded border border-white/5 text-[10px] font-mono space-y-1 w-full min-w-0 max-w-full overflow-x-auto whitespace-normal break-words">
                           <div>Source Name: <span className="text-teal-300 font-bold">{sourceInfo.sourceName}</span></div>
-                          <div className="truncate">Repository Location: <span className="text-emerald-300 font-bold select-all">{sourceInfo.locationInfo}</span></div>
-                          <div className="truncate">GitHub Release Asset Key: <span className="text-teal-400 select-all">{sourceInfo.fileInfo}</span></div>
-                          <div className="truncate">Target Asset Release URL: <span className="text-slate-400 break-all select-all font-bold">{item.downloadUrl || "missing"}</span></div>
-                          <div className="truncate">Checksum Definition: <span className="text-slate-400">{item.checksum ? `sha256_${item.checksum}` : "missing"}</span></div>
+                          <div className="break-all">Repository Location: <span className="text-emerald-300 font-bold select-all">{sourceInfo.locationInfo}</span></div>
+                          <div className="break-all">GitHub Release Asset Key: <span className="text-teal-400 select-all">{sourceInfo.fileInfo}</span></div>
+                          <div className="break-all">
+                            Target Asset Release URL: <code className="text-slate-400 select-all font-bold p-0.5 bg-black/20 rounded break-all">{item.downloadUrl || "missing"}</code>
+                          </div>
+                          <div className="break-all">
+                            Checksum Definition: <code className="text-slate-400 p-0.5 bg-black/20 rounded break-all">{item.checksum ? `sha256:${item.checksum}` : "missing"}</code>
+                          </div>
                         </div>
                       </div>
 
@@ -1250,6 +1311,36 @@ export default function ModelDownloader() {
                                   GitHub source not configured.
                                 </div>
                               </div>
+                            ) : item.verifiedStatus !== "verified" ? (
+                              <div className="space-y-1">
+                                <button
+                                  disabled
+                                  className={`w-full py-1.5 ${
+                                    item.verifiedStatus === 'needs_verification'
+                                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                      : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                                  } border text-xs font-mono rounded cursor-not-allowed uppercase font-bold`}
+                                >
+                                  {item.verifiedStatus === 'needs_verification' ? 'Needs Verification' : 
+                                   item.verifiedStatus === 'unavailable' ? 'Unavailable' :
+                                   item.verifiedStatus === 'broken_link' ? 'Broken Link' :
+                                   item.verifiedStatus === 'missing_hash' ? 'Hash Missing' :
+                                   item.verifiedStatus === 'hash_mismatch' ? 'Hash Mismatch' :
+                                   item.verifiedStatus === 'unsupported_backend' ? 'Unsupported Backend' :
+                                   item.verifiedStatus === 'experimental' ? 'Experimental' : 'Unavailable'}
+                                </button>
+                                <div className={`text-[9px] ${
+                                  item.verifiedStatus === 'needs_verification' ? 'text-amber-400/80' : 'text-rose-400/80'
+                                } font-mono text-center leading-normal`}>
+                                  {item.verifiedStatus === 'needs_verification' ? 'Verification is pending on this model resource.' : 
+                                   item.verifiedStatus === 'unavailable' ? 'Direct download is currently disabled.' :
+                                   item.verifiedStatus === 'broken_link' ? 'Weights link is broken or offline.' :
+                                   item.verifiedStatus === 'missing_hash' ? 'Block: missing required integrity checksum.' :
+                                   item.verifiedStatus === 'hash_mismatch' ? 'Block: hash mismatch on target weights.' :
+                                   item.verifiedStatus === 'unsupported_backend' ? 'Block: target engine backend not supported.' :
+                                   item.verifiedStatus === 'experimental' ? 'Experimental build: source not audited.' : 'Unavailable for direct download.'}
+                                </div>
+                              </div>
                             ) : (
                               <button
                                 onClick={() => triggerDownload(item)}
@@ -1277,7 +1368,7 @@ export default function ModelDownloader() {
 
             {gitHubTabModels.length === 0 && (
               <div className="text-center py-10 bg-white/[0.02] border border-white/5 rounded-xl text-slate-400 text-xs font-mono">
-                No configured GitHub model library sources match search criteria.
+                No models match current search/filter.
               </div>
             )}
           </div>

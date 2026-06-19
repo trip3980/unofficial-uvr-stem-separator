@@ -1,14 +1,20 @@
-# Unofficial UVR Stem Separator
+# OpenStem AI Audio Workstation
 
-An unofficial Windows desktop stem-separation application inspired by UVR-style workflows, designed around a React/Electron desktop interface, safe local processing architecture, model registry planning, backend adapter separation, FFmpeg readiness checks, and future support for VR, MDX, MDX23C, Demucs, RoFormer, Mel-Band RoFormer, BS-RoFormer, and user-imported models.
+> **Independent AI audio workstation for local stem separation and audio workflow tools.**
 
-**Created by Robert Sawin (GitHub: Trip3980)**
+OpenStem AI Audio Workstation is an independent desktop audio workstation for local AI-assisted stem separation, model management, post-separation review, MIDI transcription workflows, and experimental generation loopback tools. Current status: Hardened Functional Alpha. Beta Candidate remains blocked until verified local UVR AI E2E stem-separation proof passes.
 
-**Disclaimer**: This project is not affiliated with, endorsed by, or maintained by the Ultimate Vocal Remover developers. UVR language refers only to workflow inspiration and source-separation interface patterns. The project is not trying to replace Ultimate Vocal Remover or claim official UVR succession. It is an unofficial classic-style desktop stem separator built around safer packaging, readiness checks, model registry planning, backend adapters, and future model support.
+---
 
-Unofficial UVR Stem Separator exists for two reasons:
-1. To future-proof the classic UVR-style workflow so newer models, model categories, and backend libraries can be added through adapters instead of rewrites.
-2. To preserve the familiar standalone desktop experience of the older UVR-style app while supporting newer separation technology inside a modern executable Windows shell.
+### Independent Project Notice & Disclaimer
+
+> ⚠️ **IMPORTANT**: **OpenStem AI Audio Workstation is an independent audio-separation workstation. It is not the official Ultimate Vocal Remover project and does not claim affiliation, certification, or endorsement by the original UVR project.**
+
+This workspace is designed to help users configure and run independent local source-separation workflows using tools, models, and weights they acquire and manage themselves. Use of phrases like "UVR-compatible" and "UVR-style" refers strictly to workflow compatibility, reference model standards, and command-line structures. 
+
+This project does not claim ownership over any upstream separation engines, deep learning models, weights, or associated scientific research projects. We respect all upstream creators and strongly encourage supporting their work directly.
+
+---
 
 ## Building Desktop Executable
 
@@ -35,21 +41,22 @@ This project is configured to be packaged as a standalone desktop application us
    ```
    *Note: This command uses `electron-builder` to package the app into an installer or executable. The final distributable will be output to the `dist-electron` folder.*
 
-## Architecture Notes
+---
 
-- The React SPA serves as the Electron renderer.
-- `electron-shell/main.cjs` coordinates the main process.
-- `electron-shell/preload.cjs` safely exposes IPC handlers (select files, trigger separation) via `contextBridge` to the `window.uvr` object without exposing raw Node APIs.
-- The `type` field in `package.json` is set to `module`, but Electron's main process scripts use `.cjs` extensions.
+## Technical Credits & Upstream Attribution
 
-## Acknowledgments & References
+This project functions as an integrator and credits the following upstream projects for their foundation, engines, or design reference:
+- **OpenStem AI Audio Workstation**: Main application shell and workflow integrator. (Author: Robert Sawin / Trip3980)
+- **Ultimate Vocal Remover GUI / UVR**: Historical workflow inspiration and compatibility reference for UVR-style source separation. OpenStem is not an official UVR product.
+- **audio-separator**: The Python CLI and library providing the backbone for executing Demucs and MDX-Net pipelines robustly on diverse local hardware setups.
+- **Demucs / facebookresearch**: Multi-stem audio source separation neural networks.
+- **FFmpeg**: Transcoding, fallback static DSP filter separations, and audio operations. FFmpeg fallback is non-AI FFmpeg-based processing and does not count as neural source-separation proof.
+- **Basic Pitch (Spotify)**: Automated audio-to-MIDI transcription models for pitch tracking.
+- **PyTorch / ONNX Runtime**: Underlying machine learning inference execution backends.
 
-This project is a modern, independent UI reimplementation and architecture planner inspired by the incredible work done by the **Ultimate Vocal Remover (UVR)** community.
-
-- **Original UVR GUI Project**: Big thanks to [Anjok07 and the UVR team](https://github.com/Anjok07/ultimatevocalremovergui) for their foundational work in making audio separation accessible.
-- **Model Architectures**: This application acts as a front-end shell intended to support backend execution of world-class separation models such as [Demucs](https://github.com/facebookresearch/demucs) (Facebook Research), [RoFormer](https://github.com/lucidrains/roformer-pytorch), Mel-Band RoFormer, and MDX-Net.
-- **Audio-Separator**: Planned backend integration utilizing libraries inspired by or directly interfacing with [audio-separator](https://github.com/nomadkaraoke/python-audio-separator).
+---
 
 ## License
 
-This UI shell and configuration is open-source (MIT License). See the `LICENSE` file for details. Please ensure you comply with the respective licenses of any models, backend execution scripts, or external binaries (like FFmpeg) you use alongside this software.
+This UI shell and configuration is licensed under the MIT License. See the `LICENSE` file for details. 
+Please read `THIRD_PARTY_NOTICES.md` for full attribution, license details of upstream projects, and model weight redistribution terms. You must comply with the licenses of any third-party binaries, libraries, or model weights that you run or integrate.

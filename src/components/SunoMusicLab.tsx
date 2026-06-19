@@ -1297,11 +1297,11 @@ We are the kings of the feedback tonight`;
       try {
         const verify = await (window as any).uvr.verifyAudioFile(track.localFilePath);
         if (!verify.exists) {
-          triggerToast("Action blocked: The local generated file was not found on disk.");
+          triggerToast("Loopback blocked: no verified local audio file exists for this track.");
           return;
         }
       } catch (err: any) {
-        triggerToast(`Verification error: ${err.message}`);
+        triggerToast("Loopback blocked: no verified local audio file exists for this track.");
         return;
       }
     }
@@ -1333,11 +1333,11 @@ We are the kings of the feedback tonight`;
       try {
         const verify = await (window as any).uvr.verifyAudioFile(track.localFilePath);
         if (!verify.exists) {
-          triggerToast("Action blocked: The local generated file was not found on disk.");
+          triggerToast("Loopback blocked: no verified local audio file exists for this track.");
           return;
         }
       } catch (err: any) {
-        triggerToast(`Verification error: ${err.message}`);
+        triggerToast("Loopback blocked: no verified local audio file exists for this track.");
         return;
       }
     }
@@ -1393,7 +1393,7 @@ We are the kings of the feedback tonight`;
             <span className="w-3 h-3 rounded-full bg-yellow-500/30 border border-yellow-500/40"></span>
             <span className="w-3 h-3 rounded-full bg-emerald-500/30 border border-emerald-500/40"></span>
           </div>
-          <span className="text-[10px] font-mono tracking-widest text-rose-400 uppercase font-bold text-center absolute left-1/2 -translate-x-1/2">
+          <span className="hidden sm:block text-[10px] font-mono tracking-widest text-rose-400 uppercase font-bold text-center absolute left-1/2 -translate-x-1/2">
             Generative Music Workspace
           </span>
           <div className="flex gap-3 justify-end items-center w-[140px]">
@@ -2929,9 +2929,33 @@ We are the kings of the feedback tonight`;
                         }`}>
                           {track.source}
                         </span>
-                        <span className="px-1.5 py-0.5 rounded text-[8px] font-mono shrink-0 bg-yellow-500/10 text-yellow-400 border border-yellow-500/10 scale-90 origin-left">
-                          {track.id.toString().includes("suno-") || track.id.toString().includes("yue-") ? "Demo / Pre-seeded (Not locally generated)" : "User Draft"}
-                        </span>
+                        {track.isDemo ? (
+                          <span className="px-1.5 py-0.5 rounded text-[8px] font-mono shrink-0 bg-yellow-500/10 text-yellow-400 border border-yellow-500/10 scale-90 origin-left">
+                            Demo only / No local file
+                          </span>
+                        ) : track.proofSource === "remote_url" ? (
+                          <span className="px-1.5 py-0.5 rounded text-[8px] font-mono shrink-0 bg-blue-500/10 text-blue-300 border border-blue-500/10 scale-90 origin-left">
+                            Remote URL / Not local proof
+                          </span>
+                        ) : track.proofSource === "local_generated" ? (
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-mono shrink-0 scale-90 origin-left ${track.fileExists ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/10" : "bg-rose-500/10 text-rose-400 border border-rose-500/10"}`}>
+                            {track.fileExists ? "Local generated file / Verified on disk" : "Missing file"}
+                          </span>
+                        ) : track.proofSource === "local_imported" ? (
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-mono shrink-0 scale-90 origin-left ${track.fileExists ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/10" : "bg-rose-500/10 text-rose-400 border border-rose-500/10"}`}>
+                            {track.fileExists ? "Local imported file / Verified on disk" : "Missing file"}
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[8px] font-mono shrink-0 bg-yellow-500/10 text-yellow-400 border border-yellow-500/10 scale-90 origin-left">
+                            Demo only / No local file
+                          </span>
+                        )}
+
+                        {track.proofReportPath && (
+                          <span className="px-1.5 py-0.5 rounded text-[8px] font-mono shrink-0 bg-purple-500/10 text-purple-400 border border-purple-500/10 scale-90 origin-left">
+                            Proof report attached
+                          </span>
+                        )}
                         <h4 className={`text-xs font-bold truncate w-full ${isCurrentActive ? "text-green-300" : "text-slate-200"}`}>
                           {track.title}
                         </h4>
@@ -3036,27 +3060,54 @@ We are the kings of the feedback tonight`;
                   <div className="p-2.5 rounded-lg bg-red-950/20 border border-red-500/15 text-[10px] font-sans text-slate-400 space-y-1">
                     <span className="font-bold text-red-400 uppercase font-mono block">⚠️ E2E Proof Verification Exclusion:</span>
                     <p className="leading-snug text-slate-400">
-                      Generative music output is <strong>not part of UVR AI separation proof</strong> and does not count towards end-to-end certification proof. Loops back as draft reference only.
+                      Only verified local audio files can be looped back into UVR tools. Generative audio does not count as UVR AI E2E proof.
                     </p>
                   </div>
 
                   <button
                     type="button"
+                    disabled={activeTrack.isDemo || !activeTrack.localFilePath || !activeTrack.fileExists}
                     onClick={() => sendToSeparator(activeTrack)}
-                    className="w-full py-2.5 rounded-lg font-sans text-[10px] font-bold uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 border border-green-500/20 bg-green-950/20 text-green-300 hover:bg-green-500/10 active:scale-[0.99] select-none cursor-pointer"
+                    className={`w-full py-2.5 rounded-lg font-sans text-[10px] font-bold uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 border select-none ${
+                      activeTrack.isDemo || !activeTrack.localFilePath || !activeTrack.fileExists
+                        ? "bg-slate-900/60 border-white/5 text-slate-500 cursor-not-allowed"
+                        : "border-green-500/20 bg-green-950/20 text-green-300 hover:bg-green-500/10 cursor-pointer active:scale-[0.99]"
+                    }`}
                   >
                     <FileAudio className="w-3.5 h-3.5 text-green-400 shrink-0" />
-                    Load in Audio Separator
+                    Load in Audio Separator {activeTrack.isDemo && "(Demo Mode Blocked)"}
                   </button>
 
                   <button
                     type="button"
+                    disabled={activeTrack.isDemo || !activeTrack.localFilePath || !activeTrack.fileExists}
                     onClick={() => sendToMixer(activeTrack)}
-                    className="w-full py-2.5 rounded-lg font-sans text-[10px] font-bold uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 border border-purple-500/20 bg-purple-950/20 text-purple-300 hover:bg-purple-500/10 active:scale-[0.99] select-none cursor-pointer"
+                    className={`w-full py-2.5 rounded-lg font-sans text-[10px] font-bold uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 border select-none ${
+                      activeTrack.isDemo || !activeTrack.localFilePath || !activeTrack.fileExists
+                        ? "bg-slate-900/60 border-white/5 text-slate-500 cursor-not-allowed"
+                        : "border-purple-500/20 bg-purple-950/20 text-purple-300 hover:bg-purple-500/10 cursor-pointer active:scale-[0.99]"
+                    }`}
                   >
                     <Sliders className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                    Load in Multitrack Mixer
+                    Load in Multitrack Mixer {activeTrack.isDemo && "(Demo Mode Blocked)"}
                   </button>
+
+                  {activeTrack.localFilePath && activeTrack.fileExists && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if ((window as any).uvr?.openOutputFolder) {
+                          (window as any).uvr.openOutputFolder(activeTrack.localFilePath);
+                          triggerToast(`Requesting open file path: ${activeTrack.localFilePath}`);
+                        } else {
+                          triggerToast(`Local file path: ${activeTrack.localFilePath}`);
+                        }
+                      }}
+                      className="w-full py-2 bg-slate-900 border border-white/5 rounded-lg text-[10px] font-mono font-bold text-slate-300 hover:bg-slate-800 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <span>📂 Open file on disk</span>
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -3064,16 +3115,6 @@ We are the kings of the feedback tonight`;
         </div>
       </div>
 
-      {/* DISCRETE LEGAL / RIGHTS FOOTER */}
-      <div className="pt-4 mt-2 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-3 text-[10px] font-mono text-slate-500">
-        <div>
-          <span>Disclaimer: Users host and provide all credentials and endpoint connections.</span>
-        </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-1 justify-center md:justify-end text-center md:text-right">
-          <span>Users are solely responsible for generated audio & rights.</span>
-          <span>Outputs are not copyrighted by workstation authors.</span>
-        </div>
-      </div>
     </div>
   );
 }

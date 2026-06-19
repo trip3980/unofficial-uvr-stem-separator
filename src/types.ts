@@ -23,6 +23,7 @@ export interface ModelRegistryEntry {
   description: string;
   fileSize: string;
   downloadUrl?: string;
+  license?: string;
   
   // Model Source Registry metadata
   sourceType?: "hugging_face_repo" | "hugging_face_space" | "github_release" | "github_raw" | "manual_import" | "unknown";
@@ -30,7 +31,8 @@ export interface ModelRegistryEntry {
   checksum?: string;
   requiredBackend?: "python-pytorch" | "onnxruntime" | "audio-separator" | "cpu-dsp";
   supportedExtensions?: string[];
-  verifiedStatus?: 'verified' | 'unverified' | 'failed' | 'not_checked';
+  verifiedStatus?: 'verified' | 'needs_verification' | 'unavailable' | 'broken_link' | 'missing_hash' | 'hash_mismatch' | 'unsupported_backend' | 'experimental';
+  gpuSupportStatus?: "yes" | "no" | "unknown";
   updateAvailable?: boolean;
 }
 

@@ -11,12 +11,37 @@ import {
   XCircle,
   AlertTriangle,
   Play,
-  FileAudio,
-  Shield,
-  Sliders,
   Check,
 } from "lucide-react";
 import { HelpToggle, HelpText } from "./HelpSystem";
+
+// Backend readiness input props
+export interface EnsembleReadiness {
+  inputFileSelected: boolean;
+  modelFilesInstalled: boolean;
+  pythonReady: boolean;
+  audioSeparatorReady: boolean;
+  ffmpegReady: boolean;
+  outputFolderSelected: boolean;
+  outputFolderWritable?: boolean;
+  ensembleBackendImplemented: boolean;
+  diskSpaceChecked: boolean;
+  diskSpaceOk?: boolean;
+  deviceModeSelected: boolean;
+  cudaProofPassed?: boolean;
+}
+
+export interface EnsemblePipelinePlannerProps {
+  readiness?: EnsembleReadiness;
+  inputMetadata?: {
+    filename?: string;
+    sampleRate?: number;
+    channels?: number;
+    duration?: number;
+    exists?: boolean;
+  };
+  deviceMode?: string;
+}
 
 interface PipelineNode {
   id: string;
@@ -24,39 +49,58 @@ interface PipelineNode {
   label: string;
   modelType?: string;
   parameters?: string;
-  vramUsage?: string;
+  estimatedVramGb?: number; // Numeric VRAM totals
   bleedDepth?: string;
-  proofStatus?: string;
+  statusNote?: string; // Renamed from proofStatus
+  registryRequired?: boolean;
+}
+
+interface ChecklistItem {
+  id: string;
+  name: string;
+  status: "met" | "missing" | "not_checked" | "blocked" | "warning";
+  required: boolean;
+  note?: string;
+  source?: "real_diagnostic" | "user_selection" | "static_planner" | "not_wired";
 }
 
 const PRESETS = [
   {
     id: "dual",
     name: "Standard Dual Model Ensemble",
-    complexity: "Requires 2 model outputs. Offers comparative submixing.",
+    complexity: "Requires 2 model outputs. Allows comparison or combination if backend supports it.",
   },
   {
     id: "subtraction",
     name: "Vocal-Focused Two-Model Pipeline",
-    complexity: "Attempts instrumental cleanup after vocal extraction.",
+    complexity: "Reference workflow for vocal-focused cleanup. Not guaranteed to improve output.",
   },
   {
     id: "ensemble_4",
     name: "Advanced 4-Stem Ensemble Pipeline",
-    complexity: "Aggregates multiple outputs. Higher VRAM/CPU demand.",
+    complexity: "Reference 4-stem ensemble plan. Higher CPU/VRAM demand if implemented.",
   },
 ];
 
-export default function EnsemblePipelinePlanner() {
+export default function EnsemblePipelinePlanner({
+  readiness,
+  inputMetadata,
+  deviceMode,
+}: EnsemblePipelinePlannerProps = {}) {
   const [pipelineNodes, setPipelineNodes] = useState<PipelineNode[]>([
-    { id: "input-1", type: "input", label: "Audio Load (Stereo Wav 44kHz)" },
+    {
+      id: "input-1",
+      type: "input",
+      label: "Input Audio",
+    },
     {
       id: "model-1",
       type: "model",
-      label: "Extractor A: BS-RoFormer v2",
-      modelType: "BS-RoFormer (Vocal Isolation)",
-      vramUsage: "4.2 GB VRAM",
-      parameters: "Overlap: 4x, Splits: 12",
+      label: "Reference Model Slot (e.g. BS-RoFormer v2)",
+      modelType: "Model not selected",
+      parameters: "Parameters not configured",
+      estimatedVramGb: 4.2,
+      registryRequired: true,
     },
     {
       id: "math-1",
@@ -67,16 +111,17 @@ export default function EnsemblePipelinePlanner() {
     {
       id: "model-2",
       type: "model",
-      label: "Extractor B: Demucs-v4 Rhythm",
-      modelType: "Demucs-v4 (Drums & Bass isolation)",
-      vramUsage: "3.1 GB VRAM",
-      parameters: "Shifts: 2, Split Size: 1024",
+      label: "Reference Model Slot (e.g. Demucs-v4 Rhythm)",
+      modelType: "Model not selected",
+      parameters: "Parameters not configured",
+      estimatedVramGb: 3.1,
+      registryRequired: true,
     },
     {
       id: "output-1",
       type: "output",
       label: "4-Stem Output Target",
-      proofStatus: "Planned / Output target: separated stem files will appear here after a successful ensemble run."
+      statusNote: "Output target planned. No files are generated from this planner view."
     },
   ]);
 
@@ -88,13 +133,13 @@ export default function EnsemblePipelinePlanner() {
     const newNode: PipelineNode = {
       id: newNodeId,
       type: "model",
-      label: "Aux Model Node: MDX-v5 De-echo",
-      modelType: "MDX Spectral (Reverb Correction)",
-      vramUsage: "1.8 GB VRAM",
-      parameters: "Hop overlap: 2x, Denoise enabled",
+      label: "New Model Slot",
+      modelType: "Model not selected",
+      parameters: "Parameters not configured",
+      estimatedVramGb: undefined, // Show VRAM estimate unavailable
+      registryRequired: true,
     };
 
-    // Insert before output node (which is the last item)
     setPipelineNodes((prev) => {
       const copy = [...prev];
       copy.splice(copy.length - 1, 0, newNode);
@@ -103,10 +148,16 @@ export default function EnsemblePipelinePlanner() {
   };
 
   const removeNode = (id: string) => {
-    // Keep at least input, math, output and 1 model
-    const modelNodes = pipelineNodes.filter(n => n.type === "model");
-    if (pipelineNodes.length <= 3 || modelNodes.length <= 1) return;
-    setPipelineNodes((prev) => prev.filter((node) => node.id !== id));
+    setPipelineNodes((prev) => {
+      const target = prev.find((n) => n.id === id);
+      if (!target || target.type !== "model") return prev;
+
+      // Always allow removing model slots, but keeps at least 1 slot for custom planning
+      const modelNodesCount = prev.filter((n) => n.type === "model").length;
+      if (modelNodesCount <= 1) return prev;
+
+      return prev.filter((node) => node.id !== id);
+    });
   };
 
   const loadPreset = (presetId: string) => {
@@ -116,29 +167,31 @@ export default function EnsemblePipelinePlanner() {
         {
           id: "input-1",
           type: "input",
-          label: "Audio Load (Stereo Wav 44kHz)",
+          label: "Input Audio",
         },
         {
           id: "model-1",
           type: "model",
-          label: "Prism-RoFormer Vocals",
-          modelType: "BS-RoFormer",
-          vramUsage: "3.8 GB VRAM",
-          parameters: "Overlap: 4x, Splits: 12",
+          label: "Reference Model Slot (e.g. Prism-RoFormer Vocals)",
+          modelType: "Model not selected",
+          parameters: "Parameters not configured",
+          estimatedVramGb: 3.8,
+          registryRequired: true,
         },
         {
           id: "model-2",
           type: "model",
-          label: "MDX-Net Instrumental Submix",
-          modelType: "MDX-v5",
-          vramUsage: "2.5 GB VRAM",
-          parameters: "Overlap: 6x, Denoise: 50%",
+          label: "Reference Model Slot (e.g. MDX-Net Instrumental Submix)",
+          modelType: "Model not selected",
+          parameters: "Parameters not configured",
+          estimatedVramGb: 2.5,
+          registryRequired: true,
         },
         {
           id: "output-1",
           type: "output",
           label: "2-Stem Submix Target",
-          proofStatus: "Planned / Output target: separated stem files will appear here after a successful ensemble run."
+          statusNote: "Output target planned. No files are generated from this planner view."
         },
       ]);
     } else if (presetId === "subtraction") {
@@ -146,15 +199,16 @@ export default function EnsemblePipelinePlanner() {
         {
           id: "input-1",
           type: "input",
-          label: "Audio Load (Stereo Wav 44kHz)",
+          label: "Input Audio",
         },
         {
           id: "model-1",
           type: "model",
-          label: "Extractor A: BS-RoFormer v2",
-          modelType: "BS-RoFormer (Vocal Isolation)",
-          vramUsage: "4.2 GB VRAM",
-          parameters: "Overlap: 4x, Splits: 12",
+          label: "Reference Model Slot (e.g. BS-RoFormer v2)",
+          modelType: "Model not selected",
+          parameters: "Parameters not configured",
+          estimatedVramGb: 4.2,
+          registryRequired: true,
         },
         {
           id: "math-1",
@@ -165,16 +219,17 @@ export default function EnsemblePipelinePlanner() {
         {
           id: "model-2",
           type: "model",
-          label: "Extractor B: Demucs-v4 Rhythm",
-          modelType: "Demucs-v4 (Drums & Bass isolation)",
-          vramUsage: "3.1 GB VRAM",
-          parameters: "Shifts: 2, Split Size: 1024",
+          label: "Reference Model Slot (e.g. Demucs-v4 Rhythm)",
+          modelType: "Model not selected",
+          parameters: "Parameters not configured",
+          estimatedVramGb: 3.1,
+          registryRequired: true,
         },
         {
           id: "output-1",
           type: "output",
           label: "4-Stem Output Target",
-          proofStatus: "Planned / Output target: separated stem files will appear here after a successful ensemble run."
+          statusNote: "Output target planned. No files are generated from this planner view."
         },
       ]);
     } else if (presetId === "ensemble_4") {
@@ -182,21 +237,25 @@ export default function EnsemblePipelinePlanner() {
         {
           id: "input-1",
           type: "input",
-          label: "Audio Load (Stereo Wav 44kHz)",
+          label: "Input Audio",
         },
         {
           id: "model-1",
           type: "model",
-          label: "Lead Vocals BS-RoFormer",
-          modelType: "BS-RoFormer",
-          vramUsage: "4.5 GB VRAM",
+          label: "Reference Model Slot (e.g. Lead Vocals BS-RoFormer)",
+          modelType: "Model not selected",
+          parameters: "Parameters not configured",
+          estimatedVramGb: 4.5,
+          registryRequired: true,
         },
         {
           id: "model-2",
           type: "model",
-          label: "Backing Vocals MDX23C",
-          modelType: "MDX23C",
-          vramUsage: "3.5 GB VRAM",
+          label: "Reference Model Slot (e.g. Backing Vocals MDX23C)",
+          modelType: "Model not selected",
+          parameters: "Parameters not configured",
+          estimatedVramGb: 3.5,
+          registryRequired: true,
         },
         {
           id: "math-1",
@@ -207,48 +266,158 @@ export default function EnsemblePipelinePlanner() {
         {
           id: "model-3",
           type: "model",
-          label: "Rhythm Demucs HQ",
-          modelType: "Demucs-v4",
-          vramUsage: "4.0 GB VRAM",
+          label: "Reference Model Slot (e.g. Rhythm Demucs HQ)",
+          modelType: "Model not selected",
+          parameters: "Parameters not configured",
+          estimatedVramGb: 4.0,
+          registryRequired: true,
         },
         { 
           id: "output-1", 
           type: "output", 
           label: "Studio Stem Output Target",
-          proofStatus: "Planned / Output target: separated stem files will appear here after a successful ensemble run."
+          statusNote: "Output target planned. No files are generated from this planner view."
         },
       ]);
     }
   };
 
-  const totalEstimatedVram = pipelineNodes
-    .reduce((acc, node) => {
-      if (!node.vramUsage) return acc;
-      const num = parseFloat(node.vramUsage);
-      return acc + num;
-    }, 0)
-    .toFixed(1);
+  const totalEstimatedVram = pipelineNodes.reduce((acc, node) => {
+    if (node.estimatedVramGb === undefined) return acc;
+    return acc + node.estimatedVramGb;
+  }, 0);
 
   // Derive model count
-  const modelNodesCount = pipelineNodes.filter(n => n.type === "model").length;
+  const modelNodesCount = pipelineNodes.filter((n) => n.type === "model").length;
   const isMinModelsMet = modelNodesCount >= 2;
 
-  // Checklist items
-  const checklist = [
-    { name: "Input file selected", met: true, required: true },
-    { name: `At least 2 models selected (Currently: ${modelNodesCount})`, met: isMinModelsMet, required: true },
-    { name: "Required model files installed", met: false, required: true, note: "Models mapped are planned reference only" },
-    { name: "Python / audio-separator environment available", met: true, required: true },
-    { name: "FFmpeg configured", met: true, required: true },
-    { name: "Output folder selected", met: true, required: true },
-    { name: "Ensemble backend implemented", met: false, required: true, note: "Backend planning only / Not active" },
-    { name: "Enough disk space estimate", met: true, required: true },
-    { name: "Device mode selected", met: true, required: true },
-    { name: "CUDA / GPU proof status", met: false, required: false, note: "CUDA Structurally supported / Not locally proven in browser" },
+  // Build the 10-Item validation checklist using strictly verified props
+  const checklist: ChecklistItem[] = [
+    {
+      id: "input_file",
+      name: "Input file selected",
+      status: readiness
+        ? (readiness.inputFileSelected ? "met" : "missing")
+        : "not_checked",
+      required: true,
+      note: readiness?.inputFileSelected ? "Active input file loaded" : "Input metadata not checked",
+      source: readiness ? "user_selection" : "not_wired",
+    },
+    {
+      id: "min_models",
+      name: `At least 2 models selected (Currently: ${modelNodesCount})`,
+      status: isMinModelsMet ? "met" : "missing",
+      required: true,
+      note: isMinModelsMet ? "Meets parallel ensemble requirement" : "Ensemble mode requires at least 2 model slots",
+      source: "static_planner",
+    },
+    {
+      id: "models_installed",
+      name: "Required model files installed",
+      status: readiness
+        ? (readiness.modelFilesInstalled ? "met" : "missing")
+        : "not_checked",
+      required: true,
+      note: readiness?.modelFilesInstalled ? "All pipeline models present" : "Library check pending registration",
+      source: readiness ? "real_diagnostic" : "not_wired",
+    },
+    {
+      id: "python_env",
+      name: "Python & audio-separator readiness",
+      status: readiness
+        ? (readiness.pythonReady && readiness.audioSeparatorReady ? "met" : "missing")
+        : "not_checked",
+      required: true,
+      note: readiness?.pythonReady ? "Environment runtime active" : "Global system interpreter unresolved",
+      source: readiness ? "real_diagnostic" : "not_wired",
+    },
+    {
+      id: "ffmpeg_env",
+      name: "FFmpeg configured",
+      status: readiness
+        ? (readiness.ffmpegReady ? "met" : "missing")
+        : "not_checked",
+      required: true,
+      note: readiness?.ffmpegReady ? "Executables detected" : "Media binary paths not verified",
+      source: readiness ? "real_diagnostic" : "not_wired",
+    },
+    {
+      id: "output_folder",
+      name: "Output folder selected",
+      status: readiness
+        ? (readiness.outputFolderSelected ? "met" : "missing")
+        : "not_checked",
+      required: true,
+      note: readiness?.outputFolderSelected ? "Destination writable" : "Not chosen / write verification pending",
+      source: readiness ? "user_selection" : "not_wired",
+    },
+    {
+      id: "ensemble_backend",
+      name: "Ensemble backend implemented",
+      status: readiness && readiness.ensembleBackendImplemented ? "met" : "blocked",
+      required: true,
+      note: "Backend planning only / Not active",
+      source: "not_wired",
+    },
+    {
+      id: "disk_space",
+      name: "Enough disk space estimate",
+      status: readiness && readiness.diskSpaceChecked
+        ? (readiness.diskSpaceOk ? "met" : "warning")
+        : "not_checked",
+      required: true,
+      note: readiness && readiness.diskSpaceChecked ? "Drive check succeeded" : "Disk space not checked",
+      source: readiness?.diskSpaceChecked ? "real_diagnostic" : "not_wired",
+    },
+    {
+      id: "device_mode",
+      name: "Device mode selected",
+      status: readiness
+        ? (readiness.deviceModeSelected ? "met" : "missing")
+        : "not_checked",
+      required: true,
+      note: deviceMode
+        ? (deviceMode === "auto" ? "Auto selected / Backend decides device" : `Forced to ${deviceMode}`)
+        : "Device mode not checked",
+      source: readiness ? "real_diagnostic" : "not_wired",
+    },
+    {
+      id: "cuda_proof",
+      name: "CUDA / GPU proof status",
+      status: readiness
+        ? (readiness.cudaProofPassed ? "met" : "warning")
+        : "not_checked",
+      required: false,
+      note: "CUDA structurally supported only if backend and hardware support it. Not locally proven until a real E2E proof passes.",
+      source: readiness ? "real_diagnostic" : "not_wired",
+    },
   ];
 
-  const missingItems = checklist.filter(item => item.required && !item.met);
-  const isEnsembleReady = missingItems.length === 0;
+  // Extract real checklist blockers (excluding optional warnings/planner types)
+  const blockers: string[] = [];
+  if (!readiness) {
+    blockers.push("Parent diagnostics readiness props not checked.");
+  } else {
+    if (!readiness.inputFileSelected) blockers.push("Input file not verified");
+    if (!readiness.modelFilesInstalled) blockers.push("Required model files not installed / verified");
+    if (!readiness.pythonReady || !readiness.audioSeparatorReady) {
+      blockers.push("Python/audio-separator environment not checked or missing");
+    }
+    if (!readiness.ffmpegReady) blockers.push("FFmpeg environment not checked or missing");
+    if (!readiness.outputFolderSelected) blockers.push("Output folder not verified / selected");
+  }
+
+  // Handle planner layout enforcement count
+  if (modelNodesCount < 2) {
+    blockers.push("At least 2 installed models not selected");
+  }
+
+  // The backend is not implemented in current release, representing a structural blocker
+  if (!readiness?.ensembleBackendImplemented) {
+    if (!blockers.includes("Ensemble backend not implemented")) {
+      blockers.push("Ensemble backend not implemented");
+    }
+  }
 
   return (
     <div className="p-6 rounded-2xl bg-[#0a0c14]/40 border border-[#00ff00]/10 shadow-xl backdrop-blur-xl space-y-6">
@@ -261,14 +430,14 @@ export default function EnsemblePipelinePlanner() {
               Pipeline Planner
             </span>
             <span className="text-[10px] font-mono font-semibold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
-              Ensemble Mode: Planning View — Planned / Not active
+              Ensemble Mode: Planning View / Not active
             </span>
           </div>
           <h2 className="text-lg font-bold text-white font-display flex items-center gap-2">
             <Layers className="w-5 h-5 text-indigo-400" />
             Ensemble Manager
           </h2>
-          <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+          <p className="text-xs text-slate-400 mt-1 leading-relaxed font-sans">
             Build or preview multi-model separation workflows. Ensemble processing can compare or combine outputs from multiple models, but results vary by song, model quality, and backend support.
           </p>
         </div>
@@ -290,7 +459,9 @@ export default function EnsemblePipelinePlanner() {
             <button
               key={p.id}
               onClick={() => loadPreset(p.id)}
-              className={`p-4 text-left rounded-xl border transition-all duration-200 cursor-pointer ${
+              aria-pressed={selectedPreset === p.id}
+              aria-label={`Select ensemble preset ${p.name}`}
+              className={`p-4 text-left rounded-xl border transition-all duration-200 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black ${
                 selectedPreset === p.id
                   ? "bg-gradient-to-br from-indigo-500/10 to-blue-500/10 border-indigo-500/40 shadow-inner"
                   : "bg-black/30 border-white/5 hover:bg-black/20 hover:border-white/10"
@@ -311,24 +482,24 @@ export default function EnsemblePipelinePlanner() {
 
         {/* Blueprint guidelines / notes */}
         <div className="p-3 bg-slate-900/30 rounded-xl border border-slate-800 text-[11px] text-slate-400 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
-          <div className="flex items-start gap-1.5">
-            <span className="text-indigo-400 font-mono">•</span>
+          <div className="flex items-start gap-1.5 font-mono">
+            <span className="text-indigo-400">•</span>
             <span>Requires installed model files.</span>
           </div>
-          <div className="flex items-start gap-1.5">
-            <span className="text-indigo-400 font-mono">•</span>
+          <div className="flex items-start gap-1.5 font-mono">
+            <span className="text-indigo-400">•</span>
             <span>Requires local AI backend readiness.</span>
           </div>
-          <div className="flex items-start gap-1.5">
-            <span className="text-indigo-400 font-mono">•</span>
+          <div className="flex items-start gap-1.5 font-mono">
+            <span className="text-indigo-400">•</span>
             <span>Requires at least 2 model outputs or compatible models.</span>
           </div>
-          <div className="flex items-start gap-1.5">
-            <span className="text-indigo-400 font-mono">•</span>
+          <div className="flex items-start gap-1.5 font-mono">
+            <span className="text-indigo-400">•</span>
             <span>May increase processing time and memory usage.</span>
           </div>
-          <div className="flex items-start gap-1.5">
-            <span className="text-indigo-400 font-mono">•</span>
+          <div className="flex items-start gap-1.5 font-mono">
+            <span className="text-indigo-400">•</span>
             <span>Results vary by source material.</span>
           </div>
         </div>
@@ -371,8 +542,9 @@ export default function EnsemblePipelinePlanner() {
                         {isModel && (
                           <button
                             onClick={() => removeNode(node.id)}
-                            className="text-slate-500 hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100 p-0.5 cursor-pointer"
-                            title="Remove Model Node"
+                            aria-label={`Remove model stage ${node.label}`}
+                            className="text-slate-500 hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100 p-0.5 cursor-pointer outline-none focus-visible:opacity-100"
+                            title="Remove model stage node"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -388,20 +560,42 @@ export default function EnsemblePipelinePlanner() {
                       {isModel && (
                         <div className="space-y-1 text-[10px] font-mono text-slate-400">
                           <div className="flex justify-between border-b border-white/5 pb-1">
-                            <span>Base Engine:</span>
-                            <span className="text-blue-300 font-bold">
+                            <span>Base Engine Slot:</span>
+                            <span className="text-slate-505 font-medium">
                               {node.modelType}
                             </span>
                           </div>
-                          <div className="flex justify-between">
+                          <div className="flex justify-between pb-1 border-b border-white/5">
                             <span>VRAM Estimate:</span>
-                            <span className="text-slate-300">{node.vramUsage || "1.5 GB VRAM"}</span>
+                            <span className="text-slate-300">
+                              {node.estimatedVramGb !== undefined 
+                                ? `${node.estimatedVramGb.toFixed(1)} GB estimate` 
+                                : "VRAM estimate unavailable"}
+                            </span>
                           </div>
-                          {node.parameters && (
-                            <div className="text-[9px] text-slate-500 leading-tight pt-1 border-t border-white/5 text-purple-300">
-                              {node.parameters}
+                          
+                          <div className="pt-1.5 space-y-0.5 text-[9px] text-slate-500 leading-tight">
+                            <div className="flex justify-between">
+                              <span>Model Registry ID:</span>
+                              <span className="text-slate-500">None linked</span>
                             </div>
-                          )}
+                            <div className="flex justify-between text-yellow-500/80 font-bold">
+                              <span>Model Registry Link:</span>
+                              <span>Planned / Not active</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Installed Status:</span>
+                              <span className="text-slate-500">not checked</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Hash Status:</span>
+                              <span className="text-slate-500 font-bold">not checked</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Local File Status:</span>
+                              <span className="text-slate-500">not checked</span>
+                            </div>
+                          </div>
                         </div>
                       )}
 
@@ -414,25 +608,55 @@ export default function EnsemblePipelinePlanner() {
                             </span>
                           </div>
                           <p className="text-[9px] text-slate-500 leading-normal pt-1">
-                            Voxel / Average processing. May reduce vocal bleed, but results vary.
+                            Reference math stage only. Actual ensemble math is not implemented in this planner.
+                          </p>
+                          <p className="text-[9px] text-purple-400/80 leading-normal">
+                            Bleed reduction / phase processing reference. Results vary if implemented.
                           </p>
                         </div>
                       )}
 
                       {isInput && (
-                        <p className="text-[10px] text-slate-500 font-mono">
-                          Decoupled raw master stereo source input config
-                        </p>
+                        <div className="space-y-1 text-[10px] font-mono text-slate-400">
+                          {inputMetadata ? (
+                            <div className="pt-1.5 space-y-0.5 border-t border-white/5 text-[9px]">
+                              <div className="flex justify-between">
+                                <span>Filename:</span>
+                                <span className="text-slate-300 truncate max-w-[120px]" title={inputMetadata.filename}>{inputMetadata.filename}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Sample Rate:</span>
+                                <span className="text-slate-400">{inputMetadata.sampleRate ? `${inputMetadata.sampleRate} Hz` : "n/a"}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Channels:</span>
+                                <span className="text-slate-400">{inputMetadata.channels ? (inputMetadata.channels === 2 ? "Stereo" : "Mono") : "n/a"}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Duration:</span>
+                                <span className="text-slate-400">{inputMetadata.duration ? `${inputMetadata.duration}s` : "n/a"}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>File Exists:</span>
+                                <span className={`${inputMetadata.exists ? "text-emerald-400" : "text-rose-400"} font-bold`}>{inputMetadata.exists ? "Yes" : "No"}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-slate-500 font-mono italic mt-1 leading-normal">
+                              Input metadata not checked.
+                            </p>
+                          )}
+                        </div>
                       )}
 
                       {isOutput && (
                         <div className="text-[10px] text-emerald-400 font-mono space-y-1">
                           <div className="flex items-center gap-1.5 font-bold">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <span>Output planned — not yet generated</span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            <span>Output planned — offline reference</span>
                           </div>
-                          <span className="text-[8px] text-slate-500 block leading-tight">
-                            {node.proofStatus}
+                          <span className="text-[8.5px] text-slate-500 block leading-normal pt-1 border-t border-white/5">
+                            {node.statusNote}
                           </span>
                         </div>
                       )}
@@ -451,13 +675,13 @@ export default function EnsemblePipelinePlanner() {
           </div>
 
           {/* Append button */}
-          <div className="mt-5 flex justify-center border-t border-white/5 pt-3">
+          <div className="mt-5 flex justify-center border-t border-white/5 pt-3 animate-fade-in">
             <button
               onClick={addCustomModelNode}
-              className="px-4 py-2 bg-gradient-to-r from-blue-600/20 to-indigo-600/20 text-blue-300 border border-blue-500/20 rounded-xl text-xs hover:from-blue-600/30 hover:to-indigo-600/30 hover:border-blue-500/40 transition-all cursor-pointer font-bold flex items-center gap-1.5"
+              className="px-4 py-2 bg-gradient-to-r from-blue-600/20 to-indigo-600/20 text-blue-300 border border-blue-500/20 rounded-xl text-xs hover:from-blue-600/30 hover:to-indigo-600/30 hover:border-blue-500/40 transition-all cursor-pointer font-bold flex items-center gap-1.5 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
             >
               <Plus className="w-4 h-4" />
-              ADD SEPARATION STAGE MODEL NODE
+              ADD SEPARATION STAGE MODEL SLOT
             </button>
           </div>
         </div>
@@ -470,46 +694,57 @@ export default function EnsemblePipelinePlanner() {
         </span>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
-          <div className="p-3 bg-black/40 rounded border border-slate-900 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-purple-400 font-bold block text-[10px] uppercase font-mono tracking-wider">
-                Phase Inversion / Cleanup Process
-              </label>
-              <span className="text-[8px] text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded uppercase font-bold border border-slate-800">
-                Planner Param
-              </span>
+          <div className="p-3 bg-black/40 rounded border border-slate-900 space-y-2 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between gap-1.5">
+                <label className="text-purple-400 font-bold block text-[10px] uppercase font-mono tracking-wider">
+                  Phase Inversion / Cleanup Process
+                </label>
+                <span className="text-[8px] text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded uppercase font-bold border border-slate-800 shrink-0">
+                  Planner Param
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-normal mt-1.5">
+                Reference toggle only. If implemented, subtraction or phase-based processing may attempt to reduce bleed between model outputs, but it can introduce artifacts and must be validated per track.
+              </p>
             </div>
-            <p className="text-[11px] text-slate-500 leading-normal">
-              Injects subtraction-based cleanup, if implemented. Subtracts opposing segment patterns to filter high-frequency resonance.
-            </p>
-            <div className="flex items-center justify-between pt-1 border-t border-white/5">
-              <span className="text-[9px] text-slate-400 uppercase font-semibold">Enabled</span>
-              <button
-                onClick={() => setSubtractPhase(!subtractPhase)}
-                className="text-slate-300 hover:text-white cursor-pointer focus:outline-none"
-              >
-                {subtractPhase ? (
-                  <ToggleRight className="w-7 h-7 text-indigo-400" />
-                ) : (
-                  <ToggleLeft className="w-7 h-7 text-slate-600" />
-                )}
-              </button>
+            <div>
+              <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                <span className="text-[9px] text-slate-400 uppercase font-semibold">Planner parameter / Not active</span>
+                <button
+                  onClick={() => setSubtractPhase(!subtractPhase)}
+                  aria-pressed={subtractPhase}
+                  aria-label="Toggle subtraction-based phase processing note (planner parameter only)"
+                  className="text-indigo-400 hover:text-indigo-3 w-7 h-7 flex items-center justify-center rounded focus-visible:ring-2 focus-visible:ring-indigo-500 outline-none"
+                >
+                  {subtractPhase ? (
+                    <ToggleRight className="w-7 h-7 text-indigo-400" />
+                  ) : (
+                    <ToggleLeft className="w-7 h-7 text-slate-600" />
+                  )}
+                </button>
+              </div>
+              <span className="block text-[8px] text-slate-600 text-right mt-1">
+                Stored planner note only / not executed
+              </span>
             </div>
           </div>
 
-          <div className="p-3 bg-black/40 rounded border border-slate-900 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-blue-400 font-bold block text-[10px] uppercase font-mono tracking-wider">
-                Min Spec Weighted Filter
-              </label>
-              <span className="text-[8px] text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded uppercase font-bold border border-slate-800">
-                Legacy / Not wired
-              </span>
+          <div className="p-3 bg-black/40 rounded border border-slate-900 space-y-2 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between gap-1.5">
+                <label className="text-blue-400 font-bold block text-[10px] uppercase font-mono tracking-wider">
+                  Min Spec Weighted Filter
+                </label>
+                <span className="text-[8px] text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded uppercase font-bold border border-slate-800 shrink-0">
+                  Legacy / Not wired
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-normal mt-1.5">
+                Narrow limits for transient extraction. Employs median/average blending, if implemented.
+              </p>
             </div>
-            <p className="text-[11px] text-slate-500 leading-normal">
-              Narrow limits for transient extraction. Employs median/average blending, if implemented.
-            </p>
-            <div className="pt-2">
+            <div className="pt-2 border-t border-white/5">
               <input
                 type="range"
                 disabled
@@ -525,19 +760,21 @@ export default function EnsemblePipelinePlanner() {
             </div>
           </div>
 
-          <div className="p-3 bg-black/40 rounded border border-slate-900 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-amber-400 font-bold block text-[10px] uppercase font-mono tracking-wider">
-                Max Spec Weighted Filter
-              </label>
-              <span className="text-[8px] text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded uppercase font-bold border border-slate-800">
-                Legacy / Not wired
-              </span>
+          <div className="p-3 bg-black/40 rounded border border-slate-900 space-y-2 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between gap-1.5">
+                <label className="text-amber-400 font-bold block text-[10px] uppercase font-mono tracking-wider">
+                  Max Spec Weighted Filter
+                </label>
+                <span className="text-[8px] text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded uppercase font-bold border border-slate-800 shrink-0">
+                  Legacy / Not wired
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-normal mt-1.5">
+                Determines peak frequency capping for sequential model aggregation.
+              </p>
             </div>
-            <p className="text-[11px] text-slate-500 leading-normal">
-              Determines peak frequency capping for sequential model aggregation.
-            </p>
-            <div className="pt-2">
+            <div className="pt-2 border-t border-white/5">
               <input
                 type="range"
                 disabled
@@ -562,7 +799,7 @@ export default function EnsemblePipelinePlanner() {
             <Info className="w-4 h-4 text-blue-400" />
             Ensemble Workflow Considerations
           </h4>
-          <p className="text-slate-400 leading-relaxed max-w-xl">
+          <p className="text-slate-400 leading-relaxed max-w-xl font-sans">
             Subtracting Model A's output from the original audio source creates an isolated instrumental submix. Subsequent model stages must be sequentially processed on your system, multiplying execution timeline lengths.
           </p>
         </div>
@@ -573,11 +810,11 @@ export default function EnsemblePipelinePlanner() {
               Estimated Peak VRAM
             </span>
             <span className="font-bold text-white text-base">
-              {totalEstimatedVram} GB estimate
+              {totalEstimatedVram > 0 ? `${totalEstimatedVram.toFixed(1)} GB estimate` : "VRAM estimate unavailable"}
             </span>
-            <span className="text-[9px] text-slate-400 block max-w-[210px] leading-normal mt-0.5">
+            <span className="text-[9px] text-slate-400 block max-w-[210px] leading-normal mt-0.5 font-sans">
               Memory Safety: May exceed available VRAM depending on model, segment size, input length, and backend. 
-              <span className="text-yellow-500 block font-semibold">(Estimated only / Not live hardware check)</span>
+              <span className="text-yellow-500 block font-semibold font-mono">(Static planning estimate / Not live VRAM check)</span>
             </span>
           </div>
         </div>
@@ -585,6 +822,8 @@ export default function EnsemblePipelinePlanner() {
 
       {/* SECTION 6: COMPREHENSIVE PREFLIGHT CHECKLIST & REQ BANNER */}
       <div className="p-5 rounded-2xl bg-[#090b14]/90 border border-slate-800 shadow-lg space-y-4 font-mono">
+        
+        {/* HEADER */}
         <div>
           <span className="text-[10px] uppercase font-mono font-bold text-slate-400 tracking-wider block mb-1">
             Preflight Stage Validation
@@ -594,67 +833,130 @@ export default function EnsemblePipelinePlanner() {
           </h3>
         </div>
 
-        {/* Requirements missing banner */}
-        {!isEnsembleReady && (
-          <div className="p-3 rounded-lg border bg-rose-500/10 border-rose-500/30 text-rose-400 flex items-start gap-2.5 text-xs">
-            <XCircle className="w-4 h-4 shrink-0 mt-0.5" />
+        {/* PLANNER SOURCE SESSION METADATA PANEL */}
+        <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-900 space-y-3">
+          <span className="text-[10px] font-mono font-bold text-indigo-400 uppercase tracking-wider block">
+            Planner Source Session Metadata
+          </span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 text-[11px] text-slate-400">
             <div>
-              <span className="font-bold block">
-                Blocked: Ensemble requirements missing
+              <span className="text-slate-600 font-bold block text-[9px] uppercase tracking-wider">Preset Selected:</span>
+              <span className="text-slate-300 font-mono font-semibold">
+                {PRESETS.find((p) => p.id === selectedPreset)?.name || "Custom Layout"}
               </span>
-              <p className="text-[11px] text-rose-400/80 mt-0.5 leading-relaxed">
-                The pipeline is not ready for execution because multiple validation markers are unmet or represent planned implementation features. 
-                Missing items: {missingItems.map(m => m.name).join(", ")}.
-              </p>
             </div>
+            <div>
+              <span className="text-slate-600 font-bold block text-[9px] uppercase tracking-wider">Model Slots:</span>
+              <span className="text-indigo-400 font-mono font-bold">{modelNodesCount}</span>
+            </div>
+            <div>
+              <span className="text-slate-600 font-bold block text-[9px] uppercase tracking-wider">Installed Models:</span>
+              <span className="text-slate-500 font-mono">not checked</span>
+            </div>
+            <div>
+              <span className="text-slate-600 font-bold block text-[9px] uppercase tracking-wider">Required Outputs:</span>
+              <span className="text-emerald-400 font-mono">
+                {pipelineNodes.find((n) => n.type === "output")?.label || "None"}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-600 font-bold block text-[9px] uppercase tracking-wider">Backend Status:</span>
+              <span className="text-rose-400 font-mono font-bold">Planned / Offline</span>
+            </div>
+            <div>
+              <span className="text-slate-600 font-bold block text-[9px] uppercase tracking-wider">Proof Status:</span>
+              <span className="text-slate-500 font-mono font-medium">No active E2E proof</span>
+            </div>
+            <div>
+              <span className="text-slate-600 font-bold block text-[9px] uppercase tracking-wider">Export Status:</span>
+              <span className="text-slate-500 font-mono">Disabled</span>
+            </div>
+          </div>
+          <div className="text-[9.5px] text-yellow-500/80 font-semibold border-t border-white/5 pt-1.5">
+            Model Registry Integration: Planned / Not active
+          </div>
+        </div>
+
+        {/* Execution Scope Notice */}
+        <div className="p-3.5 bg-yellow-500/5 border border-yellow-500/20 rounded-xl flex items-start gap-2.5 text-[11px] text-yellow-300/80">
+          <Info className="w-4 h-4 shrink-0 text-yellow-400 mt-0.5" />
+          <p className="leading-relaxed font-sans">
+            <strong>Execution Scope Notice:</strong> This panel is a planning/reference tool. It does not run ensemble separation unless a backend ensemble runner is implemented and all preflight requirements pass. Planning a pipeline does not count as UVR AI E2E proof.
+          </p>
+        </div>
+
+        {/* Requirements Blocked Banner Summary */}
+        {blockers.length > 0 && (
+          <div className="p-4 bg-rose-500/5 border border-rose-500/20 rounded-xl space-y-2">
+            <span className="text-[10px] uppercase font-bold text-rose-400 font-mono flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4" />
+              Blocked: {blockers.length} requirements missing
+            </span>
+            <ul className="list-decimal list-inside font-mono text-[11px] text-rose-300/80 space-y-1 pl-1">
+              {blockers.map((blocker, idx) => (
+                <li key={idx} className="leading-snug">{blocker}</li>
+              ))}
+            </ul>
           </div>
         )}
 
-        {isEnsembleReady && (
-          <div className="p-3 rounded-lg border bg-emerald-500/10 border-emerald-500/30 text-emerald-400 flex items-center gap-2.5 text-xs">
-            <CheckCircle className="w-4 h-4 shrink-0" />
+        {blockers.length === 0 && (
+          <div className="p-3.5 rounded-lg border bg-emerald-500/10 border-[#00ff00]/30 text-emerald-450 flex items-center gap-2.5 text-xs">
+            <CheckCircle className="w-4 h-4 shrink-0 text-emerald-500" />
             <div>
-              <span className="font-bold">All Checklist Metrics Met (Local Dry-run Only)</span>
+              <span className="font-bold">Planning checklist complete / execution backend still not active</span>
             </div>
           </div>
         )}
 
         {/* 10-Item validation checklist grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 pt-1 text-xs">
-          {checklist.map((item, index) => (
+          {checklist.map((item) => (
             <div
-              key={index}
-              className={`p-2.5 rounded-lg border flex flex-col justify-between h-[85px] transition-all bg-black/45 ${
-                item.met
+              key={item.id}
+              className={`p-2.5 rounded-lg border flex flex-col justify-between h-[95px] transition-all bg-black/45 ${
+                item.status === "met"
                   ? "border-[#00ff00]/10 hover:border-[#00ff00]/25"
-                  : item.required
+                  : item.status === "missing" || item.status === "blocked"
                     ? "border-rose-950/40 hover:border-rose-950/70"
-                    : "border-slate-800"
+                    : item.status === "not_checked"
+                      ? "border-slate-800 hover:border-slate-700"
+                      : "border-amber-950/40 hover:border-amber-950/70"
               }`}
             >
               <div className="flex items-start gap-1.5 justify-between">
                 <span className="font-semibold text-slate-300 text-[10px] leading-tight">
                   {item.name}
                 </span>
-                {item.met ? (
+                {item.status === "met" ? (
                   <Check className="w-3.5 h-3.5 text-green-400 shrink-0 mt-0.5" />
-                ) : item.required ? (
+                ) : item.status === "missing" ? (
                   <XCircle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
-                ) : (
+                ) : item.status === "blocked" ? (
+                  <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
+                ) : item.status === "warning" ? (
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                ) : (
+                  <span className="text-[10px] text-slate-500 font-bold">?</span>
                 )}
               </div>
 
               <div className="text-[9px] text-slate-500 leading-tight">
-                {item.met ? (
+                {item.source === "static_planner" ? (
+                  <span className="text-indigo-400 font-semibold uppercase">Planner only</span>
+                ) : item.status === "met" ? (
                   <span className="text-emerald-500 font-semibold uppercase">Verified</span>
-                ) : item.required ? (
-                  <span className="text-rose-500 font-bold uppercase">Missing / Planned</span>
+                ) : item.status === "missing" ? (
+                  <span className="text-rose-400 font-bold uppercase">Missing</span>
+                ) : item.status === "not_checked" ? (
+                  <span className="text-slate-400 font-semibold uppercase">Not checked</span>
+                ) : item.status === "blocked" ? (
+                  <span className="text-red-500 font-semibold uppercase">Blocked</span>
                 ) : (
-                  <span className="text-amber-500 uppercase">Warning</span>
+                  <span className="text-amber-505 font-semibold uppercase">Warning</span>
                 )}
                 {item.note && (
-                  <span className="block text-[8px] text-slate-600 truncate" title={item.note}>
+                  <span className="block text-[8px] text-slate-600 truncate mt-1" title={item.note}>
                     {item.note}
                   </span>
                 )}
@@ -664,17 +966,19 @@ export default function EnsemblePipelinePlanner() {
         </div>
 
         {/* RUN PIPELINE PROCESS BUTTON */}
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 pt-3 border-t border-white/5">
-          <p className="text-[10px] text-slate-500 max-w-md leading-normal">
-            Ensemble model aggregation cannot occur inside web client frames. Always ensure required model binaries are downloaded into your local environment directory first.
+        <div className="flex flex-col lg:grid lg:grid-cols-3 items-center gap-4 pt-3 border-t border-white/5">
+          <p className="text-[10px] text-slate-500 max-w-md leading-normal col-span-2">
+            Ensemble execution requires the native backend. This planner view does not run model aggregation in the browser. Required model files must be installed or imported into the configured model library and verified as available before execution.
           </p>
-          <button
-            disabled
-            className="w-full sm:w-auto px-5 py-2.5 bg-slate-800 border border-slate-700 text-slate-500 rounded-xl text-xs font-bold font-mono cursor-not-allowed flex items-center justify-center gap-1.5"
-          >
-            <Play className="w-3.5 h-3.5 fill-current" />
-            Run Ensemble Pipeline — Blocked / Planned/Not active
-          </button>
+          <div className="flex justify-end w-full col-span-1">
+            <button
+              disabled
+              className="w-full lg:w-auto px-5 py-2.5 bg-slate-900 border border-slate-800 text-slate-600 rounded-xl text-xs font-bold font-mono cursor-not-allowed flex items-center justify-center gap-1.5"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              Run Ensemble Pipeline — Backend not implemented
+            </button>
+          </div>
         </div>
       </div>
     </div>

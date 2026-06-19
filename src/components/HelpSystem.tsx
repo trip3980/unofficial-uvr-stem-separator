@@ -173,21 +173,22 @@ export function AccessibleTooltipWrapper({
   };
 
   // Clone child to apply keyboard event handlers and styling classes
-  const interactiveChild = React.cloneElement(children, {
+  const childElement = children as React.ReactElement<any>;
+  const interactiveChild = React.cloneElement(childElement, {
     onFocus: (e: React.FocusEvent) => {
       handleFocus();
-      if (children.props.onFocus) children.props.onFocus(e);
+      if (childElement.props.onFocus) childElement.props.onFocus(e);
     },
     onBlur: (e: React.FocusEvent) => {
       handleBlur();
-      if (children.props.onBlur) children.props.onBlur(e);
+      if (childElement.props.onBlur) childElement.props.onBlur(e);
     },
     onKeyDown: (e: React.KeyboardEvent) => {
       handleKeyDown(e);
-      if (children.props.onKeyDown) children.props.onKeyDown(e);
+      if (childElement.props.onKeyDown) childElement.props.onKeyDown(e);
     },
-    className: `${children.props.className || ""} focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-green-400`,
-    tabIndex: children.props.tabIndex ?? 0,
+    className: `${childElement.props.className || ""} focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-green-400`,
+    tabIndex: childElement.props.tabIndex ?? 0,
     "aria-describedby": "uvr-context-help-tooltip",
   });
 

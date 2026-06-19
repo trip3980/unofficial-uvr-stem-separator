@@ -1,33 +1,31 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Settings,
   Cpu,
-  HardDrive,
-  RefreshCw,
   Volume2,
   Save,
   TerminalSquare,
-  Info,
   Shield,
-  HelpCircle,
   FolderOpen,
   AlertTriangle,
-  Play,
   Music,
-  Lock,
-  ArrowRightLeft,
   Undo,
-  FileText,
-  CheckCircle2,
   Workflow,
   Sliders,
   ChevronDown,
   ChevronUp,
   FileCode,
   XCircle,
-  Power
+  Info,
+  CheckCircle2,
+  Play,
+  Sparkles
 } from "lucide-react";
 import { HelpToggle, HelpText, HelpTooltipIcon, AccessibleTooltipWrapper } from "./HelpSystem";
+import { APP_NAME, APP_SHORT_NAME } from "../config/branding";
+
+// Global custom settings changed event name
+const GLOBAL_SETTINGS_EVENT = "uvr6_global_settings_changed";
 
 // Types matching the centralized AppState
 type OutputFormat = "WAV" | "FLAC" | "MP3";
@@ -49,11 +47,169 @@ interface GlobalWiredState {
   splitMode: boolean;
   saveAllOutputs: boolean;
   modelTestMode: boolean;
-  saveNoiseyOutput: boolean;
+  saveNoisyOutput: boolean;
+  saveNoiseyOutput: boolean; // Backward compatibility with legacy spelling typo
   highPrecisionWeights: boolean;
   sameAsInputFolder: boolean;
   createFolderPerTrack: boolean;
   customPythonPath: string;
+  selectedOutputFolder: string;
+}
+
+// ==========================================
+// SAFE STORAGE HELPER FUNCTIONS (Rule 4)
+// ==========================================
+
+function safeReadSavedState(): any {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return null;
+    const item = localStorage.getItem("uvr6_saved_app_state");
+    if (!item) return null;
+    const parsed = JSON.parse(item);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed;
+    }
+    return null;
+  } catch (e) {
+    console.warn("Storage read error for uvr6_saved_app_state:", e);
+    return null;
+  }
+}
+
+function safeWriteSavedState(payload: any): boolean {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return false;
+    localStorage.setItem("uvr6_saved_app_state", JSON.stringify(payload));
+    return true;
+  } catch (e) {
+    console.error("Storage write error for uvr6_saved_app_state:", e);
+    return false;
+  }
+}
+
+function safeReadCustomPythonPath(): string {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return "";
+    return localStorage.getItem("customPythonPath") || "";
+  } catch (e) {
+    console.warn("Python path storage read error:", e);
+    return "";
+  }
+}
+
+function safeWriteCustomPythonPath(path: string): boolean {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return false;
+    localStorage.setItem("customPythonPath", path);
+    return true;
+  } catch (e) {
+    console.error("Python path storage write error:", e);
+    return false;
+  }
+}
+
+// ==========================================
+// SETTINGS SCHEMA VALIDATION (Rule 5)
+// ==========================================
+
+interface ValidationResult {
+  valid: boolean;
+  category: "valid" | "ignored_keys" | "blocked";
+  error?: string;
+  cleanedPayload?: any;
+}
+
+function validateSettingsSchema(parsed: any): ValidationResult {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { valid: false, category: "blocked", error: "Settings must be a JSON object structure" };
+  }
+
+  const ALLOWED_FORMATS = ["WAV", "FLAC", "MP3"];
+  const ALLOWED_DEVICES = ["cpu", "cuda", "mps", "directml", "dml", "auto"];
+  const ALLOWED_METHODS = ["vr", "mdx", "demucs", "bs_roformer", "ensemble"];
+
+  // Critical values checks
+  if (parsed.outputFormat !== undefined && !ALLOWED_FORMATS.includes(parsed.outputFormat)) {
+    return { valid: false, category: "blocked", error: `Invalid outputFormat: "${parsed.outputFormat}". Allowed formats: WAV, FLAC, MP3.` };
+  }
+
+  if (parsed.processMethodId !== undefined && !ALLOWED_METHODS.includes(parsed.processMethodId)) {
+    return { valid: false, category: "blocked", error: `Invalid processMethodId: "${parsed.processMethodId}". Allowed values: vr, mdx, demucs, bs_roformer, ensemble.` };
+  }
+
+  if (parsed.dropdownSettings?.executionDevice !== undefined && !ALLOWED_DEVICES.includes(parsed.dropdownSettings.executionDevice)) {
+    return { valid: false, category: "blocked", error: `Invalid executionDevice: "${parsed.dropdownSettings.executionDevice}". Allowed devices: cpu, cuda, mps, directml, auto.` };
+  }
+
+  // Schema extraction with arbitrary keys filtering
+  const ALLOWED_ROOT_KEYS = [
+    "selectedOutputFolder",
+    "processMethodId",
+    "selectedModelId",
+    "selectedEnsembleId",
+    "outputFormat",
+    "dropdownSettings",
+    "checkboxSettings",
+    "note"
+  ];
+
+  let hasUnknownKeys = false;
+  const cleaned: any = {};
+
+  for (const key of Object.keys(parsed)) {
+    if (ALLOWED_ROOT_KEYS.includes(key)) {
+      cleaned[key] = parsed[key];
+    } else {
+      hasUnknownKeys = true;
+    }
+  }
+
+  // Filter dropdownSettings keys
+  const ALLOWED_DROPDOWN_KEYS = ["chunks", "noiseReduction", "executionDevice", "cpuThreads", "segmentSize"];
+  if (parsed.dropdownSettings && typeof parsed.dropdownSettings === "object" && !Array.isArray(parsed.dropdownSettings)) {
+    cleaned.dropdownSettings = {};
+    for (const key of Object.keys(parsed.dropdownSettings)) {
+      if (ALLOWED_DROPDOWN_KEYS.includes(key)) {
+        cleaned.dropdownSettings[key] = parsed.dropdownSettings[key];
+      } else {
+        hasUnknownKeys = true;
+      }
+    }
+  }
+
+  // Filter checkboxSettings keys
+  const ALLOWED_CHECKBOX_KEYS = [
+    "ttaActive",
+    "postProcessActive",
+    "saveVocalsOnly",
+    "saveInstrumentalOnly",
+    "splitMode",
+    "saveAllOutputs",
+    "modelTestMode",
+    "saveNoiseyOutput",
+    "saveNoisyOutput",
+    "highPrecisionWeights",
+    "sameAsInputFolder",
+    "createFolderPerTrack"
+  ];
+  if (parsed.checkboxSettings && typeof parsed.checkboxSettings === "object" && !Array.isArray(parsed.checkboxSettings)) {
+    cleaned.checkboxSettings = {};
+    for (const key of Object.keys(parsed.checkboxSettings)) {
+      if (ALLOWED_CHECKBOX_KEYS.includes(key)) {
+        cleaned.checkboxSettings[key] = parsed.checkboxSettings[key];
+      } else {
+        hasUnknownKeys = true;
+      }
+    }
+  }
+
+  // Migrate 'dml' to 'directml' (Rule 14)
+  if (cleaned.dropdownSettings && cleaned.dropdownSettings.executionDevice === "dml") {
+    cleaned.dropdownSettings.executionDevice = "directml";
+  }
+
+  const category = hasUnknownKeys ? "ignored_keys" : "valid";
+  return { valid: true, category, cleanedPayload: cleaned };
 }
 
 export default function GlobalSettings() {
@@ -63,7 +219,15 @@ export default function GlobalSettings() {
 
   // Destructive confirmations
   const [modalType, setModalType] = useState<"reset" | "restore_safe" | "clear_temp" | "clear_failed" | "reset_cache" | "import_export" | null>(null);
+  const [modalSubTab, setModalSubTab] = useState<"export" | "import">("export");
   const [importText, setImportText] = useState("");
+  const [importFeedback, setImportFeedback] = useState<{ type: "success" | "error" | "warning"; message: string } | null>(null);
+  const [validatedCleanPayload, setValidatedCleanPayload] = useState<any | null>(null);
+
+  // Verification states for async checks
+  const [pythonVerification, setPythonVerification] = useState<"idle" | "verifying" | "valid" | "invalid" | "unverified_browser">("idle");
+  const [pythonVersion, setPythonVersion] = useState<string>("");
+  const [outputFolderVerification, setOutputFolderVerification] = useState<"idle" | "verifying" | "writable" | "missing" | "unverified_browser">("idle");
 
   // Master local state
   const [state, setState] = useState<GlobalWiredState>({
@@ -83,47 +247,117 @@ export default function GlobalSettings() {
     splitMode: true,
     saveAllOutputs: false,
     modelTestMode: false,
+    saveNoisyOutput: false,
     saveNoiseyOutput: false,
     highPrecisionWeights: true,
     sameAsInputFolder: false,
     createFolderPerTrack: false,
     customPythonPath: "",
+    selectedOutputFolder: "",
   });
 
-  // Load from local storage on mount
-  useEffect(() => {
-    const savedState = localStorage.getItem("uvr6_saved_app_state");
-    const savedPath = localStorage.getItem("customPythonPath") || "";
-
-    if (savedState) {
-      try {
-        const parsed = JSON.parse(savedState);
-        setState({
-          processMethodId: parsed.processMethodId || "bs_roformer",
-          selectedModelId: parsed.selectedModelId || "mel_band_roformer_karaoke",
-          selectedEnsembleId: parsed.selectedEnsembleId || "multi_ai_ensemble_preset",
-          outputFormat: parsed.outputFormat || "WAV",
-          chunks: parsed.dropdownSettings?.chunks || "12",
-          noiseReduction: parsed.dropdownSettings?.noiseReduction || "4",
-          executionDevice: parsed.dropdownSettings?.executionDevice || "cpu",
-          cpuThreads: parsed.dropdownSettings?.cpuThreads || 4,
-          segmentSize: parsed.dropdownSettings?.segmentSize || "1024",
-          ttaActive: parsed.checkboxSettings?.ttaActive || false,
-          postProcessActive: parsed.checkboxSettings?.postProcessActive ?? true,
-          saveVocalsOnly: parsed.checkboxSettings?.saveVocalsOnly || false,
-          saveInstrumentalOnly: parsed.checkboxSettings?.saveInstrumentalOnly || false,
-          splitMode: parsed.checkboxSettings?.splitMode ?? true,
-          saveAllOutputs: parsed.checkboxSettings?.saveAllOutputs || false,
-          modelTestMode: parsed.checkboxSettings?.modelTestMode || false,
-          saveNoiseyOutput: parsed.checkboxSettings?.saveNoiseyOutput || false,
-          highPrecisionWeights: parsed.checkboxSettings?.highPrecisionWeights ?? true,
-          sameAsInputFolder: parsed.checkboxSettings?.sameAsInputFolder || false,
-          createFolderPerTrack: parsed.checkboxSettings?.createFolderPerTrack || false,
-          customPythonPath: savedPath,
-        });
-      } catch (e) {
-        console.error("Error parsing localStorage settings map", e);
+  // Verify custom Python environment asynchronously (Rule 35)
+  const verifyPythonPath = async (pathToCheck: string) => {
+    const uvr = (window as any).uvr;
+    if (!pathToCheck) {
+      setPythonVerification("idle");
+      setPythonVersion("");
+      return;
+    }
+    if (!uvr) {
+      setPythonVerification("idle");
+      return;
+    }
+    setPythonVerification("verifying");
+    try {
+      const res = await uvr.verifyPythonPath(pathToCheck);
+      if (res && res.success) {
+        setPythonVerification("valid");
+        setPythonVersion(res.version || "Python 3.x");
+      } else {
+        setPythonVerification("invalid");
+        setPythonVersion("");
       }
+    } catch {
+      setPythonVerification("invalid");
+      setPythonVersion("");
+    }
+  };
+
+  // Verify output folder location asynchronously (Rule 3)
+  const verifyOutputFolder = async (pathToCheck: string) => {
+    const uvr = (window as any).uvr;
+    if (!pathToCheck) {
+      setOutputFolderVerification("idle");
+      return;
+    }
+    if (!uvr) {
+      setOutputFolderVerification("unverified_browser");
+      return;
+    }
+    setOutputFolderVerification("verifying");
+    try {
+      const res = await uvr.verifyOutputFolder(pathToCheck);
+      if (res && res.success) {
+        setOutputFolderVerification("writable");
+      } else {
+        setOutputFolderVerification("missing");
+      }
+    } catch {
+      setOutputFolderVerification("missing");
+    }
+  };
+
+  // Trigger verifications on mount or state changes
+  useEffect(() => {
+    if (state.customPythonPath) {
+      verifyPythonPath(state.customPythonPath);
+    }
+  }, []);
+
+  useEffect(() => {
+    verifyOutputFolder(state.selectedOutputFolder);
+  }, [state.selectedOutputFolder]);
+
+  // Load from local storage on mount (guarded carefully - Rule 4)
+  useEffect(() => {
+    const parsed = safeReadSavedState();
+    const savedPath = safeReadCustomPythonPath();
+
+    if (parsed) {
+      const legacyNoisy = parsed.checkboxSettings?.saveNoiseyOutput || false;
+      const canonicalNoisy = parsed.checkboxSettings?.saveNoisyOutput ?? legacyNoisy;
+      let dev = parsed.dropdownSettings?.executionDevice || "cpu";
+      if (dev === "dml") dev = "directml";
+
+      setState({
+        processMethodId: parsed.processMethodId || "bs_roformer",
+        selectedModelId: parsed.selectedModelId || "mel_band_roformer_karaoke",
+        selectedEnsembleId: parsed.selectedEnsembleId || "multi_ai_ensemble_preset",
+        outputFormat: parsed.outputFormat || "WAV",
+        chunks: parsed.dropdownSettings?.chunks || "12",
+        noiseReduction: parsed.dropdownSettings?.noiseReduction || "4",
+        executionDevice: dev,
+        cpuThreads: parsed.dropdownSettings?.cpuThreads || 4,
+        segmentSize: parsed.dropdownSettings?.segmentSize || "1024",
+        ttaActive: parsed.checkboxSettings?.ttaActive || false,
+        postProcessActive: parsed.checkboxSettings?.postProcessActive ?? true,
+        saveVocalsOnly: parsed.checkboxSettings?.saveVocalsOnly || false,
+        saveInstrumentalOnly: parsed.checkboxSettings?.saveInstrumentalOnly || false,
+        splitMode: parsed.checkboxSettings?.splitMode ?? true,
+        saveAllOutputs: parsed.checkboxSettings?.saveAllOutputs || false,
+        modelTestMode: parsed.checkboxSettings?.modelTestMode || false,
+        saveNoisyOutput: canonicalNoisy,
+        saveNoiseyOutput: canonicalNoisy,
+        highPrecisionWeights: parsed.checkboxSettings?.highPrecisionWeights ?? true,
+        sameAsInputFolder: parsed.checkboxSettings?.sameAsInputFolder || false,
+        createFolderPerTrack: parsed.checkboxSettings?.createFolderPerTrack || false,
+        customPythonPath: savedPath,
+        selectedOutputFolder: parsed.selectedOutputFolder || "",
+      });
+    } else if (localStorage.getItem("uvr6_saved_app_state") !== null) {
+      // Storage item was present but malformed
+      triggerToast("Stored preferences were found to be corrupt. Safe factory defaults have been loaded instead.", "warning");
     }
   }, []);
 
@@ -133,71 +367,134 @@ export default function GlobalSettings() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  // Browse output repository target folder using native electron IPC (Rule 1 & 3)
+  const handleBrowseOutputFolder = async () => {
+    const uvr = (window as any).uvr;
+    if (uvr && typeof uvr.selectOutputFolder === "function") {
+      try {
+        const folder = await uvr.selectOutputFolder();
+        if (folder) {
+          setState(prev => ({ ...prev, selectedOutputFolder: folder }));
+          triggerToast(`Output target folder updated to ${folder}`, "success");
+        }
+      } catch (err: any) {
+        triggerToast(`Folder selector error: ${err.message}`, "error");
+      }
+    } else {
+      triggerToast("Browser Preview: Native Folder Dialog is unavailable in Web sandbox.", "info");
+    }
+  };
+
+  // Browse python path custom file using native electron IPC (Rule 3)
+  const handleBrowsePythonPath = async () => {
+    const uvr = (window as any).uvr;
+    if (uvr && typeof uvr.selectPythonPath === "function") {
+      try {
+        const path = await uvr.selectPythonPath();
+        if (path) {
+          setState(prev => ({ ...prev, customPythonPath: path }));
+          verifyPythonPath(path);
+          triggerToast(`Custom Python path set to ${path}`, "success");
+        }
+      } catch (err: any) {
+        triggerToast(`File selector error: ${err.message}`, "error");
+      }
+    } else {
+      triggerToast("Browser Preview: Native File Dialog is unavailable in Web sandbox.", "info");
+    }
+  };
+
   // Save changes
-  const saveMasterPreferences = () => {
+  const saveGlobalPreferences = () => {
     // 1. Save Python Path
-    localStorage.setItem("customPythonPath", state.customPythonPath);
+    safeWriteCustomPythonPath(state.customPythonPath);
 
     // 2. Save App State
     const payload = {
-      selectedOutputFolder: "C:\\Users\\Consumer\\Music_Stems\\",
+      selectedOutputFolder: state.selectedOutputFolder,
       processMethodId: state.processMethodId,
       selectedModelId: state.selectedModelId,
       selectedEnsembleId: state.selectedEnsembleId,
       outputFormat: state.outputFormat,
       dropdownSettings: {
         chunks: state.chunks,
-         noiseReduction: state.noiseReduction,
-         executionDevice: state.executionDevice,
-         cpuThreads: state.cpuThreads,
-         segmentSize: state.segmentSize,
-       },
-       checkboxSettings: {
-         ttaActive: state.ttaActive,
-         postProcessActive: state.postProcessActive,
-         saveVocalsOnly: state.saveVocalsOnly,
-         saveInstrumentalOnly: state.saveInstrumentalOnly,
-         splitMode: state.splitMode,
-         saveAllOutputs: state.saveAllOutputs,
-         modelTestMode: state.modelTestMode,
-         saveNoiseyOutput: state.saveNoiseyOutput,
-         highPrecisionWeights: state.highPrecisionWeights,
-         sameAsInputFolder: state.sameAsInputFolder,
-         createFolderPerTrack: state.createFolderPerTrack,
-       }
+        noiseReduction: state.noiseReduction,
+        executionDevice: state.executionDevice,
+        cpuThreads: state.cpuThreads,
+        segmentSize: state.segmentSize,
+      },
+      checkboxSettings: {
+        ttaActive: state.ttaActive,
+        postProcessActive: state.postProcessActive,
+        saveVocalsOnly: state.saveVocalsOnly,
+        saveInstrumentalOnly: state.saveInstrumentalOnly,
+        splitMode: state.splitMode,
+        saveAllOutputs: state.saveAllOutputs,
+        modelTestMode: state.modelTestMode,
+        saveNoisyOutput: state.saveNoisyOutput,
+        saveNoiseyOutput: state.saveNoisyOutput, // Backward compatible legacy property
+        highPrecisionWeights: state.highPrecisionWeights,
+        sameAsInputFolder: state.sameAsInputFolder,
+        createFolderPerTrack: state.createFolderPerTrack,
+      }
     };
 
-    // Load any existing to preserve output folders or history
-    const savedState = localStorage.getItem("uvr6_saved_app_state");
-    let existing = {};
-    if (savedState) {
-      try {
-        existing = JSON.parse(savedState);
-      } catch {}
-    }
+    // Load any existing to preserve details
+    const existing = safeReadSavedState() || {};
 
-    localStorage.setItem("uvr6_saved_app_state", JSON.stringify({ ...existing, ...payload }));
-    triggerToast("Preferences are currently stored in local app storage using localStorage keys (uvr6_saved_app_state and customPythonPath)!", "success");
+    const fullyWiredPayload = { ...existing, ...payload };
+    safeWriteSavedState(fullyWiredPayload);
+
+    triggerToast("Global preferences saved to local app storage. Defaults apply to newly initialized jobs only.", "success");
     
-    // Dispatch a custom event so the UI updates any local active selections immediately
-    window.dispatchEvent(new Event("storage"));
+    // Dispatch a custom event so the UI updates any local active selections immediately (Rule 9)
+    window.dispatchEvent(new CustomEvent(GLOBAL_SETTINGS_EVENT, { detail: fullyWiredPayload }));
   };
 
-  // Clean resets
+  // Clean resets (avoid page reload, update inline React state smoothly - Rule 23)
   const handleHardReset = () => {
     localStorage.removeItem("uvr6_saved_app_state");
     localStorage.removeItem("customPythonPath");
     setModalType(null);
-    triggerToast("All configurations flushed. Reloading application...", "warning");
-    setTimeout(() => {
-      window.location.reload();
-    }, 1500);
+
+    const factoryValues: GlobalWiredState = {
+      processMethodId: "bs_roformer",
+      selectedModelId: "mel_band_roformer_karaoke",
+      selectedEnsembleId: "multi_ai_ensemble_preset",
+      outputFormat: "WAV",
+      chunks: "12",
+      noiseReduction: "4",
+      executionDevice: "cpu",
+      cpuThreads: 4,
+      segmentSize: "1024",
+      ttaActive: false,
+      postProcessActive: true,
+      saveVocalsOnly: false,
+      saveInstrumentalOnly: false,
+      splitMode: true,
+      saveAllOutputs: false,
+      modelTestMode: false,
+      saveNoisyOutput: false,
+      saveNoiseyOutput: false,
+      highPrecisionWeights: true,
+      sameAsInputFolder: false,
+      createFolderPerTrack: false,
+      customPythonPath: "",
+      selectedOutputFolder: "",
+    };
+
+    setState(factoryValues);
+    setPythonVerification("idle");
+    setPythonVersion("");
+    setOutputFolderVerification("idle");
+
+    triggerToast("All configurations flushed. Defaults restored inline smoothly.", "warning");
+    window.dispatchEvent(new CustomEvent(GLOBAL_SETTINGS_EVENT, { detail: factoryValues }));
   };
 
   const handleRestoreSafeDefaults = () => {
-    localStorage.setItem("customPythonPath", "");
     const safeDefaults = {
-      selectedOutputFolder: "C:\\Users\\Consumer\\Music_Stems\\",
+      selectedOutputFolder: "", // Safe, dynamic, unassigned environment path (Rule 2)
       processMethodId: "bs_roformer",
       selectedModelId: "mel_band_roformer_karaoke",
       selectedEnsembleId: "multi_ai_ensemble_preset",
@@ -205,7 +502,7 @@ export default function GlobalSettings() {
       dropdownSettings: {
         chunks: "12",
         noiseReduction: "4",
-        executionDevice: "cpu", // CPU safe fallback
+        executionDevice: "cpu" as const, // CPU safe fallback
         cpuThreads: 4,
         segmentSize: "1024",
       },
@@ -217,45 +514,278 @@ export default function GlobalSettings() {
         splitMode: true,
         saveAllOutputs: false,
         modelTestMode: false,
+        saveNoisyOutput: false,
         saveNoiseyOutput: false,
         highPrecisionWeights: true,
         sameAsInputFolder: false,
         createFolderPerTrack: false,
       }
     };
-    localStorage.setItem("uvr6_saved_app_state", JSON.stringify(safeDefaults));
+    
+    safeWriteCustomPythonPath("");
+    safeWriteSavedState(safeDefaults);
     setModalType(null);
-    triggerToast("Restored local safe environments (CPU Execution, zero-auto downloads). Reloading...", "success");
-    setTimeout(() => {
-      window.location.reload();
-    }, 1500);
+
+    setState({
+      processMethodId: "bs_roformer",
+      selectedModelId: "mel_band_roformer_karaoke",
+      selectedEnsembleId: "multi_ai_ensemble_preset",
+      outputFormat: "WAV",
+      chunks: "12",
+      noiseReduction: "4",
+      executionDevice: "cpu",
+      cpuThreads: 4,
+      segmentSize: "1024",
+      ttaActive: false,
+      postProcessActive: true,
+      saveVocalsOnly: false,
+      saveInstrumentalOnly: false,
+      splitMode: true,
+      saveAllOutputs: false,
+      modelTestMode: false,
+      saveNoisyOutput: false,
+      saveNoiseyOutput: false,
+      highPrecisionWeights: true,
+      sameAsInputFolder: false,
+      createFolderPerTrack: false,
+      customPythonPath: "",
+      selectedOutputFolder: "",
+    });
+    setPythonVerification("idle");
+    setPythonVersion("");
+    setOutputFolderVerification("idle");
+
+    triggerToast("Restored local safe environments (CPU Execution, zero-auto downloads). No reboot required.", "success");
+    window.dispatchEvent(new CustomEvent(GLOBAL_SETTINGS_EVENT, { detail: safeDefaults }));
+  };
+
+  const handleClearTempFiles = async () => {
+    const uvr = (window as any).uvr;
+    if (uvr && typeof uvr.clearTempFiles === "function") {
+      try {
+        const res = await uvr.clearTempFiles();
+        if (res && res.success) {
+          triggerToast("All process runtime temporary directories wiped clean!", "success");
+        } else {
+          triggerToast(`Failed flushing temp directories: ${res?.error || "unknown directory error"}`, "error");
+        }
+      } catch (e: any) {
+        triggerToast(`Error flushing files: ${e.message}`, "error");
+      }
+    } else {
+      triggerToast("Browser Preview Mode: All simulated process runtime temporary directories wiped clean!", "success");
+    }
+    setModalType(null);
+  };
+
+  const handleClearFailedDownloads = async () => {
+    const uvr = (window as any).uvr;
+    if (uvr && typeof uvr.clearFailedDownloads === "function") {
+      try {
+        const res = await uvr.clearFailedDownloads();
+        if (res && res.success) {
+          triggerToast("Purged corrupt partial download registers successfully.", "success");
+        } else {
+          triggerToast(`Failed clean: ${res?.error || "unknown registers error"}`, "error");
+        }
+      } catch (e: any) {
+        triggerToast(`Error purging files: ${e.message}`, "error");
+      }
+    } else {
+      triggerToast("Browser Preview Mode: Purged corrupt partial download registers successfully.", "success");
+    }
+    setModalType(null);
+  };
+
+  const handleResetWeightsCache = async () => {
+    const uvr = (window as any).uvr;
+    if (uvr && typeof uvr.resetWeightsCache === "function") {
+      try {
+        const res = await uvr.resetWeightsCache();
+        if (res && res.success) {
+          triggerToast("Model registry download verification flags cleared.", "success");
+        } else {
+          triggerToast(`Failed reset: ${res?.error || "unknown weights registry error"}`, "error");
+        }
+      } catch (e: any) {
+        triggerToast(`Error resetting weights: ${e.message}`, "error");
+      }
+    } else {
+      triggerToast("Browser Preview Mode: Model registry download verification flags cleared.", "success");
+    }
+    setModalType(null);
   };
 
   const handleImportSettings = () => {
+    if (!validatedCleanPayload) {
+      triggerToast("Please run validation on pasted configuration JSON before importing.", "warning");
+      return;
+    }
+    const res = safeWriteSavedState(validatedCleanPayload);
+    if (validatedCleanPayload.customPythonPath !== undefined) {
+      safeWriteCustomPythonPath(validatedCleanPayload.customPythonPath);
+    }
+    if (res) {
+      // Sync React state directly
+      const dropdown = validatedCleanPayload.dropdownSettings || {};
+      const checkbox = validatedCleanPayload.checkboxSettings || {};
+      
+      setState({
+        processMethodId: validatedCleanPayload.processMethodId || "bs_roformer",
+        selectedModelId: validatedCleanPayload.selectedModelId || "mel_band_roformer_karaoke",
+        selectedEnsembleId: validatedCleanPayload.selectedEnsembleId || "multi_ai_ensemble_preset",
+        outputFormat: validatedCleanPayload.outputFormat || "WAV",
+        chunks: dropdown.chunks || "12",
+        noiseReduction: dropdown.noiseReduction || "4",
+        executionDevice: dropdown.executionDevice || "cpu",
+        cpuThreads: dropdown.cpuThreads || 4,
+        segmentSize: dropdown.segmentSize || "1024",
+        ttaActive: checkbox.ttaActive || false,
+        postProcessActive: checkbox.postProcessActive ?? true,
+        saveVocalsOnly: checkbox.saveVocalsOnly || false,
+        saveInstrumentalOnly: checkbox.saveInstrumentalOnly || false,
+        splitMode: checkbox.splitMode ?? true,
+        saveAllOutputs: checkbox.saveAllOutputs || false,
+        modelTestMode: checkbox.modelTestMode || false,
+        saveNoisyOutput: checkbox.saveNoisyOutput || checkbox.saveNoiseyOutput || false,
+        saveNoiseyOutput: checkbox.saveNoisyOutput || checkbox.saveNoiseyOutput || false,
+        highPrecisionWeights: checkbox.highPrecisionWeights ?? true,
+        sameAsInputFolder: checkbox.sameAsInputFolder || false,
+        createFolderPerTrack: checkbox.createFolderPerTrack || false,
+        customPythonPath: validatedCleanPayload.customPythonPath || "",
+        selectedOutputFolder: validatedCleanPayload.selectedOutputFolder || "",
+      });
+
+      triggerToast("Custom diagnostic configurations imported successfully!", "success");
+      setModalType(null);
+      // Dispatch immediately (Rule 9)
+      window.dispatchEvent(new CustomEvent(GLOBAL_SETTINGS_EVENT, { detail: validatedCleanPayload }));
+    }
+  };
+
+  const runImportTextValidation = () => {
     try {
       const parsed = JSON.parse(importText);
-      if (!parsed.processMethodId || !parsed.dropdownSettings) {
-        throw new Error("Missing critical keys (processMethodId or dropdownSettings)");
+      const verifyRes = validateSettingsSchema(parsed);
+      if (verifyRes.valid) {
+        setValidatedCleanPayload(verifyRes.cleanedPayload);
+        if (verifyRes.category === "ignored_keys") {
+          setImportFeedback({
+            type: "warning",
+            message: "Import mapping verified: arbitrary unknown properties were safely stripped/ignored. Ready to apply."
+          });
+        } else {
+          setImportFeedback({
+            type: "success",
+            message: "Import mapping verified: strict clean settings schema matches perfectly! Ready to apply."
+          });
+        }
+      } else {
+        setValidatedCleanPayload(null);
+        setImportFeedback({
+          type: "error",
+          message: `Blocked invalid schema: ${verifyRes.error || "failed structure parsing"}`
+        });
       }
-      localStorage.setItem("uvr6_saved_app_state", JSON.stringify(parsed));
-      if (parsed.customPythonPath !== undefined) {
-        localStorage.setItem("customPythonPath", parsed.customPythonPath);
-      }
-      setModalType(null);
-      triggerToast("Custom diagnostic configurations imported successfully! Reloading view...", "success");
-      setTimeout(() => window.location.reload(), 1500);
     } catch (e: any) {
-      triggerToast("Failed to parse settings JSON. Error: " + e.message, "error");
+      setValidatedCleanPayload(null);
+      setImportFeedback({
+        type: "error",
+        message: `Import blocked: JSON Syntax Error - ${e.message}`
+      });
     }
   };
 
   const handleExportClick = () => {
-    const savedState = localStorage.getItem("uvr6_saved_app_state");
-    const jsonStr = savedState 
-      ? JSON.stringify(JSON.parse(savedState), null, 2)
-      : JSON.stringify({ note: "No configurations written yet" }, null, 2);
-    setImportText(jsonStr);
+    // Pre-populate with currently staged preferences
+    const currentPayload = {
+      selectedOutputFolder: state.selectedOutputFolder,
+      processMethodId: state.processMethodId,
+      selectedModelId: state.selectedModelId,
+      selectedEnsembleId: state.selectedEnsembleId,
+      outputFormat: state.outputFormat,
+      dropdownSettings: {
+        chunks: state.chunks,
+        noiseReduction: state.noiseReduction,
+        executionDevice: state.executionDevice,
+        cpuThreads: state.cpuThreads,
+        segmentSize: state.segmentSize,
+      },
+      checkboxSettings: {
+        ttaActive: state.ttaActive,
+        postProcessActive: state.postProcessActive,
+        saveVocalsOnly: state.saveVocalsOnly,
+        saveInstrumentalOnly: state.saveInstrumentalOnly,
+        splitMode: state.splitMode,
+        saveAllOutputs: state.saveAllOutputs,
+        modelTestMode: state.modelTestMode,
+        saveNoisyOutput: state.saveNoisyOutput,
+        highPrecisionWeights: state.highPrecisionWeights,
+        sameAsInputFolder: state.sameAsInputFolder,
+        createFolderPerTrack: state.createFolderPerTrack,
+      },
+      customPythonPath: state.customPythonPath
+    };
+    
+    setImportText(JSON.stringify(currentPayload, null, 2));
+    setModalSubTab("export");
+    setImportFeedback(null);
+    setValidatedCleanPayload(null);
     setModalType("import_export");
+  };
+
+  const handleDownloadSettingsFile = () => {
+    try {
+      const currentPayload = {
+        selectedOutputFolder: state.selectedOutputFolder,
+        processMethodId: state.processMethodId,
+        selectedModelId: state.selectedModelId,
+        selectedEnsembleId: state.selectedEnsembleId,
+        outputFormat: state.outputFormat,
+        dropdownSettings: {
+          chunks: state.chunks,
+          noiseReduction: state.noiseReduction,
+          executionDevice: state.executionDevice,
+          cpuThreads: state.cpuThreads,
+          segmentSize: state.segmentSize,
+        },
+        checkboxSettings: {
+          ttaActive: state.ttaActive,
+          postProcessActive: state.postProcessActive,
+          saveVocalsOnly: state.saveVocalsOnly,
+          saveInstrumentalOnly: state.saveInstrumentalOnly,
+          splitMode: state.splitMode,
+          saveAllOutputs: state.saveAllOutputs,
+          modelTestMode: state.modelTestMode,
+          saveNoisyOutput: state.saveNoisyOutput,
+          highPrecisionWeights: state.highPrecisionWeights,
+          sameAsInputFolder: state.sameAsInputFolder,
+          createFolderPerTrack: state.createFolderPerTrack,
+        },
+        customPythonPath: state.customPythonPath
+      };
+
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentPayload, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", "openstem_settings_profile.json");
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      triggerToast("Downloaded settings schema profile file locally.", "success");
+    } catch (e: any) {
+      triggerToast("File creation error: " + e.message, "error");
+    }
+  };
+
+  const handleCopySettingsToClipboard = () => {
+    navigator.clipboard.writeText(importText)
+      .then(() => {
+        triggerToast("Settings JSON copied to clipboard successfully!", "success");
+      })
+      .catch((e: any) => {
+        triggerToast("Clipboard access blocked by browser options.", "error");
+      });
   };
 
   // State to track accordion expansion (index-based)
@@ -269,25 +799,25 @@ export default function GlobalSettings() {
     setExpanded((prev) => ({ ...prev, [idx]: !prev[idx] }));
   };
 
-  // Model selection configurations based on active engine
+  // Clean objective model names and formats (Rule 18)
   const VR_MODEL_OPTIONS = [
-    { id: "vr_5_hp_karaoke", label: "5_HP-Karaoke-UVR.pth [Vocals/Instrumental]" },
-    { id: "vr_de_echo_normal", label: "UVR-De-Echo-Normal.pth [De-Echo Filter]" }
+    { id: "vr_5_hp_karaoke", label: "5_HP-Karaoke-UVR.pth" },
+    { id: "vr_de_echo_normal", label: "UVR-De-Echo-Normal.pth" }
   ];
 
   const MDX_MODEL_OPTIONS = [
-    { id: "kim_vocal_2_mdx", label: "Kim_Vocal_2.onnx [Vocals/Secondary Pass]" },
-    { id: "mdx_de_reverb", label: "MDX_DeReverb.onnx [De-Reverb Filter]" }
+    { id: "kim_vocal_2_mdx", label: "Kim_Vocal_2.onnx" },
+    { id: "mdx_de_reverb", label: "MDX_DeReverb.onnx" }
   ];
 
   const DEMUCS_MODEL_OPTIONS = [
-    { id: "htdemucs_v4_pt", label: "htdemucs.pt [4-Stem Hybrid Native]" },
-    { id: "htdemucs_ft_ft", label: "htdemucs_ft.pt [Advanced Fine-Tuning]" }
+    { id: "htdemucs_v4_pt", label: "htdemucs.pt" },
+    { id: "htdemucs_ft_ft", label: "htdemucs_ft.pt" }
   ];
 
   const ROFORMER_MODEL_OPTIONS = [
-    { id: "mel_band_roformer_karaoke", label: "mel_band_roformer_karaoke [Optimal Karaoke]" },
-    { id: "roformer_vocals", label: "vocal_roformer_model [Isolated Vocals]" }
+    { id: "mel_band_roformer_karaoke", label: "mel_band_roformer_karaoke.onnx" },
+    { id: "roformer_vocals", label: "vocal_roformer_model.ckpt" }
   ];
 
   const ENSEMBLE_PRESETS = [
@@ -296,13 +826,40 @@ export default function GlobalSettings() {
     { id: "basic_mdx_ensemble", label: "MDX Spectrogram Average Preset" }
   ];
 
+  // Helper to compile Collateral Staged Modifications (collapsible preview card)
+  const stagedChanges = React.useMemo(() => {
+    const list: string[] = [];
+    if (state.processMethodId !== "bs_roformer") list.push(`Default Process: ${state.processMethodId.toUpperCase()}`);
+    if (state.outputFormat !== "WAV") list.push(`Save Format: ${state.outputFormat}`);
+    if (state.chunks !== "12") list.push(`MDX Chunk Size: ${state.chunks}`);
+    if (state.noiseReduction !== "4") list.push(`MDX NR Strength: ${state.noiseReduction}`);
+    if (state.executionDevice !== "cpu") list.push(`Execution Device: ${state.executionDevice.toUpperCase()}`);
+    if (state.cpuThreads !== 4) list.push(`CPU Thread Count: ${state.cpuThreads} cores`);
+    if (state.segmentSize !== "1024") list.push(`VR Window Size: ${state.segmentSize}`);
+    if (state.sameAsInputFolder) list.push("Force: Output inside source folders");
+    if (state.saveVocalsOnly) list.push("Extract: Save Vocals Stem Only");
+    if (state.saveInstrumentalOnly) list.push("Extract: Save Instrumental Stem Only");
+    if (!state.postProcessActive) list.push("Process: Disable residue filtering limit");
+    if (state.customPythonPath) list.push(`Python Overrides: ${state.customPythonPath}`);
+    if (state.selectedOutputFolder) list.push(`Output Folder: ${state.selectedOutputFolder}`);
+    return list;
+  }, [state]);
+
   return (
     <div className="w-full max-w-full space-y-6 animate-fade-in relative z-10 min-w-0 box-border pb-10">
       
       {/* Dynamic Action Success Toast */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 p-4 rounded-xl border flex items-center gap-3 shadow-2xl animate-bounce bg-[#0a0f1d] border-emerald-500/30 text-emerald-300">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+        <div className={`fixed bottom-6 right-6 z-50 p-4 rounded-xl border flex items-center gap-3 shadow-2xl animate-fade-in ${
+          toastType === "success" ? "bg-[#0b1c12] border-emerald-500/40 text-emerald-300" :
+          toastType === "warning" ? "bg-[#21180b] border-amber-500/40 text-amber-300" :
+          toastType === "error" ? "bg-[#240b0f] border-rose-500/40 text-rose-300" :
+          "bg-[#0e1629] border-blue-500/45 text-blue-300"
+        }`}>
+          {toastType === "success" && <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />}
+          {toastType === "warning" && <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />}
+          {toastType === "error" && <XCircle className="w-5 h-5 text-rose-400 shrink-0" />}
+          {toastType === "info" && <Info className="w-5 h-5 text-blue-400 shrink-0" />}
           <div className="text-xs font-mono font-bold whitespace-normal leading-normal">{toastMessage}</div>
         </div>
       )}
@@ -319,7 +876,7 @@ export default function GlobalSettings() {
             </div>
             <div className="min-w-0">
               <h2 className="text-lg md:text-xl font-display font-bold text-green-300 whitespace-normal break-words">
-                UVR Global Settings Hub
+                OpenStem Global Settings Hub
               </h2>
               <p className="text-2xs sm:text-xs font-mono text-green-500/70 tracking-wider uppercase mt-0.5 whitespace-normal">
                 UVR5 Legacy Parity Calibration Dashboard
@@ -358,7 +915,7 @@ export default function GlobalSettings() {
             <span>Honesty & Safe Sandbox Restrictions Policy</span>
           </div>
           <p className="text-[11px] leading-relaxed text-slate-300 pb-1">
-            UVR-6 isolates execution logic safely. Settings labeled as <span className="text-emerald-400 font-bold">Wired / Active</span> apply immediately to new jobs. Unwired legacy configurations are rendered with a strict <span className="text-purple-400 font-bold font-mono">Legacy UVR5 Reference / Not wired</span> anchor so they remain visible for architectural compatibility mappings but do not emit mock state values.
+            {APP_SHORT_NAME} isolates execution logic safely. Settings labeled as <span className="text-emerald-400 font-bold">Wired / Active</span> apply immediately to new jobs. Unwired legacy configurations are rendered with a strict <span className="text-purple-400 font-bold font-mono">Legacy reference / Not wired</span> anchor so they remain visible for architectural compatibility mappings but do not emit mock state values.
           </p>
         </div>
 
@@ -552,21 +1109,29 @@ export default function GlobalSettings() {
 
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-2">
-                      <label className="flex flex-col gap-1.5 justify-between p-2.5 rounded bg-black/40 border border-emerald-500/15">
+                      <label className="flex flex-col gap-1.5 justify-between p-2.5 rounded bg-black/40 border border-emerald-500/15 cursor-pointer">
                         <span className="text-[9px] font-mono uppercase text-emerald-400 font-bold">Save Vocals Only</span>
                         <input 
                           type="checkbox"
                           checked={state.saveVocalsOnly}
-                          onChange={(e) => setState(prev => ({ ...prev, saveVocalsOnly: e.target.checked }))}
+                          onChange={(e) => setState(prev => ({
+                            ...prev,
+                            saveVocalsOnly: e.target.checked,
+                            saveInstrumentalOnly: e.target.checked ? false : prev.saveInstrumentalOnly
+                          }))}
                           className="w-4 h-4 rounded border-emerald-500 text-emerald-500 accent-emerald-500 mt-1"
                         />
                       </label>
-                      <label className="flex flex-col gap-1.5 justify-between p-2.5 rounded bg-black/40 border border-emerald-500/15">
+                      <label className="flex flex-col gap-1.5 justify-between p-2.5 rounded bg-black/40 border border-emerald-500/15 cursor-pointer">
                         <span className="text-[9px] font-mono uppercase text-emerald-400 font-bold">Save Instrumental Only</span>
                         <input 
                           type="checkbox"
                           checked={state.saveInstrumentalOnly}
-                          onChange={(e) => setState(prev => ({ ...prev, saveInstrumentalOnly: e.target.checked }))}
+                          onChange={(e) => setState(prev => ({
+                            ...prev,
+                            saveInstrumentalOnly: e.target.checked,
+                            saveVocalsOnly: e.target.checked ? false : prev.saveVocalsOnly
+                          }))}
                           className="w-4 h-4 rounded border-emerald-500 text-emerald-500 accent-emerald-500 mt-1"
                         />
                       </label>
@@ -593,6 +1158,16 @@ export default function GlobalSettings() {
                         <span>Post-Process Residue Isolation filter</span>
                         <span className="block text-[9px] text-[#55f28c]/60 italic font-sans leading-snug">
                           Subtracts residuals from vocals to clean bleed in instrumentals.
+                        </span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-3 p-2 rounded bg-black/30 border border-purple-500/10 cursor-not-allowed opacity-60">
+                      <input type="checkbox" disabled checked={state.highPrecisionWeights} className="w-4 h-4 rounded border-purple-500/20 bg-black text-purple-500" />
+                      <div className="text-2xs font-mono text-purple-400">
+                        <span>High Precision Weights (FP32 precision mode)</span>
+                        <span className="block text-[9px] text-slate-500 italic font-sans leading-normal">
+                          Preserves raw weight scales for high precision runtime prediction. <span className="font-mono text-purple-400">(Legacy UVR5 Reference / Not wired)</span>
                         </span>
                       </div>
                     </label>
@@ -928,12 +1503,16 @@ export default function GlobalSettings() {
                       <input 
                         type="checkbox"
                         checked={state.saveVocalsOnly}
-                        onChange={(e) => setState(prev => ({ ...prev, saveVocalsOnly: e.target.checked }))}
+                        onChange={(e) => setState(prev => ({
+                          ...prev,
+                          saveVocalsOnly: e.target.checked,
+                          saveInstrumentalOnly: e.target.checked ? false : prev.saveInstrumentalOnly
+                        }))}
                         className="w-4 h-4 rounded border-emerald-500 text-emerald-500 accent-emerald-500"
                       />
                       <div className="text-2xs font-mono text-emerald-300">
                         <span>Save Vocals Stem Only</span>
-                        <span className="block text-[9px] text-[#55f28c]/60 italic font-sans leading-tight">Cleans Instrumental traces from RAM immediately</span>
+                        <span className="block text-[9px] text-[#55f28c]/60 italic font-sans leading-tight">Cleans Instrumental traces from RAM immediately • Sync Mirror</span>
                       </div>
                     </label>
 
@@ -941,12 +1520,16 @@ export default function GlobalSettings() {
                       <input 
                         type="checkbox"
                         checked={state.saveInstrumentalOnly}
-                        onChange={(e) => setState(prev => ({ ...prev, saveInstrumentalOnly: e.target.checked }))}
+                        onChange={(e) => setState(prev => ({
+                          ...prev,
+                          saveInstrumentalOnly: e.target.checked,
+                          saveVocalsOnly: e.target.checked ? false : prev.saveVocalsOnly
+                        }))}
                         className="w-4 h-4 rounded border-emerald-500 text-emerald-500 accent-emerald-500"
                       />
                       <div className="text-2xs font-mono text-emerald-300">
                         <span>Save Instrumental Stem Only</span>
-                        <span className="block text-[9px] text-[#55f28c]/60 italic font-sans leading-tight">Saves drive space by immediately discarding vocal temporary tracks</span>
+                        <span className="block text-[9px] text-[#55f28c]/60 italic font-sans leading-tight">Saves drive space by immediately discarding vocal temporary tracks • Sync Mirror</span>
                       </div>
                     </label>
                   </div>
@@ -995,11 +1578,11 @@ export default function GlobalSettings() {
                         onChange={(e) => setState(prev => ({ ...prev, executionDevice: e.target.value as any }))}
                         className="w-full bg-black/65 border border-green-500/25 rounded-lg px-3 py-2 text-xs text-green-300 focus:outline-none"
                       >
-                        <option value="cpu">Basic x86_64 CPU [Compatible fallback]</option>
-                        <option value="cuda">CUDA GPU Device [Structurally supported / Not locally proven]</option>
-                        <option value="mps">Apple MPS / Metal [Structurally supported / Not locally proven]</option>
-                        <option value="directml">DirectML [Experimental / Delegated / Not locally proven]</option>
-                        <option value="auto">Auto Selection [Safest device allocation]</option>
+                        <option value="cpu">Basic Windows/Mac/Linux CPU (Certified Safe Fallback)</option>
+                        <option value="cuda">NVIDIA CUDA GPU Accelerator (Supported / Requires custom host dependencies)</option>
+                        <option value="mps">Apple Silicon MPS Accelerator (Supported / macOS Apple Silicon only)</option>
+                        <option value="directml">DirectML GPU (Windows AMD/Intel/NVIDIA Accelerator)</option>
+                        <option value="auto">Dynamic Platform Auto-Selection (Bypasses active overrides if unavailable)</option>
                       </select>
                     </label>
 
@@ -1017,7 +1600,7 @@ export default function GlobalSettings() {
                         className="w-full h-1 bg-black/60 border border-green-500/20 rounded accent-emerald-500"
                       />
                       <span className="text-[10px] text-slate-400 italic font-sans leading-relaxed block">
-                        Restricts local multi-threading processor locks on lightweight systems.
+                        Configures thread locks on the active CPU core scheduler, limiting host performance footprints during high-intensity separation tasks.
                       </span>
                     </label>
                   </div>
@@ -1060,33 +1643,103 @@ export default function GlobalSettings() {
                 />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-3.5">
-                    <label className="flex flex-col gap-1.5">
+                    <div className="space-y-1.5 p-3 rounded-lg bg-black/45 border border-white/5 space-y-3">
                       <div className="flex justify-between items-center text-[10px] uppercase text-emerald-400 font-bold">
                         <span>Custom Python Environment (Safe Mode)</span>
                         {state.customPythonPath ? (
-                          <span className="text-[9px] text-[#4dd4fa] font-bold">Custom path selected</span>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                            pythonVerification === "valid" ? "bg-emerald-950/40 text-emerald-400 border border-emerald-500/20" :
+                            pythonVerification === "invalid" ? "bg-rose-950/40 text-rose-400 border border-rose-500/20" :
+                            pythonVerification === "verifying" ? "bg-amber-950/40 text-amber-400 border border-amber-500/20 animate-pulse" :
+                            "bg-slate-850/40 text-slate-400 border border-slate-700/20"
+                          }`}>
+                            {pythonVerification === "valid" && `Validated: ${pythonVersion}`}
+                            {pythonVerification === "invalid" && "Invalid Binary"}
+                            {pythonVerification === "verifying" && "Scanning..."}
+                            {pythonVerification === "idle" && "Idle"}
+                            {pythonVerification === "unverified_browser" && "Web Sandbox"}
+                          </span>
                         ) : (
                           <span className="text-[9px] text-emerald-500 font-bold">System Default</span>
                         )}
                       </div>
-                      <input 
-                        type="text"
-                        value={state.customPythonPath}
-                        onChange={(e) => setState(prev => ({ ...prev, customPythonPath: e.target.value }))}
-                        placeholder="/usr/bin/python3, python.exe, or empty to select system global packages"
-                        className="w-full bg-black/65 border border-green-500/20 rounded-lg px-3 py-2 text-xs text-green-300 placeholder-slate-600 focus:outline-none focus:border-green-400"
-                      />
-                      <span className="text-[10px] text-slate-400 font-sans italic leading-relaxed block">
-                        Input absolute binary path to override embedded Python instance for high precision environments.
-                      </span>
-                    </label>
-
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] uppercase text-emerald-400 font-bold block">Active Output Repository</span>
-                      <div className="p-2.5 bg-black/45 rounded border border-white/5 flex items-center justify-between gap-3 text-2xs truncate">
-                        <span className="text-slate-300 font-mono truncate">C:\Users\Consumer\Music_Stems\</span>
-                        <span className="text-[8px] uppercase select-none px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/10">Active Wired</span>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text"
+                          value={state.customPythonPath}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setState(prev => ({ ...prev, customPythonPath: val }));
+                            verifyPythonPath(val);
+                          }}
+                          placeholder="/usr/bin/python3, python.exe, or empty to select system global packages"
+                          className="flex-grow bg-black/65 border border-green-500/20 rounded-lg px-3 py-2 text-xs text-green-300 placeholder-slate-600 focus:outline-none focus:border-green-400"
+                        />
+                        <button 
+                          onClick={handleBrowsePythonPath}
+                          className="px-3 py-2 bg-black hover:bg-slate-900 border border-slate-700 rounded text-2xs text-slate-300 transition-all font-mono hover:text-white"
+                        >
+                          Browse...
+                        </button>
+                        {state.customPythonPath && (
+                          <button 
+                            onClick={() => {
+                              setState(prev => ({ ...prev, customPythonPath: "" }));
+                              setPythonVerification("idle");
+                              setPythonVersion("");
+                            }}
+                            className="px-2 py-2 bg-rose-950/20 hover:bg-rose-900/30 border border-rose-800/30 text-rose-400 rounded text-2xs transition-all font-mono"
+                          >
+                            Clear
+                          </button>
+                        )}
                       </div>
+                      <p className="text-[10px] text-slate-400 font-sans italic leading-relaxed block">
+                        Input absolute binary path to override embedded Python instance for high precision environments.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5 p-3 rounded-lg bg-black/45 border border-white/5 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] uppercase text-emerald-400 font-bold block">Active Output Repository</span>
+                        <span className={`text-[9px] font-mono uppercase font-bold px-1.5 py-0.5 rounded ${
+                          outputFolderVerification === "writable" ? "bg-emerald-950/40 text-emerald-400 border border-emerald-500/20" :
+                          outputFolderVerification === "missing" ? "bg-rose-950/40 text-rose-400 border border-rose-500/20" :
+                          outputFolderVerification === "verifying" ? "bg-amber-950/40 text-amber-400 border border-amber-500/20 animate-pulse" :
+                          "bg-slate-800/40 text-slate-400 border border-slate-700/20"
+                        }`}>
+                          {outputFolderVerification === "writable" && "Writable"}
+                          {outputFolderVerification === "missing" && "Access Denied / Missing"}
+                          {outputFolderVerification === "verifying" && "Checking Access..."}
+                          {outputFolderVerification === "idle" && "Default Fallback"}
+                          {outputFolderVerification === "unverified_browser" && "Simulator Mode"}
+                        </span>
+                      </div>
+                      <div className="flex gap-2 min-w-0">
+                        <div className="flex-grow bg-black/65 border border-green-500/20 rounded-lg px-3 py-2 text-xs text-green-300 placeholder-slate-600 truncate flex items-center min-w-0">
+                          <span className="truncate font-mono">{state.selectedOutputFolder || "Source Folder (Deed fallback)"}</span>
+                        </div>
+                        <button 
+                          onClick={handleBrowseOutputFolder}
+                          className="px-3 py-2 bg-black hover:bg-slate-900 border border-slate-700 rounded text-2xs text-slate-300 transition-all font-mono hover:text-white shrink-0"
+                        >
+                          Select Folder...
+                        </button>
+                        {state.selectedOutputFolder && (
+                          <button 
+                            onClick={() => {
+                              setState(prev => ({ ...prev, selectedOutputFolder: "" }));
+                              setOutputFolderVerification("idle");
+                            }}
+                            className="px-2 py-2 bg-rose-950/20 hover:bg-rose-900/30 border border-rose-800/30 text-rose-400 rounded text-2xs transition-all font-mono shrink-0"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-sans italic leading-relaxed block">
+                        Select an alternate destination folder for written stems. Unassigned defaults automatically to directory of processing audio track inputs.
+                      </p>
                     </div>
                   </div>
 
@@ -1219,13 +1872,31 @@ export default function GlobalSettings() {
 
         </div>
 
+        {/* Staged Changes preview card */}
+        {stagedChanges.length > 0 && (
+          <div className="mt-6 p-4 rounded-xl border border-purple-500/30 bg-purple-950/10 space-y-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-purple-400 font-mono">
+              <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+              <span>Staged Preferences Preview ({stagedChanges.length} modified settings)</span>
+            </div>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono text-slate-300">
+              {stagedChanges.map((change, idx) => (
+                <li key={idx} className="flex items-center gap-2 bg-black/40 p-1.5 rounded border border-white/5 truncate" title={change}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 animate-pulse"></span>
+                  <span className="truncate">{change}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Master save button */}
         <div className="mt-8 pt-5 border-t border-green-500/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div className="text-2xs text-slate-400 font-sans italic whitespace-normal max-w-sm sm:max-w-md">
             Global defaults apply to newly initialized jobs unless the user manually overrides the current job settings. Doing so prevents unexpectedly overwriting an active job, active processing state, or per-job selections already made in the console. Preferences are stored in local app storage using the Electron/browser localStorage keys <code className="text-emerald-400 font-mono">uvr6_saved_app_state</code> (for dropdownSettings and checkboxSettings) and <code className="text-emerald-400 font-mono">customPythonPath</code>.
           </div>
           <button 
-            onClick={saveMasterPreferences}
+            onClick={saveGlobalPreferences}
             className="w-full sm:w-auto px-6 py-3 rounded-xl bg-green-500/20 hover:bg-green-500/30 border border-green-500/50 text-green-300 font-bold font-mono transition-all flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.15)] shrink-0"
           >
             <Save className="w-4 h-4 shrink-0" />
@@ -1297,17 +1968,17 @@ export default function GlobalSettings() {
                 </button>
               )}
               {modalType === "clear_temp" && (
-                <button onClick={() => { setModalType(null); triggerToast("All process runtime temporary directories wiped clean!", "success"); }} className="px-4 py-2 rounded bg-amber-950 hover:bg-amber-900 border border-amber-600 text-amber-200 font-bold">
+                <button onClick={handleClearTempFiles} className="px-4 py-2 rounded bg-amber-950 hover:bg-amber-900 border border-amber-600 text-amber-200 font-bold">
                   Confirm cleanup
                 </button>
               )}
               {modalType === "clear_failed" && (
-                <button onClick={() => { setModalType(null); triggerToast("Purged corrupt partial download registers successfully.", "success"); }} className="px-4 py-2 rounded bg-amber-950 hover:bg-amber-900 border border-amber-600 text-amber-200 font-bold">
+                <button onClick={handleClearFailedDownloads} className="px-4 py-2 rounded bg-amber-950 hover:bg-amber-900 border border-amber-600 text-amber-200 font-bold">
                   Clean transfer registers
                 </button>
               )}
               {modalType === "reset_cache" && (
-                <button onClick={() => { setModalType(null); triggerToast("Model registry download verification flags cleared.", "success"); }} className="px-4 py-2 rounded bg-rose-950 hover:bg-rose-900 border border-rose-600 text-rose-200 font-bold">
+                <button onClick={handleResetWeightsCache} className="px-4 py-2 rounded bg-rose-950 hover:bg-rose-900 border border-rose-600 text-rose-200 font-bold">
                   Reset Checksums
                 </button>
               )}

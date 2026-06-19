@@ -1,6 +1,6 @@
 {
   "name": "Unofficial UVR Stem Separator",
-  "description": "An unofficial Windows desktop stem-separation application inspired by UVR-style workflows.",
+  "description": "An unofficial AI-assisted desktop workstation for UVR-style source-separation workflows.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

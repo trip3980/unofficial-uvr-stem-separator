@@ -1,0 +1,49 @@
+# Third-Party Notices & Project References
+
+OpenStem stands on the work of open-source audio, machine-learning, and desktop-application communities. Some projects are used directly as dependencies, some are called externally, and some are referenced for compatibility or workflow inspiration.
+
+## Upstream Project Directory & Licensing
+
+| Project | Purpose in OpenStem | Status | Source | License | Notes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **OpenStem AI Audio Workstation** | Main application shell and workflow integrator. | Project codebase. | Robert Sawin / Trip3980 | Needs verification | - |
+| **Ultimate Vocal Remover GUI / UVR** | Historical workflow inspiration and compatibility reference for UVR-style source separation. | Referenced only | anjok07 / ultimatevocalremovergui | MIT License | OpenStem is not an official UVR product. |
+| **Eddycrack864 / UVR5-UI** | UVR5-style UI/reference material. | Referenced only | Eddycrack864 / UVR5-UI | needs verification | Do not imply official affiliation. |
+| **TheStinger / UVR5_UI** | UVR5 UI reference / compatibility inspiration. | Referenced only | TheStinger / UVR5_UI | needs verification | - |
+| **audio-separator** | Python CLI/library backend bridge for local source separation workflows. | Optional/local backend dependency | nomadkaraoke / python-audio-separator | MIT License | - |
+| **Demucs** | Source-separation backend/model family for vocals, drums, bass, and other stems. | Optional backend/model family | facebookresearch / demucs | MIT License | - |
+| **MDX-Net / MDX model family** | Source-separation model family commonly used for vocal/instrumental workflows. | Model architecture / optional model family | Kuielab & contributors | needs verification | - |
+| **RoFormer / BS-RoFormer model family** | Modern transformer-based separation model family where configured. | Optional model family / source must be verified per model | ZFTurbo & contributors | needs verification | - |
+| **MVSEP-MDX23 / MDX23C references** | Optional/experimental model family references. | Experimental or Referenced only | ZFTurbo / MVSEP | needs verification | - |
+| **FFmpeg** | Decoding, encoding, probing, resampling, trimming, filtering, and non-AI fallback processing. | External dependency | FFmpeg Official | LGPL v2.1+ / GPL v3.0 | FFmpeg fallback is not neural source separation. |
+| **PyTorch** | ML runtime used by local Python backends where installed. | External/local dependency | PyTorch Official | BSD-3-Clause | - |
+| **ONNX Runtime** | ONNX model execution provider where backend uses ONNX. | External/local dependency | Microsoft / ONNX Runtime | MIT License | ONNX provider selection is backend-dependent unless OpenStem directly configures it. |
+| **Basic Pitch** | Audio-to-MIDI transcription workflow. | Optional backend/module | Spotify / Basic Pitch | Apache License 2.0 | Basic Pitch is not stem separation and does not satisfy AI separation proof. |
+| **Electron** | Desktop application shell and native bridge. | Project dependency | ElectronJS | MIT License | - |
+| **React** | Frontend UI framework. | Project dependency | React Official | MIT License | - |
+| **Vite** | Development/build tool. | Project dependency | Vite Dev | MIT License | - |
+| **TypeScript** | Typed application development. | Project dependency | Microsoft | Apache License 2.0 | - |
+| **Tailwind CSS** | UI styling. | Project dependency | Tailwind Labs | MIT License | - |
+| **lucide-react** | Icon library. | Project dependency | Lucide | ISC License | - |
+| **motion / Framer Motion** | UI animation library. | Project dependency | Framer | MIT License | - |
+| **Node.js / npm ecosystem** | JavaScript runtime and package ecosystem. | Development/runtime dependency | Node.js Foundation | MIT License | - |
+| **nkhilunni / demucs-rs** | Rust/Demucs reference or future backend lane. | Referenced only or Planned / Not active | nkhilunni / demucs-rs | needs verification | - |
+| **Open-Unmix** | Optional/future source-separation reference lane. | Future lane / Referenced only | sigsep / open-unmix-pytorch | MIT License | - |
+| **Spleeter** | Optional/future source-separation reference lane. | Future lane / Referenced only | deezer / spleeter | MIT License | - |
+| **YuE** | Experimental local music-generation workflow. | Experimental / Optional | MultimodalArt / YuE | needs verification | Not part of UVR-style separation proof. |
+| **AudioCraft / MusicGen** | Experimental music-generation reference lane. | Future lane / Optional / Not active | facebookresearch / audiocraft | MIT License | - |
+| **Stable Audio Tools** | Experimental/future music-generation reference lane. | Future lane / Not active | Stability AI | needs verification | - |
+| **DDSP** | Experimental/future audio synthesis or differentiable DSP reference lane. | Future lane / Referenced only | magenta / ddsp | Apache License 2.0 | - |
+| **Python** | Required runtime for local backend helper scripts if used. | External runtime | Python Software Foundation | PSF License | - |
+| **PyInstaller** | Python helper bundling only if used. | Build tool | pyinstaller / pyinstaller | GPL v2.0 | - |
+| **electron-builder** | App packaging for Windows/Linux releases. | Build dependency | electron-userland / electron-builder | MIT License | - |
+
+---
+
+## Important License Disclosures & Redistribution Policy
+
+1. **Permissive Licenses Limit Warranty**: Standard open-source permissions (including MIT, Apache 2.0, and BSD-3-Clause) allow reuse, modification, and redistribution of the source code. However, **they do not allow unrestricted use without conditions**. All copies or substantial portions of the software must retain original copyright notices and warranty disclaimers exactly.
+2. **Redistribution of Model Weights**: This project **does not bundle model weights**. The redistribution permission for many neural networks remains restrictive or conditional. Weights files must be acquired separately by the user in compliance with third-party license agreements.
+3. **No Direct GPL Infringement**: The compiled desktop application does not link directly with FFmpeg static library code. It triggers external user-provided FFmpeg executable binaries via subprocess execution.
+
+All third-party copyrights not specifically listed above are silently preserved and respected under their original authors' terms.

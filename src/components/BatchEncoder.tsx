@@ -433,15 +433,6 @@ export default function BatchEncoder() {
                 </p>
               </div>
 
-              <div className="p-3 rounded-lg bg-rose-950/20 border border-rose-500/10 space-y-1 text-rose-300">
-                <div className="text-[10px] uppercase font-bold tracking-wider text-rose-400 flex items-center gap-1.5 font-mono">
-                  <span>❌ Absolute Honestly Disclaimer</span>
-                </div>
-                <p className="text-[11px] select-text leading-relaxed">
-                  Standard formatting, downmixing, or resampling <strong>does NOT</strong> pass through neural deep-tensor engines. It does not isolate stems or improve the acoustic resolution of previously separated files.
-                </p>
-              </div>
-
               <div className="p-3 rounded-lg bg-indigo-950/20 border border-indigo-500/10 space-y-1.5 text-indigo-300">
                 <div className="text-[10px] uppercase font-bold tracking-wider text-indigo-400 flex items-center gap-1.5 font-mono">
                   <span>💿 Codec Specific Limits</span>
