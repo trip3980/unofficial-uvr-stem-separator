@@ -26,3 +26,7 @@
 
 ## Target Audience
 - **Keep it simple.** The target user wants a desktop audio workstation that avoids Python setup, command-line confusion, model-folder confusion, CUDA mystery, unclear exports, and backend ambiguity.
+
+## Repo-Scoped Skills
+- Use repo-scoped skills in `.agents/skills/` for focused OpenStem tasks. These skills do not replace AGENTS.md; they narrow Codex behavior for specific work areas.
+- Current toolchain includes ESLint, scoped Prettier check, strict TypeScript ratchet, artifact verification, model-source audit, backend diagnostics, proof readiness check, release checklist, and proof asset checklist. `release:check` passing does not approve Beta; `proof:check` must pass with a verified model and non-empty AI stems before Beta can be considered.

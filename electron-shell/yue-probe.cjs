@@ -1,6 +1,11 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync, spawn } = require('child_process');
+const { execFileSync, spawn } = require('child_process');
+const {
+  createMissingHelperScriptResult,
+  fileExists,
+  resolveScriptFile
+} = require('./runtime-paths.cjs');
 
 // Parse CLI Arguments
 const args = {};
@@ -60,6 +65,7 @@ let flashAttentionInstalled = false;
 let yueRootExists = false;
 let inferPyExists = false;
 let requirementsStatus = 'Unverified';
+let helperMissing = null;
 
 // Validate Output Directory first so we can write report there
 let mainLogDir = process.cwd();
@@ -80,7 +86,7 @@ if (outputDir) {
 // 1. Verify python path
 let pythonWorking = false;
 try {
-  const versionOut = execSync(`"${pythonPath}" --version`, { encoding: 'utf8', timeout: 3000 });
+  const versionOut = execFileSync(pythonPath, ['--version'], { encoding: 'utf8', timeout: 3000 });
   if (versionOut && (versionOut.toLowerCase().includes('python') || /^[0-9.]+/i.test(versionOut.trim()))) {
     pythonWorking = true;
     pythonVersion = versionOut.replace(/python/i, '').trim();
@@ -92,10 +98,9 @@ try {
 // 2. Spawn python backend probe to read torch/transformers statistics
 if (pythonWorking) {
   try {
-    const probeScriptPath = path.join(__dirname, '../scripts/yue_probe.py');
-    if (fs.existsSync(probeScriptPath)) {
-      const probeRunCmd = `"${pythonPath}" "${probeScriptPath}" --yue-root "${yueRoot}" --output "${outputDir}"`;
-      const probeOut = execSync(probeRunCmd, { encoding: 'utf8', timeout: 5000 });
+    const probeScriptPath = resolveScriptFile('yue_probe.py');
+    if (fileExists(probeScriptPath)) {
+      const probeOut = execFileSync(pythonPath, [probeScriptPath, '--yue-root', yueRoot, '--output', outputDir], { encoding: 'utf8', timeout: 5000 });
       if (probeOut) {
         const pData = JSON.parse(probeOut.trim());
         torchVersion = pData.torchVersion || 'None';
@@ -115,7 +120,8 @@ if (pythonWorking) {
         }
       }
     } else {
-      blockers.push("Internal scripting file 'scripts/yue_probe.py' is missing.");
+      helperMissing = createMissingHelperScriptResult(probeScriptPath);
+      blockers.push(`${helperMissing.message} Missing: ${helperMissing.missingPath}`);
     }
   } catch (err) {
     blockers.push(`Failed running python-environment verification probe: ${err.message}`);
@@ -177,12 +183,13 @@ let stderrSummary = '';
 let proofStatus = 'BLOCKED';
 let generatedFiles = [];
 let generatedFileSizes = {};
+let commandArgs = [];
 
 if (blockers.length === 0 && yueRootExists && inferPyExists) {
   // Build safe YuE inference command arguments list
-  const commandArgs = [];
+  commandArgs = [];
   
-  commandArgs.push('inference/infer.py');
+  commandArgs.push(executionInferPy);
   commandArgs.push('--stage1_model', stage1Model);
   commandArgs.push('--stage2_model', stage2Model);
   commandArgs.push('--genre_txt', finalGenrePath);
@@ -236,20 +243,7 @@ async function executeInference() {
   console.log(`[EXEC] Launching child subprocess for real YuE inference...\nCWD: ${yueRoot}\nCmd: ${commandToRun}`);
   proofStatus = 'FAIL'; // default until positive completion verified
   
-  const executableMain = pythonPath;
-  const parts = commandToRun.split(' ').slice(1);
-  const parsedParts = [];
-  
-  // Custom un-quoting for argument delivery to spawn
-  for (let i = 0; i < parts.length; i++) {
-    let p = parts[i];
-    if (p.startsWith('"') && p.endsWith('"')) {
-      p = p.slice(1, -1);
-    }
-    parsedParts.push(p);
-  }
-
-  const child = spawn(executableMain, [path.join(yueRoot, 'inference', 'infer.py'), ...parsedParts.slice(1)], {
+  const child = spawn(pythonPath, commandArgs, {
     cwd: yueRoot
   });
 
@@ -339,6 +333,8 @@ function writeReport() {
     generatedFiles: generatedFiles,
     generatedFileSizes: generatedFileSizes,
     proofStatus: proofStatus,
+    status: helperMissing ? helperMissing.status : proofStatus,
+    helperMissing: helperMissing,
     blockers: blockers
   };
 

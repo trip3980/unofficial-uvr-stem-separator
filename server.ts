@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 
 async function startServer() {
   const app = express();
@@ -100,21 +100,31 @@ Your response MUST be wrapped in a clean JSON structure:
     }
 
     try {
+      const parsedTarget = new URL(String(targetUrl));
+      if (!["http:", "https:"].includes(parsedTarget.protocol)) {
+        return res.status(400).json({ error: "Proxy target must use http or https." });
+      }
+
+      const requestMethod = String(method || "POST").toUpperCase();
+      if (!["GET", "POST"].includes(requestMethod)) {
+        return res.status(400).json({ error: "Proxy method must be GET or POST." });
+      }
+
       const fetchHeaders: Record<string, string> = {
         "Content-Type": "application/json",
         ...(headers || {}),
       };
 
       const fetchOptions: any = {
-        method: method || "POST",
+        method: requestMethod,
         headers: fetchHeaders,
       };
 
-      if (body && (method || "POST") !== "GET") {
+      if (body && requestMethod !== "GET") {
         fetchOptions.body = typeof body === "string" ? body : JSON.stringify(body);
       }
 
-      const backendResponse = await fetch(targetUrl, fetchOptions);
+      const backendResponse = await fetch(parsedTarget.toString(), fetchOptions);
       const isJson = backendResponse.headers.get("content-type")?.includes("application/json");
       
       const responseData = isJson 
@@ -133,7 +143,7 @@ Your response MUST be wrapped in a clean JSON structure:
 
   // API Route: Check FFmpeg availability on host server system
   app.get("/api/batch-encoder/check-ffmpeg", (req, res) => {
-    exec("ffmpeg -version", (error, stdout) => {
+    execFile("ffmpeg", ["-version"], (error, stdout) => {
       if (error) {
         res.json({ available: false, version: null, path: "Not detected on host PATH" });
       } else {
@@ -158,7 +168,7 @@ Your response MUST be wrapped in a clean JSON structure:
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  app.listen(PORT, "127.0.0.1", () => {
     console.log(`[OpenStem Server] Running on http://localhost:${PORT}`);
   });
 }

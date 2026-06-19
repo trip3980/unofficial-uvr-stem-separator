@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-electron
+tmp_test_runs
+coverage
+release
+out
+installer
+*.log
+package-lock.json

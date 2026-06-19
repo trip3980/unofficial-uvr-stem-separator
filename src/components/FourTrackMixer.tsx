@@ -323,7 +323,7 @@ export default function FourTrackMixer({
                 Stem Mixer Workspace
               </span>
               <span className="text-[10px] font-mono font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                Mixer Mode: {stemsToUse.length === 0 ? "No Session Loaded" : useDemo ? "Demo Preview Only" : "Real Stem Session Loaded"}
+                Mixer Mode: {stemsToUse.length === 0 ? "No verified stem session loaded" : useDemo ? "Demo Preview Only" : "Verified Stem Session Loaded"}
               </span>
             </div>
             <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wider flex items-center gap-1.5">
@@ -331,7 +331,7 @@ export default function FourTrackMixer({
               Post-Separation Stem Review & Mixdown
             </h3>
             <p className="text-[11px] text-slate-400 mt-1">
-              Provides an interactive environment to review output stems from previous source-separation runs.
+              Reviews verified output stems from previous local separation runs. Demo stems are preview-only and cannot be exported.
             </p>
           </div>
 
@@ -369,7 +369,7 @@ export default function FourTrackMixer({
                 Stem Source / Type
               </span>
               <span className={`font-bold ${useDemo ? "text-amber-500" : stemsToUse.length > 0 ? "text-emerald-500" : "text-rose-400"}`}>
-                {stemsToUse.length === 0 ? "No stems available" : useDemo ? "Simulated / Placeholder Demo" : "Verified Real AI Output"}
+                {stemsToUse.length === 0 ? "No verified stem session loaded" : useDemo ? "Preview-only demo stems" : "Verified local AI output"}
               </span>
             </div>
             <div>

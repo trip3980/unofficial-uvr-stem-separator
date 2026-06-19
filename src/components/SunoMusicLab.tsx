@@ -351,6 +351,7 @@ export default function SunoMusicLab({
   const intervalRef = useRef<number | null>(null);
   const logsEndRef = useRef<HTMLDivElement | null>(null);
   const lyricsInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const serverRoutesAvailable = !(typeof window !== "undefined" && !!(window as any).uvr && window.location.protocol === "file:");
 
   // Sync state to local storage
   useEffect(() => {
@@ -368,7 +369,7 @@ export default function SunoMusicLab({
   useEffect(() => {
     let activePoll = true;
     const queuedTracks = tracks.filter(t => t.status === "queued" && t.source === "suno");
-    if (queuedTracks.length === 0 || apiMode !== "real") return;
+    if (queuedTracks.length === 0 || apiMode !== "real" || !serverRoutesAvailable) return;
 
     const interval = setInterval(async () => {
       const ids = queuedTracks.map(t => t.id).join(",");
@@ -423,7 +424,7 @@ export default function SunoMusicLab({
       activePoll = false;
       clearInterval(interval);
     };
-  }, [tracks, apiMode, baseUrl]);
+  }, [tracks, apiMode, baseUrl, serverRoutesAvailable]);
 
   // Sync audio progress bars
   useEffect(() => {
@@ -541,6 +542,11 @@ export default function SunoMusicLab({
   const handleGenerateLyricsWithGemini = async () => {
     if (!aiAssistantIdea.trim()) {
       triggerToast("Input a central idea or mood for drafting!");
+      return;
+    }
+    if (!serverRoutesAvailable) {
+      triggerToast("Gemini helper route is dev/server-only in packaged file mode. Using local text-only drafting fallback.");
+      simulateLocalComposerFallback();
       return;
     }
 
@@ -696,6 +702,14 @@ We are the kings of the feedback tonight`;
     addLog(`[Suno-API Node Wrapper] Mode: ${apiMode === "real" ? "REAL HOST COMPILER" : "FREE PLAY SANDBOX"}`);
     
     if (apiMode === "real") {
+      if (!serverRoutesAvailable) {
+        addLog(`[Suno-API Proxy] Packaged file mode detected. server.ts HTTP proxy routes are not running inside the packaged renderer.`);
+        addLog(`[Suno-API Proxy] Use sandbox mode or run the dev/server target explicitly; no hidden backend will be started.`);
+        triggerToast("Suno proxy is dev/server-only in packaged mode.");
+        setIsGenerating(false);
+        return;
+      }
+
       const isApproved = isUrlApproved(baseUrl);
       if (!isApproved) {
         addLog(`[Suno-API Proxy] Connection blocked: Only localhost or trusted user-approved local bridge URLs are permitted for local proxy routing.`);
@@ -1114,6 +1128,14 @@ We are the kings of the feedback tonight`;
     };
 
     if (yueApiMode === "real") {
+      if (!serverRoutesAvailable) {
+        addLog(`[YuE API Client] Packaged file mode detected. server.ts HTTP proxy routes are not running inside the packaged renderer.`);
+        addLog(`[YuE API Client] Use Direct Local CLI Subprocess mode for packaged Electron, or run a dev/server target explicitly.`);
+        triggerToast("YuE remote proxy is dev/server-only in packaged mode.");
+        setIsGenerating(false);
+        return;
+      }
+
       const isApproved = isUrlApproved(yueBaseUrl);
       if (!isApproved) {
         addLog(`[YuE Direct Client] Connection blocked: Only localhost or trusted user-approved local backend URLs are permitted for proxy routing.`);
@@ -1196,7 +1218,7 @@ We are the kings of the feedback tonight`;
         return;
       } catch (err: any) {
         addLog(`[YuE API Link Error] Direct connection failed: ${err.message}`);
-        addLog(`[YuE Recovery] Routing back to local device high-fidelity Sandbox simulation...`);
+        addLog(`[YuE Recovery] Routing back to sandbox preview mode; no model inference will run...`);
       }
     }
 
@@ -1644,7 +1666,7 @@ We are the kings of the feedback tonight`;
                     type="button"
                     onClick={() => {
                       setApiMode("sandbox");
-                      triggerToast("Swapped to Sandbox Simulation Mode (offline testing).");
+                      triggerToast("Swapped to Sandbox Preview Mode. No model inference will run.");
                     }}
                     className={`py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
                       apiMode === "sandbox"
@@ -1737,7 +1759,7 @@ We are the kings of the feedback tonight`;
                     type="button"
                     onClick={() => {
                       setYueApiMode("sandbox");
-                      triggerToast("Swapped YuE to Sandbox Simulation Mode (offline testing).");
+                      triggerToast("Swapped YuE to Sandbox Preview Mode. No model inference will run.");
                     }}
                     className={`py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
                       yueApiMode === "sandbox"
@@ -2134,7 +2156,7 @@ We are the kings of the feedback tonight`;
                 <div className="space-y-1">
                   <span className="font-bold text-[11px] text-slate-300 block">YuE (岳) Open-Source Integration details:</span>
                   <p className="text-[10px] text-slate-500 leading-normal font-sans">
-                    Designed by multimodal-art-projection, YuE generates high-fidelity vocal tracks with rich background audio using Stage 1 tokenizers & Stage 2 orchestration. Learn more at: <a href="https://github.com/multimodal-art-projection/YuE" target="_blank" className="text-purple-400 hover:underline inline-flex items-center gap-0.5">https://github.com/multimodal-art-projection/YuE <ExternalLink className="w-2.5 h-2.5" /></a>
+                    Designed by multimodal-art-projection, YuE can generate vocal tracks with backing audio when the real local/server backend is configured. Learn more at: <a href="https://github.com/multimodal-art-projection/YuE" target="_blank" className="text-purple-400 hover:underline inline-flex items-center gap-0.5">https://github.com/multimodal-art-projection/YuE <ExternalLink className="w-2.5 h-2.5" /></a>
                   </p>
                 </div>
               </div>
@@ -2424,7 +2446,7 @@ We are the kings of the feedback tonight`;
                       type="button"
                       onClick={() => {
                         setYueStage("full_orchestra");
-                        triggerToast("YuE Stage 2: Full Orchestra mode. Synthesizes vocals and orchestrates high-fidelity backings.");
+                        triggerToast("YuE Stage 2: Full Orchestra mode selected. Real synthesis requires a configured YuE backend.");
                       }}
                       className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase transition-all cursor-pointer ${
                         yueStage === "full_orchestra"
@@ -2644,7 +2666,7 @@ We are the kings of the feedback tonight`;
 
                   {yueApiMode === "sandbox" && (
                     <div className="text-[11px] text-cyan-400 leading-relaxed italic p-1">
-                      ✨ Sandbox Simulation Mode is Active. Offline high-fidelity audio mockup simulation is enabled. Local PyTorch workspace preflights are bypassed.
+                      ✨ Sandbox Preview Mode is active. No local PyTorch preflight or model inference is running.
                     </div>
                   )}
 

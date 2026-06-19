@@ -1,318 +1,199 @@
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
-const { execSync, spawn } = require('child_process');
+const aiSeparation = require('./ai-separation.cjs');
 
-console.log("==========================================================");
-console.log("      ELECTRON NATIVE DESKTOP REAL AI PIPELINE E2E TEST   ");
-console.log("==========================================================");
+function parseArgs(argv) {
+  const parsed = {
+    python: null,
+    model: null,
+    input: null,
+    output: null,
+    device: 'cpu',
+    expectedSha256: null,
+    expectedSizeBytes: null,
+    license: null,
+    sourceUrl: null
+  };
 
-// Parse input args
-const args = process.argv.slice(2);
-let customPython = null;
-let customModel = null;
-let customInput = null;
-let customOutput = null;
-let customDevice = 'cpu';
-
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === '--python') {
-    customPython = args[i + 1];
-  } else if (args[i] === '--model') {
-    customModel = args[i + 1];
-  } else if (args[i] === '--input') {
-    customInput = args[i + 1];
-  } else if (args[i] === '--output') {
-    customOutput = args[i + 1];
-  } else if (args[i] === '--device') {
-    customDevice = args[i + 1] || 'cpu';
+  for (let i = 0; i < argv.length; i++) {
+    const key = argv[i];
+    const value = argv[i + 1];
+    if (key === '--python') parsed.python = value;
+    if (key === '--model') parsed.model = value;
+    if (key === '--input') parsed.input = value;
+    if (key === '--output') parsed.output = value;
+    if (key === '--device') parsed.device = value || 'cpu';
+    if (key === '--expected-sha256') parsed.expectedSha256 = value;
+    if (key === '--expected-size-bytes') parsed.expectedSizeBytes = value;
+    if (key === '--license') parsed.license = value;
+    if (key === '--source-url') parsed.sourceUrl = value;
+    if (key.startsWith('--')) i++;
   }
+  return parsed;
 }
 
-// 1. Core Paths resolution
-const tmpDir = path.join(__dirname, '..', 'tmp_test_runs');
-if (!fs.existsSync(tmpDir)) {
-  fs.mkdirSync(tmpDir, { recursive: true });
+function printHeader() {
+  console.log('==========================================================');
+  console.log('      OPENSTEM REAL LOCAL CPU AI SEPARATION E2E PROOF      ');
+  console.log('==========================================================');
 }
 
-const inputTrack = customInput || path.join(tmpDir, 'test_ai_source.wav');
-const outputDir = customOutput || path.join(tmpDir, 'test_ai_output_stems');
-if (!fs.existsSync(outputDir)) {
-  fs.mkdirSync(outputDir, { recursive: true });
-}
-
-// Helper to find model folder
-function getModelLibraryPath() {
-  let userData = '';
-  if (process.platform === 'win32') {
-    userData = path.join(process.env.APPDATA || '', 'openstem-ai-audio-workstation');
-    if (!fs.existsSync(userData)) {
-      const oldPath = path.join(process.env.APPDATA || '', 'unofficial-uvr-stem-separator');
-      if (fs.existsSync(oldPath)) userData = oldPath;
-    }
-  } else if (process.platform === 'darwin') {
-    userData = path.join(os.homedir(), 'Library', 'Application Support', 'openstem-ai-audio-workstation');
-    if (!fs.existsSync(userData)) {
-      const oldPath = path.join(os.homedir(), 'Library', 'Application Support', 'unofficial-uvr-stem-separator');
-      if (fs.existsSync(oldPath)) userData = oldPath;
-    }
-  } else {
-    userData = path.join(os.homedir(), '.config', 'openstem-ai-audio-workstation');
-    if (!fs.existsSync(userData)) {
-      const oldPath = path.join(os.homedir(), '.config', 'unofficial-uvr-stem-separator');
-      if (fs.existsSync(oldPath)) userData = oldPath;
-    }
+function block(message, details = []) {
+  console.log('\nRESULT: BLOCKED');
+  console.log(`Reason: ${message}`);
+  for (const detail of details) {
+    console.log(`  - ${detail}`);
   }
-  return path.join(userData, 'uvr_models');
-}
-
-function findAnyLocalModelFile(libraryPath) {
-  if (!fs.existsSync(libraryPath)) return null;
-  const subdirs = ['VR', 'MDX_Net', 'MDX-Net', 'Demucs', 'RoFormer', 'MDXC', 'Custom', 'Ensemble'];
-  for (const sub of subdirs) {
-    const subPath = path.join(libraryPath, sub);
-    if (fs.existsSync(subPath)) {
-      const files = fs.readdirSync(subPath);
-      for (const f of files) {
-        if (f.endsWith('.onnx') || f.endsWith('.pth') || f.endsWith('.ckpt')) {
-          return {
-            name: f,
-            architecture: sub.replace('_', '-'),
-            filePath: path.join(subPath, f)
-          };
-        }
-      }
-    }
-  }
-  return null;
-}
-
-// 2. Diagnostics Pre-requisites Verified Directly
-console.log("\n[1/5] Running Core AI Dependency Checks...");
-
-// A. Check FFmpeg
-let ffmpegReady = false;
-try {
-  execSync('ffmpeg -version', { stdio: 'ignore' });
-  ffmpegReady = true;
-} catch (e) {}
-console.log(`  --> FFmpeg System Availability: ${ffmpegReady ? "PASSED (Installed)" : "FAILED"}`);
-
-// B. Check Python
-let pythonFound = false;
-let workingCmd = 'python';
-const cmds = [];
-if (customPython) {
-  cmds.push(customPython);
-}
-cmds.push('python', 'python3', 'py');
-
-for (const cmd of cmds) {
-  if (!cmd) continue;
-  try {
-    const execCmd = cmd.includes(' ') && !cmd.startsWith('"') ? `"${cmd}"` : cmd;
-    execSync(`${execCmd} --version`, { stdio: 'ignore' });
-    workingCmd = execCmd;
-    pythonFound = true;
-    break;
-  } catch (e) {}
-}
-console.log(`  --> Python Environment Resolver: ${pythonFound ? `PASSED (${workingCmd})` : "FAILED"}`);
-
-// C. Check PyTorch & audio-separator
-let torchInstalled = false;
-let audioSeparatorReady = false;
-if (pythonFound) {
-  try {
-    execSync(`${workingCmd} -c "import torch"`, { stdio: 'ignore' });
-    torchInstalled = true;
-  } catch (e) {}
-  try {
-    execSync(`${workingCmd} -c "import audio_separator"`, { stdio: 'ignore' });
-    audioSeparatorReady = true;
-  } catch (e) {}
-}
-console.log(`  --> PyTorch Neural Network Module: ${torchInstalled ? "PASSED (Ready)" : "FAILED"}`);
-console.log(`  --> audio-separator Package CLI: ${audioSeparatorReady ? "PASSED (Ready)" : "FAILED"}`);
-
-// D. Model disk verification
-let modelFilePath = null;
-let modelFileName = null;
-let modelArchitecture = "Unknown";
-let modelFileSize = "Unknown";
-
-if (customModel) {
-  if (fs.existsSync(customModel)) {
-    modelFilePath = customModel;
-    modelFileName = path.basename(customModel);
-    const stat = fs.statSync(customModel);
-    modelFileSize = `${(stat.size / (1024 * 1024)).toFixed(1)} MB`;
-    const parts = customModel.split(path.sep);
-    modelArchitecture = parts[parts.length - 2] || "MDX_Net";
-  }
-} else {
-  const libPath = getModelLibraryPath();
-  const discoveredModel = findAnyLocalModelFile(libPath);
-  console.log(`  --> Model Library Path: "${libPath}"`);
-  if (discoveredModel) {
-    modelFilePath = discoveredModel.filePath;
-    modelFileName = discoveredModel.name;
-    modelArchitecture = discoveredModel.architecture;
-    const stat = fs.statSync(discoveredModel.filePath);
-    modelFileSize = `${(stat.size / (1024 * 1024)).toFixed(1)} MB`;
-  }
-}
-
-if (modelFilePath) {
-  console.log(`  --> Selected Model File: "${modelFileName}" (${modelArchitecture})`);
-  console.log(`  --> Model File Path: "${modelFilePath}"`);
-  console.log(`  --> Model File Size: ${modelFileSize}`);
-} else {
-  console.log(`  --> Selected Model File status: MISSING (No model specified or found)`);
-}
-
-// 3. Evaluation Gate for real AI Execution
-const canRunAI = ffmpegReady && pythonFound && torchInstalled && audioSeparatorReady && modelFilePath;
-
-if (!canRunAI) {
-  console.log("\n[!] VERIFICATION CODES: BLOCKED");
-  console.log("  --> Missing pre-requisites for Real AI Separation Test.");
-  if (!ffmpegReady) console.log("      * Reason: FFmpeg binary is missing.");
-  if (!pythonFound) console.log("      * Reason: Python environment is missing.");
-  if (!torchInstalled) console.log("      * Reason: PyTorch module is missing.");
-  if (!audioSeparatorReady) console.log("      * Reason: audio-separator pack is missing.");
-  if (!modelFilePath) console.log("      * Reason: No model weight file is selected or downloaded.");
-  console.log("\nRESULT: BLOCKED - Real AI/model-based separation is not proven yet.");
-  console.log("==========================================================");
-  process.exit(2); // Exit with blocked status
-}
-
-// Validate execution device availability
-let finalRunDevice = 'cpu';
-if (pythonFound && torchInstalled) {
-  try {
-    const torchCheckCode = "import torch; cuda = torch.cuda.is_available() if hasattr(torch, 'cuda') else False; mps = torch.backends.mps.is_available() if hasattr(torch.backends, 'mps') else False; print(f'{cuda}|{mps}')";
-    const torchOutput = execSync(`${workingCmd} -c "${torchCheckCode}"`, { encoding: 'utf8', timeout: 5000 }).trim();
-    const parts = torchOutput.split('|');
-    const cudaAvailable = parts[0] === 'True';
-    const mpsAvailable = parts[1] === 'True';
-
-    if (customDevice === 'cuda') {
-      if (!cudaAvailable) {
-        console.error(`\n[!] VERIFICATION CODES: FAILED (CUDA requested but unavailable via PyTorch)`);
-        process.exit(1);
-      }
-      finalRunDevice = 'cuda';
-    } else if (customDevice === 'mps') {
-      if (!mpsAvailable) {
-        console.error(`\n[!] VERIFICATION CODES: FAILED (MPS requested but unavailable on this platform)`);
-        process.exit(1);
-      }
-      finalRunDevice = 'mps';
-    } else if (customDevice === 'dml' || customDevice === 'directml') {
-      finalRunDevice = 'dml';
-    } else if (customDevice === 'auto') {
-      if (cudaAvailable) {
-        finalRunDevice = 'cuda';
-      } else if (mpsAvailable) {
-        finalRunDevice = 'mps';
-      } else {
-        finalRunDevice = 'cpu';
-      }
-    } else {
-      finalRunDevice = 'cpu';
-    }
-  } catch (e) {
-    if (customDevice !== 'cpu' && customDevice !== 'auto') {
-      console.error(`\n[!] VERIFICATION CODES: FAILED (Error verifying hardware support: ${e.message})`);
-      process.exit(1);
-    }
-    finalRunDevice = 'cpu';
-  }
-}
-console.log(`  --> Mapped Execution Device: "${finalRunDevice}" (User option: "${customDevice}")`);
-
-// Validate input track
-if (customInput && !fs.existsSync(customInput)) {
-  console.error(`\n[!] VERIFICATION CODES: BLOCKED (Input audio file missing: "${customInput}")`);
+  console.log('==========================================================');
   process.exit(2);
 }
 
-// 4. Synthesize valid audio wav test target via FFmpeg (if not customInput)
-if (!customInput) {
-  console.log("\n[2/5] Synthesizing Real Audio Source Target...");
-  try {
-    execSync(`ffmpeg -f lavfi -i anullsrc=r=44100:cl=stereo -t 2 "${inputTrack}" -y`, { stdio: 'ignore' });
-    console.log(`  --> Generated test WAV file at: "${inputTrack}"`);
-  } catch (err) {
-    console.error("  --> FAILED: Cannot generate WAV input", err.message);
-    process.exit(1);
+function fail(message, result) {
+  console.log('\nRESULT: FAIL');
+  console.log(`Reason: ${message}`);
+  if (result) {
+    console.log(JSON.stringify(result, null, 2));
   }
-} else {
-  console.log(`\n[2/5] Using Custom Audio Source Target: "${inputTrack}"`);
+  console.log('==========================================================');
+  process.exit(1);
 }
 
-// 5. Spawn real audio-separator CLI command process
-console.log("\n[3/5] Starting Real AI Subprocess Execution...");
-for (const f of fs.readdirSync(outputDir)) {
-  try { fs.unlinkSync(path.join(outputDir, f)); } catch (e) {}
+function requireExistingFile(label, filePath) {
+  if (!filePath) block(`${label} path is required.`);
+  const resolved = path.resolve(filePath);
+  if (!fs.existsSync(resolved)) block(`${label} path does not exist.`, [resolved]);
+  if (!fs.statSync(resolved).isFile()) block(`${label} path is not a file.`, [resolved]);
+  return resolved;
 }
-const filesBefore = new Set(fs.readdirSync(outputDir));
 
-const cliArgs = [
-  '-m', 'audio_separator.cli',
-  inputTrack,
-  '--model_filename', modelFilePath,
-  '--output_dir', outputDir,
-  '--device', finalRunDevice
-];
+function requireExistingDirectory(label, folderPath) {
+  if (!folderPath) block(`${label} path is required.`);
+  const resolved = path.resolve(folderPath);
+  if (!fs.existsSync(resolved)) block(`${label} folder does not exist.`, [resolved]);
+  if (!fs.statSync(resolved).isDirectory()) block(`${label} path is not a directory.`, [resolved]);
+  const folderCheck = aiSeparation.verifyOutputFolder(resolved);
+  if (!folderCheck.success) block(`${label} folder is not writable.`, [folderCheck.error || resolved]);
+  return resolved;
+}
 
-console.log(`  --> Spawning Process: ${workingCmd} ${cliArgs.join(' ')}`);
+async function main() {
+  printHeader();
+  const args = parseArgs(process.argv.slice(2));
 
-const child = spawn(workingCmd, cliArgs);
-
-child.stdout.on('data', (data) => {
-  console.log(`      [audio_separator-out] ${data.toString().trim()}`);
-});
-
-child.stderr.on('data', (data) => {
-  console.log(`      [audio_separator-err] ${data.toString().trim()}`);
-});
-
-child.on('close', (code) => {
-  console.log(`  --> Subprocess closed with exit code: ${code}`);
-  if (code !== 0) {
-    console.error(`\n[!] VERIFICATION CODES: FAILED (Exit Code ${code})`);
-    console.log("==========================================================");
-    process.exit(1);
+  if (args.device !== 'cpu') {
+    block('This task implements CPU AI proof only; CUDA/MPS/DirectML proof is not implemented.');
   }
 
-  // 6. Output Integrity Checks
-  console.log("\n[4/5] Scanning and Verifying Physical Output Stems on Disk...");
-  const filesAfter = fs.readdirSync(outputDir);
-  const newlyCreated = filesAfter.filter(f => !filesBefore.has(f)).map(f => path.join(outputDir, f));
+  const pythonPath = requireExistingFile('Python executable', args.python);
+  const modelPath = requireExistingFile('Model file', args.model);
+  const inputPath = requireExistingFile('Input audio', args.input);
+  const outputFolder = requireExistingDirectory('Output', args.output);
+  const expectedSha256 = args.expectedSha256 ? String(args.expectedSha256).trim().replace(/^sha256[:_]/i, '').toLowerCase() : null;
 
-  let verifiedStems = 0;
-  newlyCreated.forEach(filePath => {
-    const stat = fs.statSync(filePath);
-    console.log(`  --> Discovered Stems: "${path.basename(filePath)}" (${stat.size} bytes)`);
-    if (stat.size > 0) {
-      verifiedStems++;
+  if (!expectedSha256 || !/^[a-f0-9]{64}$/.test(expectedSha256)) {
+    block('Manual CPU proof requires --expected-sha256 with a valid SHA-256 value.', [
+      'Do not run CPU proof with an unverified model asset.',
+      'A local model with a hash mismatch or missing hash must not be used for proof.'
+    ]);
+  }
+
+  console.log('[1/4] Checking Python/backend requirements...');
+  const backendDetails = aiSeparation.checkBackendDetails(pythonPath);
+  const ffmpeg = aiSeparation.checkFFmpegReady();
+  console.log(`  Python: ${backendDetails.pythonFound ? `${backendDetails.pythonPath} (${backendDetails.pythonVersion})` : 'missing'}`);
+  console.log(`  audio-separator import: ${backendDetails.audioSeparatorInstalled ? 'ready' : 'missing'}`);
+  console.log(`  audio-separator CLI: ${backendDetails.audioSeparatorCliReady ? 'ready' : 'missing'}`);
+  console.log(`  PyTorch: ${backendDetails.torchInstalled ? backendDetails.torchVersion : 'missing'}`);
+  console.log(`  FFmpeg: ${ffmpeg.ready ? ffmpeg.version : 'missing'}`);
+
+  if (!backendDetails.canRunAISeparation || !ffmpeg.ready) {
+    const blockers = [
+      ...(backendDetails.blockers || []).map(blocker => `${blocker.id}: ${blocker.label}`),
+      ...(!ffmpeg.ready ? [`ffmpeg_missing: ${ffmpeg.error || 'ffmpeg -version failed'}`] : [])
+    ];
+    block('Backend requirements are missing.', blockers);
+  }
+
+  console.log('[2/4] Building CPU AI processing request...');
+  const request = {
+    inputs: [inputPath],
+    outputFolder,
+    format: 'WAV',
+    model: {
+      id: 'manual_e2e_model',
+      name: path.basename(modelPath),
+      architecture: path.basename(path.dirname(modelPath)) || 'Custom',
+      filePath: modelPath,
+      stemType: 'variable',
+      gpuSupport: false,
+      memoryRisk: 'high',
+      downloaded: true,
+      description: 'Manual E2E proof model',
+      fileSize: `${fs.statSync(modelPath).size} bytes`,
+      checksum: expectedSha256,
+      expectedSizeBytes: args.expectedSizeBytes ? Number(args.expectedSizeBytes) : undefined,
+      license: args.license || 'User-supplied verified source metadata',
+      sourceUrl: args.sourceUrl || undefined,
+      sourceType: 'manual_import',
+      requiredBackend: 'audio-separator'
+    },
+    verifiedModelLocalPath: modelPath,
+    method: {
+      id: 'manual_e2e_cpu_ai',
+      name: 'Manual CPU AI E2E',
+      category: 'Custom Models',
+      description: 'Manual CPU AI proof',
+      defaultModelId: 'manual_e2e_model'
+    },
+    processMethod: 'manual_e2e_cpu_ai',
+    userSelectedMode: 'ai',
+    selectedDevice: 'cpu',
+    customPythonPath: pythonPath,
+    parameters: {
+      chunks: '512',
+      noiseReduction: '0',
+      executionDevice: 'cpu',
+      cpuThreads: 2,
+      segmentSize: '256'
+    },
+    options: {
+      ttaActive: false,
+      postProcessActive: false,
+      vocalsOnly: false,
+      instrumentalOnly: false,
+      splitMode: false,
+      saveAllOutputs: true,
+      modelTestMode: false,
+      createFolderPerTrack: false
+    },
+    timestamp: new Date().toISOString()
+  };
+
+  console.log('[3/4] Running audio-separator CPU subprocess...');
+  const result = await aiSeparation.runCpuAiSeparation(request, {
+    allowExternalModelPath: true,
+    backendDetails,
+    ffmpeg,
+    onLog: (message) => console.log(`  ${message}`),
+    onProgress: (update) => {
+      if (update.log) console.log(`  ${update.log}`);
+      if (update.status && update.status !== 'running') console.log(`  [status] ${update.status}`);
     }
   });
 
-  if (verifiedStems > 0) {
-    console.log("\n[5/5] VERIFICATION CHECKS: PASSED");
-    console.log(`  --> Label: AI model separation output`);
-    console.log(`  --> Verified Stems Count: ${verifiedStems}`);
-    console.log("\n==========================================================");
-    console.log("RESULT: SUCCESS - Pure AI/model-based separation works!");
-    console.log("==========================================================");
+  console.log('[4/4] Verifying proof result...');
+  console.log(JSON.stringify(result, null, 2));
+
+  if (result.success && result.proofStatus === 'pass' && result.outputFiles.some(file => file.verified && file.sizeBytes > 0)) {
+    console.log('\nRESULT: PASS');
+    console.log('CPU AI proof passed with verified non-empty output stems.');
+    console.log('==========================================================');
     process.exit(0);
-  } else {
-    console.error("\n[5/5] VERIFICATION CHECKS: FAILED");
-    console.error("  --> No valid, non-empty output stems were created on disk.");
-    console.log("==========================================================");
-    process.exit(1);
   }
+
+  fail(result.error || 'CPU AI proof did not pass.', result);
+}
+
+main().catch((err) => {
+  fail(err.message || String(err));
 });

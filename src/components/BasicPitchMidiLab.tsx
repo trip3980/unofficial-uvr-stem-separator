@@ -98,11 +98,11 @@ export default function BasicPitchMidiLab() {
   const [preflightScanning, setPreflightScanning] = useState<boolean>(false);
   const [preflightData, setPreflightData] = useState<PreflightStatus | null>(null);
 
-  // Simulation fallback states
+  // Browser preview fallback states
   const [isElectronEnvironment, setIsElectronEnvironment] = useState<boolean>(false);
   const [logs, setLogs] = useState<string[]>([
     "[Basic Pitch MIDI Lab] Workspace initialized. Hardened Functional Alpha active.",
-    "Ready for dry-run check or midi generation subprocess spawning."
+    "Ready for preflight check. Native Electron is required for real MIDI file generation."
   ]);
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -141,10 +141,10 @@ export default function BasicPitchMidiLab() {
     }
 
     if (isElec) {
-      addLog("🟢 Desktop Electron native bridge found. Fully wired native execution is available.");
+      addLog("🟢 Native Electron bridge found. Basic Pitch subprocess execution is available.");
       // Auto run scan if possible
     } else {
-      addLog("⚠️ Browser Preview Mode. Subprocess execution bypassed; running sandbox simulations.");
+      addLog("⚠️ Browser Preview / Not runnable for local MIDI generation; sandbox preview only.");
     }
   }, []);
 
@@ -183,9 +183,9 @@ export default function BasicPitchMidiLab() {
     };
 
     if (!(window as any).uvr?.validateBasicPitchEnvironment) {
-      // High fidelity offline sandbox simulation
+      // Browser-only sandbox preview
       setPreflightScanning(true);
-      addLog("Running simulated offline preflight checks...");
+      addLog("Running browser-only MIDI preflight preview...");
       
       setTimeout(() => {
         const mock: PreflightStatus = {
@@ -216,8 +216,8 @@ export default function BasicPitchMidiLab() {
         setPreflightData(mock);
         setIsPreflightScanned(true);
         setPreflightScanning(false);
-        addLog(`🎉 Simulated dry-run preflight checklist compiled successfully. Status: ${mock.ok ? "PASS" : "BLOCKERS DETECTED"}`);
-        triggerToast("Simulated Preflight Verified.");
+        addLog(`🎉 Browser preflight preview compiled. Status: ${mock.ok ? "DRY_RUN_ONLY" : "BLOCKERS DETECTED"}`);
+        triggerToast("Browser preflight preview completed.");
       }, 8000);
       return;
     }
@@ -305,8 +305,8 @@ export default function BasicPitchMidiLab() {
     addLog(`[Subprocess] Initializing local transcription for: "${activeFile.name}" -> destination: "${outputDir}"`);
 
     if (!(window as any).uvr?.runBasicPitchTranscription) {
-      // High fidelity offline simulation
-      addLog("[Sandbox Engine] Running full sandbox audio-to-MIDI synthesis simulation...");
+      // Browser-only preview; no local MIDI/WAV/CSV files are written.
+      addLog("[Sandbox Preview] Rendering audio-to-MIDI result names only; no local files will be written.");
       const interval = setInterval(() => {
         setTranscriptionProgress((prev) => {
           if (prev >= 90) {
@@ -329,7 +329,7 @@ export default function BasicPitchMidiLab() {
         const csvOut = `${baseName}_basic_pitch_note_events.csv`;
 
         setFinalResults({
-          proofStatus: "PASS",
+          proofStatus: "DRY_RUN_ONLY",
           midiFiles: [midiOut],
           sonifiedFiles: saveSonifiedWav ? [sonifiedOut] : [],
           csvFiles: saveNoteEventsCsv ? [csvOut] : [],
@@ -347,8 +347,8 @@ export default function BasicPitchMidiLab() {
         // Mark file list as finished
         setInputFiles(prev => prev.map(f => ({ ...f, status: "Complete" })));
 
-        addLog("🎉 [Sandbox] Spotify Basic Pitch simulation transcription parsed successfully.");
-        triggerToast("🎉 Simulation Completed Successfully!");
+        addLog("🎉 [Sandbox Preview] Spotify Basic Pitch result preview completed; no local files were written.");
+        triggerToast("Browser preview completed - no local MIDI files were written.");
       }, 6000);
       return;
     }
@@ -756,7 +756,7 @@ export default function BasicPitchMidiLab() {
                     ))}
                   </div>
                   <p className="text-[10px] text-slate-500">
-                    Defines what happens when a MIDI or WAV target already exists down path.
+                    Defines what happens when a MIDI or WAV target already exists at the output path.
                   </p>
                 </div>
               </div>
@@ -992,17 +992,17 @@ export default function BasicPitchMidiLab() {
                   NATIVE RUNNER CONNECTED
                 </div>
                 <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
-                  Fully authorised to execute Basic Pitch CLI command subprocesses locally.
+                  Native Basic Pitch subprocess execution is available on this host.
                 </p>
               </div>
             ) : (
               <div className="p-3 bg-blue-950/20 border border-blue-500/20 text-blue-300 rounded-xl space-y-2">
                 <div className="flex items-center gap-1.5 font-bold font-mono text-[10px]">
                   <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-                  BROWSER PREVIEW virtualization
+                  BROWSER PREVIEW / NOT RUNNABLE
                 </div>
                 <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
-                  Actions will run mock Python synthesis. Connect native Electron executable to process local multi-stems.
+                  Actions show sandbox-only previews and do not create local MIDI files. Use native Electron to process local audio.
                 </p>
               </div>
             )}
@@ -1044,7 +1044,7 @@ export default function BasicPitchMidiLab() {
               {/* Checklist list items */}
               <div className="space-y-2 pt-2 border-t border-white/5">
                 <span className="text-[10px] font-mono text-slate-400 font-bold uppercase block tracking-wider mb-2">
-                  Preflight Proof Criteria
+                  MIDI Preflight Criteria
                 </span>
 
                 <div className="space-y-1.5 font-mono text-[10px]">
@@ -1128,7 +1128,7 @@ export default function BasicPitchMidiLab() {
                     {preflightData.ok ? "🎉 READY" : "⚠️ BLOCKED"}
                   </div>
                   {preflightData.ok ? (
-                    <p>All requirements verified and ready on machine. Preflight proof completed.</p>
+                    <p>Basic Pitch requirements checked on this machine. This does not count as UVR separation proof.</p>
                   ) : (
                     <ul className="list-disc pl-3 space-y-1 mt-1 text-[9px]">
                       {preflightData.blockers.map((b, idx) => (
@@ -1234,7 +1234,7 @@ export default function BasicPitchMidiLab() {
               <div className="bg-black/60 rounded-lg p-2 font-mono text-[9px] text-blue-300 select-all border border-white/5">
                 python -m pip install basic-pitch
               </div>
-              <p>This command downloads and bundles neural network models on first execution. Subsequent transcrips run instantly offline.</p>
+              <p>This command downloads and bundles neural network models on first execution. Subsequent transcriptions run offline.</p>
             </div>
           </div>
         </div>
@@ -1261,10 +1261,16 @@ export default function BasicPitchMidiLab() {
             </div>
           </div>
 
+          {!isElectronEnvironment && (
+            <div className="p-3 rounded-xl border border-amber-500/20 bg-amber-500/10 text-[10px] text-amber-200 font-mono">
+              Browser Preview / Not runnable: artifact names below are preview labels only. No local MIDI, WAV, CSV, or NPZ files were written.
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             <div className="space-y-3">
               <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest block">
-                Generated Artifacts list:
+                Output Artifact Names:
               </span>
 
               <div className="space-y-1.5 font-mono text-[10px]">

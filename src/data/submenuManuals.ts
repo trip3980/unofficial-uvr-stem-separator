@@ -38,7 +38,7 @@ export const submenuManuals: Record<string, ManualContent> = {
       { name: "FFmpeg DSP Fallback", desc: "Non-AI static DSP filtering. A lightweight fallback option when no AI backend is configured; not AI separation." }
     ],
     commonMistakes: [
-      "Expecting perfect separations: AI models isolate vocals with incredible accuracy, but heavy reverb, phase alignment, or noise can leave soft artifacts.",
+      "Expecting flawless separations: AI models can isolate vocals well, but heavy reverb, phase alignment, or noise can leave audible artifacts.",
       "Assuming a chosen GPU is active when local E2E proof has not passed. Check diagnostics logs.",
       "Treating FFmpeg static filtering as AI separation. FFmpeg filters cannot dynamically distinguish vocal formants from overlapping instrumentation."
     ],
@@ -210,7 +210,7 @@ export const submenuManuals: Record<string, ManualContent> = {
       { q: "Why do I need model weights?", a: "Weights are the brains of deep learning models. Without a weights file, the separation algorithm doesn't know how to reconstruct or classify stem frequencies." },
       { q: "Why does a model say Source Missing?", a: "Some models are custom or proprietary. They don't have configured public repository URLs and must be imported manually." },
       { q: "Why does a model say Manual Import Required?", a: "Indicates there is no automated download link mapped. You must acquire the file separately and import it." },
-      { q: "Why does a model say Hash Unavailable?", a: "This means the database hasn't registered a checksum for this specific model variant. You can still use it, but integrity is unverified." },
+      { q: "Why does a model say Hash Unavailable?", a: "This means the database has not registered a checksum for this model variant. The app can track the file, but it is not proof-eligible until expected SHA-256 metadata is supplied and matched." },
       { q: "Why does the model exist but not count as verified?", a: "An audio engine won't mark a model as fully verified until it passes a clean check, such as a matching SHA-256 hash or successful test execution." }
     ],
     limitations: [
@@ -316,7 +316,7 @@ export const submenuManuals: Record<string, ManualContent> = {
       "Review the Beta Candidate blocking criteria."
     ],
     settingsThatMatter: [
-      { name: "Hardened Functional Alpha State", desc: "The current state. Implies full visual and UI completeness with diagnostic fallbacks, awaiting certified local AI E2E execution tests." },
+      { name: "Hardened Functional Alpha State", desc: "The current state. Indicates broad UI and diagnostic coverage while verified local AI E2E proof remains blocked." },
       { name: "Beta Candidate Criteria", desc: "Requires real local AI model separation proof with a clean exit code 0 and non-empty AI-generated stems." },
       { name: "FFmpeg Fallback Ruling", desc: "Decrees that FFmpeg fallbacks are auxiliary utilities and do not count towards promoting the system to Beta." }
     ],
@@ -418,7 +418,7 @@ export const submenuManuals: Record<string, ManualContent> = {
       "This is audio-to-MIDI conversion only; it is NOT stem separation.",
       "This is a companion utility and is not designed to produce perfect sheet music or guitar tablature.",
       "Does not replace manual cleanup or human transcription for dense master mixes.",
-      "Safe desktop mode is required for real subprocess runs. Web sandbox will run high-fidelity MIDI simulations."
+      "Safe desktop mode is required for real subprocess runs. Web sandbox shows preview-only MIDI states and does not write local output files."
     ]
   }
 };

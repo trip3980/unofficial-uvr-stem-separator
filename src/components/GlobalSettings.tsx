@@ -573,7 +573,7 @@ export default function GlobalSettings() {
         triggerToast(`Error flushing files: ${e.message}`, "error");
       }
     } else {
-      triggerToast("Browser Preview Mode: All simulated process runtime temporary directories wiped clean!", "success");
+      triggerToast("Browser Preview Mode: cleanup preview only. Native Electron is required to delete temp files.", "info");
     }
     setModalType(null);
   };
@@ -592,7 +592,7 @@ export default function GlobalSettings() {
         triggerToast(`Error purging files: ${e.message}`, "error");
       }
     } else {
-      triggerToast("Browser Preview Mode: Purged corrupt partial download registers successfully.", "success");
+      triggerToast("Browser Preview Mode: failed-download cleanup preview only. Native Electron is required.", "info");
     }
     setModalType(null);
   };
@@ -611,7 +611,7 @@ export default function GlobalSettings() {
         triggerToast(`Error resetting weights: ${e.message}`, "error");
       }
     } else {
-      triggerToast("Browser Preview Mode: Model registry download verification flags cleared.", "success");
+      triggerToast("Browser Preview Mode: model cache reset preview only. Native Electron is required.", "info");
     }
     setModalType(null);
   };
@@ -677,7 +677,7 @@ export default function GlobalSettings() {
         } else {
           setImportFeedback({
             type: "success",
-            message: "Import mapping verified: strict clean settings schema matches perfectly! Ready to apply."
+            message: "Import mapping verified: strict clean settings schema passed. Ready to apply."
           });
         }
       } else {
@@ -1578,7 +1578,7 @@ export default function GlobalSettings() {
                         onChange={(e) => setState(prev => ({ ...prev, executionDevice: e.target.value as any }))}
                         className="w-full bg-black/65 border border-green-500/25 rounded-lg px-3 py-2 text-xs text-green-300 focus:outline-none"
                       >
-                        <option value="cpu">Basic Windows/Mac/Linux CPU (Certified Safe Fallback)</option>
+                        <option value="cpu">Basic Windows/Mac/Linux CPU (Conservative Fallback)</option>
                         <option value="cuda">NVIDIA CUDA GPU Accelerator (Supported / Requires custom host dependencies)</option>
                         <option value="mps">Apple Silicon MPS Accelerator (Supported / macOS Apple Silicon only)</option>
                         <option value="directml">DirectML GPU (Windows AMD/Intel/NVIDIA Accelerator)</option>
@@ -1924,7 +1924,7 @@ export default function GlobalSettings() {
                 </h3>
                 <p className="text-xs text-slate-400 mt-1.5 whitespace-normal break-words leading-relaxed">
                   {modalType === "reset" && "This process will flush all written local state preferences, cache flags, paths configuration, and parameters back to factory values immediately."}
-                  {modalType === "restore_safe" && "This action overrides the default settings back to a certified safe CPU execution boundary without auto weight downloads. This bypasses common third party execution issues."}
+                  {modalType === "restore_safe" && "This action restores conservative CPU defaults and disables automatic weight downloads. It reduces common third party execution issues without proving backend readiness."}
                   {modalType === "clear_temp" && "Are you sure you want to flush local cached temporary vocal and instrumental separator stems? This acts as a physical cleanup of isolated directories."}
                   {modalType === "clear_failed" && "Instantly cancels and purges incomplete or corrupted download segments from local registers."}
                   {modalType === "reset_cache" && "Cleans and resets any stored verification checksum states in the model registry cache."}

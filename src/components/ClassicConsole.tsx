@@ -53,6 +53,7 @@ import {
   validateState,
   getAdapterForModel,
 } from "../services/audioEngine";
+import { getModelProofEligibility } from "../services/modelProofEligibility";
 import {
   AppState,
   OutputFormat,
@@ -72,7 +73,7 @@ import {
  * - Strict interactive validations (Rule 8 & 9)
  * - Dependency checkbox overrides (Rule 10)
  * - Pre-flight filename projections (Rule 11)
- * - Abort controllers / SIGKILL simulated hooks (Rule 13)
+ * - Abort controllers / native cancellation hooks (Rule 13)
  * - Dynamic schemas inside Advanced settings drawers (Rule 18)
  * - Fork-specific technical inline reviews (Rule 19)
  */
@@ -180,6 +181,43 @@ interface PointerAnnotation {
   coords: { x: number; y: number };
 }
 
+function getLocalFileName(filePath: string): string {
+  return filePath.split(/[/\\]/).pop() || filePath;
+}
+
+function inferStemTypeFromPath(filePath: string): LoadedStem["stemType"] {
+  const lower = getLocalFileName(filePath).toLowerCase();
+  if (lower.includes("vocal")) return "vocals";
+  if (lower.includes("drum")) return "drums";
+  if (lower.includes("bass")) return "bass";
+  if (lower.includes("instrumental") || lower.includes("inst")) return "instrumental";
+  if (lower.includes("other")) return "other";
+  return "custom";
+}
+
+function normalizeVerifiedOutputFiles(outputFiles: any[]): LoadedStem[] {
+  return outputFiles
+    .filter((file) => file && file.verified === true && Number(file.sizeBytes) > 0 && typeof file.path === "string")
+    .map((file, index) => {
+      const name = getLocalFileName(file.path);
+      return {
+        id: `real-stem-${index}-${name}`,
+        name,
+        stemType: inferStemTypeFromPath(file.path),
+        filePath: file.path,
+        fileExists: true,
+        fileSizeBytes: Number(file.sizeBytes),
+        sourceModel: "Verified local AI output",
+        sourceEngine: "audio-separator CPU",
+        peakDataSource: "not_loaded",
+        isDemo: false,
+        canPlay: true,
+        canExport: true,
+        proofSource: "real_separation_output",
+      };
+    });
+}
+
 export default function ClassicConsole({
   selectedInputs,
   setSelectedInputs,
@@ -212,6 +250,7 @@ export default function ClassicConsole({
   const [showSetupGuide, setShowSetupGuide] = useState(false);
   const [showSystemNotes, setShowSystemNotes] = useState(false);
   const [realLoadedStems, setRealLoadedStems] = useState<LoadedStem[]>([]);
+  const [verifiedModelLocalPath, setVerifiedModelLocalPath] = useState<string>("");
   const [outputFolderVerifyStatus, setOutputFolderVerifyStatus] = useState<
     "not_selected" | "selected_not_verified" | "verified_writable" | "missing" | "not_writable" | "browser_preview"
   >("not_selected");
@@ -232,6 +271,7 @@ export default function ClassicConsole({
     pythonPath: string;
     pythonVersion: string;
     audioSeparatorInstalled: boolean;
+    audioSeparatorCliReady?: boolean;
     torchInstalled: boolean;
     torchVersion?: string;
     isCpuOnlyPytorch?: boolean;
@@ -437,6 +477,15 @@ export default function ClassicConsole({
     if (uvr && typeof uvr.onBackendProgress === "function") {
       unsubscribe = uvr.onBackendProgress((update: any) => {
         if (!update) return;
+
+        if (update.type === "log" && update.message) {
+          setSimulationLog((current) => [...current, update.message]);
+          setAppState((prev) => ({
+            ...prev,
+            consoleLogs: [update.message, ...prev.consoleLogs],
+          }));
+          return;
+        }
         
         if (update.type === "process") {
           const { progress, status, log, outputFiles, error } = update;
@@ -454,28 +503,46 @@ export default function ClassicConsole({
           }
           
           if (status === "completed") {
+            const verifiedStems = normalizeVerifiedOutputFiles(Array.isArray(outputFiles) ? outputFiles : []);
+            if (verifiedStems.length === 0) {
+              setIsSimulating(false);
+              setRealLoadedStems([]);
+              setAppState((prev) => ({
+                ...prev,
+                processingStatus: "error",
+                consoleLogs: [
+                  `[error] Backend reported completion without verified non-empty output stems.`,
+                  ...prev.consoleLogs,
+                ],
+              }));
+              setSimulationLog((current) => [
+                ...current,
+                `[error] Completion rejected: no verified non-empty AI output files were returned by backend.`,
+              ]);
+              return;
+            }
+
             setIsSimulating(false);
+            setSimProgress(100);
+            setRealLoadedStems(verifiedStems);
             setAppState((prev) => ({
               ...prev,
               processingStatus: "completed",
               progress: 100,
               consoleLogs: [
-                `[adapter] Real-time separation finished successfully! Output files created on disk.`,
-                `-- JOB SUCCESSFUL --`,
+                `[backend] CPU AI separation completed with ${verifiedStems.length} verified output stem(s).`,
                 ...prev.consoleLogs,
               ],
             }));
             
-            if (outputFiles && outputFiles.length > 0) {
-              setSimulationLog((current) => [
-                ...current,
-                `[filesystem] Output file confirmation success:`,
-                ...outputFiles.map((f) => `  ---> Stem saved: "${f}"`),
-                `-- JOB SUCCESSFUL --`,
-              ]);
-            }
-          } else if (status === "error") {
+            setSimulationLog((current) => [
+              ...current,
+              `[filesystem] Verified AI output files:`,
+              ...verifiedStems.map((stem) => `  ---> ${stem.filePath} (${stem.fileSizeBytes || 0} bytes)`),
+            ]);
+          } else if (status === "failed" || status === "error") {
             setIsSimulating(false);
+            setRealLoadedStems([]);
             setAppState((prev) => ({
               ...prev,
               processingStatus: "error",
@@ -490,6 +557,7 @@ export default function ClassicConsole({
             ]);
           } else if (status === "cancelled") {
             setIsSimulating(false);
+            setRealLoadedStems([]);
             setAppState((prev) => ({
               ...prev,
               processingStatus: "cancelled",
@@ -516,7 +584,7 @@ export default function ClassicConsole({
   const [conserveVram, setConserveVram] = useState(true);
   const [doubleQuotePaths, setDoubleQuotePaths] = useState(true);
 
-  // Model download simulation states
+  // Native quick-download UI state. Success is only set after native SHA-256 verification.
   const [modelRegistryState, setModelRegistryState] =
     useState<ModelRegistryEntry[]>(MODEL_REGISTRY);
   const [downloadingModelId, setDownloadingModelId] = useState<string | null>(
@@ -530,7 +598,7 @@ export default function ClassicConsole({
     return () => window.removeEventListener("modelRegistryChanged", handler);
   }, []);
 
-  // Interval memory reference to allow secure SIGKILL halting
+  // Interval memory reference for cancelling active UI progress state
   const activeIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sync state upward to parent props for compatibility representation (tabs context)
@@ -604,6 +672,34 @@ export default function ClassicConsole({
       modelRegistryState[0]
     );
   }, [appState.selectedModelId, modelRegistryState]);
+
+  const modelProofEligibility = useMemo(() => {
+    const installedStatuses = new Set([
+      "exists_hash_not_checked",
+      "hash_verified",
+      "hash_unavailable",
+      "hash_mismatch",
+    ]);
+    const verificationStatus =
+      modelFileStatus === "hash_verified"
+        ? "hash_verified"
+        : modelFileStatus === "hash_mismatch"
+          ? "hash_mismatch"
+          : modelFileStatus === "hash_unavailable"
+            ? "installed_hash_unavailable"
+            : modelFileStatus === "exists_hash_not_checked"
+              ? "installed_not_checked"
+              : modelFileStatus === "missing" || modelFileStatus === "download_needed"
+                ? "missing"
+                : modelFileStatus;
+
+    return getModelProofEligibility(activeModel, {
+      exists: installedStatuses.has(modelFileStatus) && !!verifiedModelLocalPath,
+      status: verificationStatus,
+      hashChecked: modelFileStatus === "hash_verified" || modelFileStatus === "hash_mismatch",
+      hashMatches: modelFileStatus === "hash_verified",
+    });
+  }, [activeModel, modelFileStatus, verifiedModelLocalPath]);
 
   // Map selected inputs with accurate metadata (Rule 24)
   const selectedInputFiles = useMemo(() => {
@@ -727,7 +823,8 @@ export default function ClassicConsole({
         fixLabel: "Please download or choose a valid model"
       });
     } else {
-      if (!activeModel.downloaded && modelFileStatus !== "hash_verified" && modelFileStatus !== "exists_hash_not_checked" && modelFileStatus !== "hash_unavailable") {
+      const installedLike = modelFileStatus === "hash_verified" || modelFileStatus === "exists_hash_not_checked" || modelFileStatus === "hash_unavailable" || modelFileStatus === "hash_mismatch";
+      if (!activeModel.downloaded && !installedLike) {
         list.push({
           id: "model_not_installed",
           label: "Selected model file not installed",
@@ -755,6 +852,14 @@ export default function ClassicConsole({
           severity: "required",
           source: "model",
           fixLabel: "Redownload or reimport the model file"
+        });
+      } else if (!modelProofEligibility.proofEligible) {
+        list.push({
+          id: "model_proof_not_eligible",
+          label: modelProofEligibility.displayMessage,
+          severity: "required",
+          source: "model",
+          fixLabel: "Use a model with verified source integrity and matching SHA-256"
         });
       }
     }
@@ -798,6 +903,15 @@ export default function ClassicConsole({
           fixLabel: "Run pip install audio-separator"
         });
       }
+      if (backendSpecs?.pythonFound && backendSpecs?.audioSeparatorInstalled && backendSpecs?.audioSeparatorCliReady === false) {
+        list.push({
+          id: "audio_separator_cli_missing",
+          label: "audio-separator CLI help could not be inspected",
+          severity: "required",
+          source: "backend",
+          fixLabel: "Repair or reinstall audio-separator in the selected Python environment"
+        });
+      }
       if (backendSpecs?.pythonFound && !backendSpecs?.torchInstalled) {
         list.push({
           id: "torch_missing",
@@ -811,6 +925,15 @@ export default function ClassicConsole({
 
     if (userSelectedMode === "ai" && isElectron) {
       const dev = appState.dropdownSettings.executionDevice;
+      if (dev !== "cpu") {
+        list.push({
+          id: "cpu_mode_required",
+          label: "CPU mode is required for the first local AI proof slice",
+          severity: "required",
+          source: "device",
+          fixLabel: "Switch execution device to CPU"
+        });
+      }
       if (dev === "cuda" && backendSpecs && !backendSpecs.cudaAvailable) {
         list.push({
           id: "cuda_missing",
@@ -849,15 +972,6 @@ export default function ClassicConsole({
       });
     }
 
-    if (modelFileStatus === "hash_unavailable") {
-      list.push({
-        id: "hash_unavailable",
-        label: "Model installed / hash unavailable",
-        severity: "warning",
-        source: "model"
-      });
-    }
-
     if (appState.dropdownSettings.executionDevice === "cpu" && backendSpecs?.cudaAvailable) {
       list.push({
         id: "gpu_unused",
@@ -869,9 +983,9 @@ export default function ClassicConsole({
 
     if (userSelectedMode === "ffmpeg") {
       list.push({
-        id: "ffmpeg_fallback_warn",
-        label: "FFmpeg fallback is non-AI: static DSP filters without deep neural separation",
-        severity: "warning",
+        id: "ffmpeg_fallback_blocked",
+        label: "FFmpeg fallback is non-AI and cannot satisfy CPU AI proof",
+        severity: "required",
         source: "mode"
       });
     }
@@ -886,7 +1000,7 @@ export default function ClassicConsole({
     }
 
     return list;
-  }, [appState.selectedInputs, appState.selectedOutputFolder, appState.checkboxSettings.sameAsInputFolder, appState.dropdownSettings.executionDevice, appState.processMethodId, selectedInputFiles, activeModel, ffmpegStatus, backendSpecs, userSelectedMode, outputFolderVerifyStatus, modelFileStatus]);
+  }, [appState.selectedInputs, appState.selectedOutputFolder, appState.checkboxSettings.sameAsInputFolder, appState.dropdownSettings.executionDevice, appState.processMethodId, selectedInputFiles, activeModel, ffmpegStatus, backendSpecs, userSelectedMode, outputFolderVerifyStatus, modelFileStatus, modelProofEligibility]);
 
   const requiredBlockers = useMemo(() => {
     return blockersAndWarnings.filter(item => item.severity === "required");
@@ -916,9 +1030,9 @@ export default function ClassicConsole({
 
     if (userSelectedMode === "ai") {
       return "ai_backend_ready" as const;
-    } else {
-      return "ffmpeg_fallback_ready" as const;
     }
+
+    return "ffmpeg_fallback_blocked" as const;
   }, [requiredBlockers, userSelectedMode]);
 
   // Dynamic model file verification hook (Rule 17)
@@ -936,20 +1050,63 @@ export default function ClassicConsole({
 
       if (!activeModel) {
         setModelFileStatus("missing");
+        setVerifiedModelLocalPath("");
         return;
       }
 
       const uvr = (window as any).uvr;
+      if (uvr && typeof uvr.verifyModelHash === "function") {
+        try {
+          const res = await uvr.verifyModelHash(activeModel);
+          if (res && res.exists) {
+            setVerifiedModelLocalPath(res.localPath || "");
+            setModelRegistryState((currentList) =>
+              currentList.map((m) =>
+                m.id === activeModel.id
+                  ? (m.downloaded && (!res.localPath || m.filePath === res.localPath)
+                    ? m
+                    : { ...m, downloaded: true, filePath: res.localPath || m.filePath })
+                  : m,
+              ),
+            );
+            if (res.status === "hash_verified") {
+              setModelFileStatus("hash_verified");
+            } else if (res.status === "installed_hash_unavailable") {
+              setModelFileStatus("hash_unavailable");
+            } else if (res.status === "hash_mismatch" || res.status === "size_mismatch") {
+              setModelFileStatus("hash_mismatch");
+            } else {
+              setModelFileStatus("exists_hash_not_checked");
+            }
+          } else {
+            setVerifiedModelLocalPath("");
+            if (activeModel.downloadUrl) {
+              setModelFileStatus("missing");
+            } else {
+              setModelFileStatus("manual_import_required");
+            }
+          }
+          return;
+        } catch (e) {
+          console.error("Failed to verify model hash:", e);
+          setVerifiedModelLocalPath("");
+          setModelFileStatus("not_checked");
+          return;
+        }
+      }
+
       if (uvr && typeof uvr.checkModelFileExists === "function") {
         try {
           const res = await uvr.checkModelFileExists(activeModel.architecture, activeModel.name);
           if (res && res.exists) {
+            setVerifiedModelLocalPath(res.absolutePath || "");
             if (activeModel.checksum) {
               setModelFileStatus("exists_hash_not_checked");
             } else {
               setModelFileStatus("hash_unavailable");
             }
           } else {
+            setVerifiedModelLocalPath("");
             if (activeModel.downloadUrl) {
               setModelFileStatus("missing");
             } else {
@@ -958,6 +1115,7 @@ export default function ClassicConsole({
           }
         } catch (e) {
           console.error("Failed to check model file existence:", e);
+          setVerifiedModelLocalPath("");
           setModelFileStatus("not_checked");
         }
       }
@@ -1036,7 +1194,10 @@ export default function ClassicConsole({
         : appState.selectedOutputFolder,
       format: appState.outputFormat,
       model: activeModel,
+      verifiedModelLocalPath,
       method: activeMethodOpt,
+      processMethod: activeMethodOpt.id,
+      selectedDevice: "cpu",
       customPythonPath: customPythonPath,
       parameters: appState.dropdownSettings,
       options: {
@@ -1057,6 +1218,7 @@ export default function ClassicConsole({
     appState.selectedOutputFolder,
     appState.processMethodId,
     activeModel,
+    verifiedModelLocalPath,
     appState.outputFormat,
     appState.checkboxSettings,
   ]);
@@ -1097,20 +1259,24 @@ export default function ClassicConsole({
       return;
     }
 
-    // Check if selected model is downloaded (Rule 17)
-    if (!activeModel.downloaded) {
+    const modelReadyForNativeRun = modelProofEligibility.proofEligible && modelFileStatus === "hash_verified";
+
+    // Check if selected model is verified on disk (Rule 17)
+    if (!modelReadyForNativeRun || !verifiedModelLocalPath) {
       setAppState((prev) => ({
         ...prev,
         processingStatus: "error",
         consoleLogs: [
-          `[preflight-diag] BLOCKED! Selected weight file "${activeModel.name}" is not downloaded to disk.`,
-          `[preflight-diag] Please navigate to the "Model Downloader" hub to download or manually import it.`,
+          `[preflight-diag] BLOCKED! Selected weight file "${activeModel.name}" is not verified on local disk.`,
+          `[preflight-diag] Proof gate: ${modelProofEligibility.displayMessage}`,
+          `[preflight-diag] Open Model Downloader to download, import, or repair this model before running AI separation.`,
           ...prev.consoleLogs,
         ],
       }));
       setSimulationLog([
-        `[error] BLOCKED: Model weights not found in local library folder.`,
-        `✖ Active model "${activeModel.name}" must be downloaded or sideloaded first.`,
+        `[error] BLOCKED: Model weights are not verified for local AI execution.`,
+        `Proof gate: ${modelProofEligibility.displayMessage}`,
+        `Active model "${activeModel.name}" status: ${modelFileStatus}.`,
       ]);
       return;
     }
@@ -1170,17 +1336,48 @@ export default function ClassicConsole({
         return;
       }
 
-      setModelFileStatus("hash_verified");
-      setSimulationLog((prevLog) => [
-        ...prevLog,
-        `[model_integrity] OK: Checked file existence of [${activeModel.name}] on local disk. Core dimensions validated.`,
-      ]);
+      try {
+        const specs = await uvr.checkBackendDetails(customPythonPath || undefined);
+        setBackendSpecs(specs);
+        if (!specs.canRunAISeparation) {
+          setBackendStatus("missing_env");
+          const nativeBlockers = Array.isArray(specs.blockers) && specs.blockers.length > 0
+            ? specs.blockers.map((b: any) => `${b.id}: ${b.label}`)
+            : ["Python, audio-separator CLI, or PyTorch is not ready."];
+          setAppState((prev) => ({
+            ...prev,
+            processingStatus: "error",
+            consoleLogs: [
+              `[backend_adapter] BLOCKED: Native AI backend is not ready.`,
+              ...nativeBlockers.map((b: string) => `  -> ${b}`),
+              ...prev.consoleLogs,
+            ],
+          }));
+          setSimulationLog((prevLog) => [
+            ...prevLog,
+            `[error] BLOCKED: Native AI backend is not ready.`,
+            ...nativeBlockers,
+          ]);
+          return;
+        }
+      } catch (e: any) {
+        setBackendStatus("missing_env");
+        setAppState((prev) => ({
+          ...prev,
+          processingStatus: "error",
+          consoleLogs: [
+            `[backend_adapter] FAILED checking backend details: ${e.message}`,
+            ...prev.consoleLogs,
+          ],
+        }));
+        return;
+      }
 
       setBackendStatus("ready");
       setSimulationLog((prevLog) => [
         ...prevLog,
-        `[backend_adapter] OK: Native environment ready. Spawning desktop worker process...`,
-        `[preflight] -- INTEGRITY GATES CLEARED --`,
+        `[model_integrity] OK: Native model path verified: ${verifiedModelLocalPath}`,
+        `[backend_adapter] OK: Python, audio-separator CLI, PyTorch, and FFmpeg checks passed for CPU AI mode.`,
         `[preflight] Opening execution confirmation dispatch.`,
       ]);
 
@@ -1188,80 +1385,19 @@ export default function ClassicConsole({
       return;
     }
 
-    // Standard web browser fallback simulation
-    // Build processing request object (Rule 4)
-    const activeMethodOpt =
-      PROCESS_METHODS.find((m) => m.id === appState.processMethodId) ||
-      PROCESS_METHODS[0];
-    const procRequest: ProcessingRequest = {
-      inputs: appState.selectedInputs,
-      outputFolder: appState.checkboxSettings.sameAsInputFolder
-        ? "(Same as Input)"
-        : appState.selectedOutputFolder,
-      format: appState.outputFormat,
-      model: activeModel,
-      method: activeMethodOpt,
-      userSelectedMode: userSelectedMode,
-      customPythonPath: customPythonPath,
-      parameters: appState.dropdownSettings,
-      options: {
-        ttaActive: appState.checkboxSettings.ttaActive,
-        postProcessActive: appState.checkboxSettings.postProcessActive,
-        vocalsOnly: appState.checkboxSettings.saveVocalsOnly,
-        instrumentalOnly: appState.checkboxSettings.saveInstrumentalOnly,
-        splitMode: appState.checkboxSettings.splitMode,
-        saveAllOutputs: appState.checkboxSettings.saveAllOutputs,
-        modelTestMode: appState.checkboxSettings.modelTestMode,
-      },
-      timestamp: new Date().toISOString(),
-    };
-
-    // Serialize request in terminal to satisfy Rule 4 ("UI only produces request object")
-    const serializedRequest = JSON.stringify(procRequest, null, 2);
-
     setAppState((prev) => ({
       ...prev,
-      processingStatus: "validating",
+      processingStatus: "error",
       consoleLogs: [
-        `[app-preflight] Formulated secure JSON job schema request.`,
-        `[audio_engine] Created serialized processing_request:`,
-        serializedRequest,
+        `[error] Browser Preview / Not runnable for native AI separation.`,
+        `[error] Use the Electron desktop build to run local Python/audio-separator jobs.`,
         ...prev.consoleLogs,
       ],
     }));
-
-    // Cascade simulation validation steps
     setSimulationLog([
-      `[diagnostics] Initializing preflight checklist...`,
-      `[diagnostics] Spawning platform integrity checks...`,
+      `[error] Browser Preview / Not runnable.`,
+      `[error] Native Electron bridge is required for CPU AI separation proof.`,
     ]);
-
-    setTimeout(() => {
-      setFfmpegStatus("ready");
-      setSimulationLog((prevLog) => [
-        ...prevLog,
-        `[ffmpeg] OK: Resolved static binary bin/ffmpeg.exe. Static codec support active.`,
-      ]);
-    }, 400);
-
-    setTimeout(() => {
-      setModelFileStatus("hash_verified");
-      setSimulationLog((prevLog) => [
-        ...prevLog,
-        `[model_integrity] OK: Checked SHA-256 integrity signature of [${activeModel.name}]. Matches registered hash.`,
-      ]);
-    }, 800);
-
-    setTimeout(() => {
-      setBackendStatus("ready");
-      setSimulationLog((prevLog) => [
-        ...prevLog,
-        `[backend_adapter] OK: Backend Python packages resolved in isolate.`,
-        `[preflight] -- INTEGRITY GATES CLEARED --`,
-        `[preflight] Opening execution confirmation dispatch.`,
-      ]);
-      setShowConfirmModal(true);
-    }, 1200);
   };
 
   // Dispatch CLI commands using backend adapters (Rule 6)
@@ -1270,6 +1406,23 @@ export default function ClassicConsole({
     setIsSimulating(true);
     setSimProgress(0);
 
+    if (!modelProofEligibility.proofEligible || modelFileStatus !== "hash_verified") {
+      setIsSimulating(false);
+      setAppState((prev) => ({
+        ...prev,
+        processingStatus: "error",
+        consoleLogs: [
+          `[preflight-diag] BLOCKED: ${modelProofEligibility.displayMessage}`,
+          ...prev.consoleLogs,
+        ],
+      }));
+      setSimulationLog([
+        `[error] BLOCKED: CPU AI proof requires a model with matching local SHA-256.`,
+        modelProofEligibility.displayMessage,
+      ]);
+      return;
+    }
+
     const activeMethodOpt =
       PROCESS_METHODS.find((m) => m.id === appState.processMethodId) ||
       PROCESS_METHODS[0];
@@ -1280,10 +1433,16 @@ export default function ClassicConsole({
         : appState.selectedOutputFolder,
       format: appState.outputFormat,
       model: activeModel,
+      verifiedModelLocalPath,
       method: activeMethodOpt,
+      processMethod: activeMethodOpt.id,
       userSelectedMode: userSelectedMode,
+      selectedDevice: "cpu",
       customPythonPath: customPythonPath,
-      parameters: appState.dropdownSettings,
+      parameters: {
+        ...appState.dropdownSettings,
+        executionDevice: "cpu",
+      },
       options: {
         ttaActive: appState.checkboxSettings.ttaActive,
         postProcessActive: appState.checkboxSettings.postProcessActive,
@@ -1363,7 +1522,7 @@ export default function ClassicConsole({
       consoleLogs: [
         `[error] Execution blocked! Native backend bridge is unavailable in the current environment.`,
         `[error] OpenStem AI Audio Workstation requires the native desktop container shell.`,
-        `[error] Interactive sandbox elements are restricted to preflight configuration and downloader simulation.`,
+        `[error] Interactive sandbox elements are restricted to preflight configuration. Model downloads require the native Model Manager bridge.`,
         ...prev.consoleLogs,
       ],
     }));
@@ -1374,10 +1533,15 @@ export default function ClassicConsole({
   };
 
   // --- 3. CONFIRMED PROCESSING SHUTDOWN SWITCHS (Rule 13) ---
-  const handleHaltJobConfirm = () => {
+  const handleHaltJobConfirm = async () => {
     const uvr = (window as any).uvr;
+    let haltResult: any = { ok: false, status: "error", error: "Native bridge unavailable." };
     if (uvr && typeof uvr.haltProcessing === "function") {
-      uvr.haltProcessing();
+      try {
+        haltResult = await uvr.haltProcessing();
+      } catch (e: any) {
+        haltResult = { ok: false, status: "error", error: e.message };
+      }
     }
 
     if (activeIntervalRef.current) {
@@ -1394,60 +1558,101 @@ export default function ClassicConsole({
       processingStatus: "cancelled",
       progress: 0,
       consoleLogs: [
-        `[halt] -- TERMINATE INSTRUCTION DISPATCHED --`,
-        `[halt] Sent SIGKILL stream to daemon subprocess worker. Thread PID killed.`,
-        `[filesystem] Ran automatic temp folder wipeout check to reclaim cached sectors.`,
+        `[halt] Native cancellation request status: ${haltResult.status}.`,
+        ...(haltResult.error ? [`[halt] Error: ${haltResult.error}`] : []),
         ...prev.consoleLogs,
       ],
     }));
 
     setSimulationLog((current) => [
       ...current,
-      `[halt] -- ABORTED PROCESS --`,
-      `[halt] SENT SIGKILL DISPATCH TO PROCESS BUFFER. Active subprocess terminated.`,
-      `[filesystem] Swept temporary chunk caches successfully.`,
+      `[halt] Native cancellation request status: ${haltResult.status}.`,
+      ...(haltResult.error ? [`[halt] Error: ${haltResult.error}`] : []),
     ]);
   };
 
-  // --- 4. DYNAMIC WEIGHT DOWNLOADING SIMULATION (Rule 17) ---
-  const handleTriggerModelDownload = (modelId: string) => {
-    setDownloadingModelId(modelId);
-    setDownloadProgress(0);
-
+  // --- 4. NATIVE WEIGHT DOWNLOAD BRIDGE (no simulated cache success) ---
+  const handleTriggerModelDownload = async (modelId: string) => {
     const targetModel = modelRegistryState.find((m) => m.id === modelId);
     if (!targetModel) return;
 
-    setSimulationLog((current) => [
-      ...current,
-      `[model_downloader] Queued download request for weight: "${targetModel.name}"`,
-      `[model_downloader] Target server: https://huggingface.co/models/uvr-community-extensions`,
+    const appendLogs = (logs: string[]) => {
+      setSimulationLog((current) => [...current, ...logs]);
+      setAppState((prev) => ({
+        ...prev,
+        consoleLogs: [...logs, ...prev.consoleLogs],
+      }));
+    };
+
+    if (targetModel.verifiedStatus !== "verified" || !targetModel.checksum) {
+      appendLogs([
+        `[model_downloader] Download blocked for "${targetModel.name}". Source integrity is not verified.`,
+        `[model_downloader] Open Model Manager to import with an expected SHA-256 or repair source metadata before downloading.`,
+      ]);
+      return;
+    }
+
+    if (!targetModel.downloadUrl) {
+      appendLogs([
+        `[model_downloader] Download blocked for "${targetModel.name}". No direct source URL is registered.`,
+      ]);
+      return;
+    }
+
+    const uvr = (window as any).uvr;
+    if (!uvr || typeof uvr.downloadModel !== "function" || typeof uvr.verifyModelHash !== "function") {
+      appendLogs([
+        `[model_downloader] Download blocked for "${targetModel.name}". Native Electron downloader/verifier is unavailable.`,
+        `[model_downloader] Browser Preview / Not runnable for model downloads or SHA-256 verification.`,
+      ]);
+      return;
+    }
+
+    setDownloadingModelId(modelId);
+    setDownloadProgress(0);
+    appendLogs([
+      `[model_downloader] Native download requested for "${targetModel.name}".`,
+      `[model_downloader] Source URL: ${targetModel.downloadUrl}`,
     ]);
 
-    let pct = 0;
-    const dlInterval = setInterval(() => {
-      pct += Math.floor(Math.random() * 15) + 12;
-      if (pct >= 100) {
-        clearInterval(dlInterval);
-
-        // Verified checksums matching integrity logic (Rule 11)
-        setTimeout(() => {
-          setModelRegistryState((currentList) =>
-            currentList.map((m) =>
-              m.id === modelId ? { ...m, downloaded: true } : m,
-            ),
-          );
-          setDownloadingModelId(null);
-          setSimulationLog((current) => [
-            ...current,
-            `[model_downloader] Completed download of "${targetModel.name}" (${targetModel.fileSize})`,
-            `[model_downloader] Verified integrity checksum: Valid SHA-256 signature calculated.`,
-            `[model_downloader] Model registered as local-available.`,
-          ]);
-        }, 600);
-      } else {
-        setDownloadProgress(pct);
+    try {
+      const res = await uvr.downloadModel(targetModel.id, targetModel.downloadUrl, targetModel.architecture, targetModel.name);
+      if (!res?.success) {
+        appendLogs([`[model_downloader] Download failed: ${res?.error || "Unknown downloader error."}`]);
+        return;
       }
-    }, 180);
+
+      setDownloadProgress(100);
+      const verification = await uvr.verifyModelHash({
+        ...targetModel,
+        filePath: res.absolutePath || targetModel.filePath,
+        downloaded: false,
+      });
+
+      if (verification?.status !== "hash_verified") {
+        appendLogs([
+          `[model_downloader] Downloaded file is not proof-eligible: ${verification?.status || "verification_failed"}.`,
+          `[model_downloader] Model remains unavailable for AI proof until SHA-256 verification passes.`,
+        ]);
+        return;
+      }
+
+      setModelRegistryState((currentList) =>
+        currentList.map((m) =>
+          m.id === modelId ? { ...m, downloaded: true, filePath: verification.localPath || res.absolutePath || m.filePath } : m,
+        ),
+      );
+      setModelFileStatus("hash_verified");
+      setVerifiedModelLocalPath(verification.localPath || res.absolutePath || "");
+      appendLogs([
+        `[model_downloader] Download complete for "${targetModel.name}".`,
+        `[model_downloader] SHA-256 verification passed through native integrity check.`,
+      ]);
+    } catch (e: any) {
+      appendLogs([`[model_downloader] Download error: ${e.message || "Unknown error."}`]);
+    } finally {
+      setDownloadingModelId(null);
+    }
   };
 
   const handleCustomAddInputTrack = async () => {
@@ -1476,7 +1681,7 @@ export default function ClassicConsole({
       }
     }
 
-    // Standard high-fidelity web browser real file browser fallback
+    // Standard browser file picker fallback
     try {
       const input = document.createElement("input");
       input.type = "file";
@@ -1834,7 +2039,7 @@ export default function ClassicConsole({
                           }
                         }
 
-                        // Standard high-fidelity web browser real folder picker fallback
+                        // Standard browser folder picker fallback
                         try {
                           const input = document.createElement("input");
                           input.type = "file";
@@ -2109,7 +2314,7 @@ export default function ClassicConsole({
                           ) : (
                             <>
                               <DownloadCloud className="w-3.5 h-3.5 mr-1" />
-                              Fetch Cache
+                              Verify / Download
                             </>
                           )}
                         </button>
@@ -2544,7 +2749,7 @@ export default function ClassicConsole({
                 const hasInputs = appState.selectedInputs && appState.selectedInputs.length > 0;
                 const hasOutput = appState.checkboxSettings.sameAsInputFolder || !!appState.selectedOutputFolder;
                 const hasModel = !!activeModel;
-                const isModelDownloaded = activeModel?.downloaded;
+                const isModelVerified = !!verifiedModelLocalPath && modelProofEligibility.proofEligible && modelFileStatus === "hash_verified";
                 const isModelSupported = ['VR', 'MDX-Net', 'Demucs', 'RoFormer', 'MDXC', 'Custom', 'Ensemble'].includes(activeModel?.architecture || '');
                 const isFFmpegReady = ffmpegStatus === "ready";
                 const hasAIEnvironment = !!(backendSpecs?.canRunAISeparation);
@@ -2555,7 +2760,7 @@ export default function ClassicConsole({
                 if (!hasModel) {
                   aiBlockers.push("No model selected");
                 } else {
-                  if (!isModelDownloaded) aiBlockers.push("Local weights file missing from device");
+                  if (!isModelVerified) aiBlockers.push(modelProofEligibility.displayMessage);
                   if (!isModelSupported) aiBlockers.push(`Selected model architecture (${activeModel?.architecture || 'Unknown'}) is not supported`);
                 }
                 if (!backendSpecs?.pythonFound) aiBlockers.push("Host Python interpreter environment is missing");
@@ -2578,20 +2783,15 @@ export default function ClassicConsole({
                   pipelineBadgeColorClasses = "bg-amber-500/10 text-amber-400 border border-amber-500/20";
                 } else if (userSelectedMode === "ai") {
                   if (computedPipelineMode === "ai_backend_ready") {
-                    pipelineStateBadgeLabel = "AI Ready";
+                    pipelineStateBadgeLabel = "Ready for Local Run";
                     pipelineBadgeColorClasses = "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 animate-pulse";
                   } else {
                     pipelineStateBadgeLabel = "Blocked — AI Requirements Unmet";
                     pipelineBadgeColorClasses = "bg-rose-500/10 text-rose-400 border border-rose-500/20";
                   }
                 } else if (userSelectedMode === "ffmpeg") {
-                  if (computedPipelineMode === "ffmpeg_fallback_ready") {
-                    pipelineStateBadgeLabel = "FFmpeg Fallback Ready";
-                    pipelineBadgeColorClasses = "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20";
-                  } else {
-                    pipelineStateBadgeLabel = "Blocked — FFmpeg Required";
-                    pipelineBadgeColorClasses = "bg-rose-500/10 text-rose-400 border border-rose-500/20";
-                  }
+                  pipelineStateBadgeLabel = "Blocked - Non-AI Mode";
+                  pipelineBadgeColorClasses = "bg-rose-500/10 text-rose-400 border border-rose-500/20";
                 }
 
                 return (
@@ -2601,7 +2801,7 @@ export default function ClassicConsole({
                       <div className="flex flex-wrap justify-between items-center gap-2 border-b border-white/5 pb-2.5">
                         <h5 className="text-[10px] font-mono font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 mt-0.5">
                           <Sliders className="w-4 h-4 text-purple-400" />
-                          Pipeline Mode Selection
+                          Run Mode & Readiness
                         </h5>
                         <div className="flex items-center gap-1.5">
                           <span className="text-[9px] text-slate-500 font-mono font-bold uppercase">Status:</span>
@@ -2628,17 +2828,17 @@ export default function ClassicConsole({
                               🧠 AI Model Backend
                             </span>
                             <span className={`text-[8px] font-mono font-extrabold uppercase px-1.5 py-0.5 rounded-md border
-                              ${hasAIEnvironment && isModelDownloaded
+                              ${hasAIEnvironment && isModelVerified
                                 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                                 : "bg-rose-500/10 text-rose-400 border-rose-500/20"
                               }`}
                             >
-                              {hasAIEnvironment && isModelDownloaded ? "Available" : "Blocked"}
+                              {hasAIEnvironment && isModelVerified ? "Available" : "Blocked"}
                             </span>
                           </div>
 
                           <p className={`text-[11px] leading-snug font-sans ${userSelectedMode === "ai" ? "text-slate-300" : "text-slate-500"}`}>
-                            Deep-learning separation leveraging high-performance audio-separator pipeline and verified offline trained weight binaries.
+                            Local audio-separator run using a proof-eligible model. Requires verified SHA-256, Python, PyTorch, FFmpeg, and non-empty output stems.
                           </p>
 
                           <div className={`space-y-1 text-[9px] font-mono pt-1.5 border-t ${userSelectedMode === "ai" ? "border-purple-500/10" : "border-white/5"}`}>
@@ -2647,8 +2847,8 @@ export default function ClassicConsole({
                               <span className={`flex items-center gap-1 ${hasAIEnvironment ? "text-emerald-400" : "text-slate-500"}`}>
                                 <span>{hasAIEnvironment ? "●" : "○"}</span> Python & Deps {hasAIEnvironment ? "✓" : "Missing"}
                               </span>
-                              <span className={`flex items-center gap-1 ${isModelDownloaded ? "text-emerald-400" : "text-slate-500"}`}>
-                                <span>{isModelDownloaded ? "●" : "○"}</span> Model File {isModelDownloaded ? "✓" : "Missing"}
+                              <span className={`flex items-center gap-1 ${isModelVerified ? "text-emerald-400" : "text-slate-500"}`}>
+                                <span>{isModelVerified ? "●" : "○"}</span> Model File {isModelVerified ? "Verified" : "Proof Blocked"}
                               </span>
                               <span className={`flex items-center gap-1 ${isFFmpegReady ? "text-emerald-400" : "text-slate-500"}`}>
                                 <span>{isFFmpegReady ? "●" : "○"}</span> FFmpeg {isFFmpegReady ? "✓" : "Missing"}
@@ -2656,14 +2856,14 @@ export default function ClassicConsole({
                             </div>
                           </div>
 
-                          {(!hasAIEnvironment || !isModelDownloaded || !isFFmpegReady) && (
+                          {(!hasAIEnvironment || !isModelVerified || !isFFmpegReady) && (
                             <div className="text-[9px] font-mono text-amber-400 leading-snug pt-1 px-2.5 py-1.5 rounded bg-amber-500/5 border border-amber-500/10 w-full mt-1.5 font-sans">
                               <strong className="text-amber-300 uppercase text-[8px] block tracking-wide font-mono mb-0.5">Blocker reason:</strong>
                               <span className="text-slate-400 leading-snug font-sans">
                                 {!hasAIEnvironment 
                                   ? "Host Python environment / audio-separator is missing." 
-                                  : !isModelDownloaded 
-                                    ? "Model weights are not present on local disk. Download model in Downloader." 
+                                  : !isModelVerified 
+                                    ? modelProofEligibility.displayMessage
                                     : "FFmpeg binary is not registered on system PATH."}
                               </span>
                             </div>
@@ -2917,12 +3117,12 @@ export default function ClassicConsole({
                               <div className="p-2.5 bg-black/40 rounded-lg border border-white/5 space-y-0.5">
                                 <div className="flex justify-between text-slate-500 text-[9px] font-bold uppercase">
                                   <span>Model File:</span>
-                                  <span className={isModelDownloaded ? "text-emerald-400 font-extrabold" : "text-rose-400"}>
-                                    {isModelDownloaded ? "Disk OK" : "Missing"}
+                                  <span className={isModelVerified ? "text-emerald-400 font-extrabold" : "text-rose-400"}>
+                                    {isModelVerified ? "Verified" : "Proof Blocked"}
                                   </span>
                                 </div>
                                 <div className="text-[10px] text-slate-200 truncate font-mono">
-                                  {isModelDownloaded ? `Weights: ${activeModel?.name}` : "Prerequisite model weights file missing on device."}
+                                  {isModelVerified ? `Weights: ${activeModel?.name}` : modelProofEligibility.displayMessage}
                                 </div>
                                 <div className="text-[8px] text-slate-500">
                                   Action if Missing: Download model weights in Downloader.
@@ -2976,9 +3176,9 @@ export default function ClassicConsole({
                                   <strong className="text-slate-105 font-bold">Ensure FFmpeg is available on process environments:</strong> Download ffmpeg binaries and declare bin paths inside environment PATH variables.
                                 </li>
                               )}
-                              {!isModelDownloaded && (
+                              {!isModelVerified && (
                                 <li>
-                                  <strong className="text-slate-105 font-bold">Download or sideload the selected model weights:</strong> Head to the Model Downloader section on the classic console to fetch weights binaries.
+                                  <strong className="text-slate-105 font-bold">Download or sideload verified model weights:</strong> Open Model Manager and use a model with verified source integrity and a matching local SHA-256.
                                 </li>
                               )}
                               <li>
@@ -3026,7 +3226,7 @@ export default function ClassicConsole({
                     content="Starts the audio separation processing using the defined configuration parameters."
                   >
                     {(() => {
-                      const isBlocked = computedPipelineMode !== "ai_backend_ready" && computedPipelineMode !== "ffmpeg_fallback_ready";
+                      const isBlocked = computedPipelineMode !== "ai_backend_ready";
                       return (
                         <motion.button
                           whileHover={isSimulating || isBlocked ? {} : { scale: 1.01 }}
@@ -3061,8 +3261,8 @@ export default function ClassicConsole({
                         </>
                       ) : (
                         <>
-                          <Play className="w-4 h-4 text-cyan-100 fill-current" />
-                          Run FFmpeg DSP Fallback
+                          <Lock className="w-4 h-4 text-slate-500" />
+                          CPU AI Proof Blocked
                         </>
                       )}
                         </motion.button>
@@ -3070,7 +3270,7 @@ export default function ClassicConsole({
                     })()}
                   </InteractiveTooltip>
 
-                  {/* secure SIGKILL emergency cancellation (Rule 13) */}
+                  {/* Native cancellation request (Rule 13) */}
                   <InteractiveTooltip
                     enabled={showTooltips}
                     position="top"
@@ -3124,7 +3324,7 @@ export default function ClassicConsole({
                     <div>
                       <div className="text-[9px] text-slate-500 uppercase font-bold">Checks Met</div>
                       <div className="text-sm font-bold text-emerald-400">
-                        {5 - requiredBlockers.filter(b => ["no_inputs", "inputs_not_verified", "output_missing", "output_not_exists", "output_not_writable", "output_browser_preview", "model_missing", "model_not_installed", "model_hash_mismatch", "ffmpeg_missing", "python_missing", "audio_separator_missing", "torch_missing"].includes(b.id)).length} / 5
+                        {5 - requiredBlockers.filter(b => ["no_inputs", "inputs_not_verified", "output_missing", "output_not_exists", "output_not_writable", "output_browser_preview", "model_missing", "model_not_installed", "model_hash_mismatch", "model_proof_not_eligible", "ffmpeg_missing", "python_missing", "audio_separator_missing", "torch_missing"].includes(b.id)).length} / 5
                       </div>
                     </div>
                     <div>
@@ -3190,17 +3390,19 @@ export default function ClassicConsole({
                         <span>{activeModel ? "●" : "○"}</span> Core Weights File
                       </span>
                       <span className={`text-[10px] 
-                        ${modelFileStatus === "hash_verified" || modelFileStatus === "exists_hash_not_checked" || modelFileStatus === "hash_unavailable"
+                        ${modelFileStatus === "hash_verified"
                           ? "text-emerald-400"
-                          : "text-rose-400"
+                          : modelFileStatus === "exists_hash_not_checked" || modelFileStatus === "hash_unavailable"
+                            ? "text-amber-400"
+                            : "text-rose-400"
                         }`}
                       >
                         {modelFileStatus === "hash_verified"
                           ? "installed & verified"
                           : modelFileStatus === "exists_hash_not_checked"
-                            ? "installed"
+                            ? "installed / proof blocked"
                             : modelFileStatus === "hash_unavailable"
-                              ? "installed (no checksum)"
+                              ? "hash unavailable / proof blocked"
                               : modelFileStatus === "hash_mismatch"
                                 ? "checksum mismatch"
                                 : "missing / uninstalled"}
@@ -3213,7 +3415,7 @@ export default function ClassicConsole({
                         <span>{ffmpegStatus === "ready" ? "●" : "○"}</span> Backend Dependencies
                       </span>
                       <span className={`text-[10px] 
-                        ${ffmpegStatus === "ready" && (userSelectedMode !== "ai" || backendSpecs?.canRunAISeparation)
+                        ${ffmpegStatus === "ready" && userSelectedMode === "ai" && backendSpecs?.canRunAISeparation
                           ? "text-emerald-400"
                           : "text-rose-400"
                         }`}
@@ -3221,7 +3423,7 @@ export default function ClassicConsole({
                         {ffmpegStatus !== "ready"
                           ? "ffmpeg missing"
                           : userSelectedMode === "ffmpeg"
-                            ? "ffmpeg dsp ready"
+                            ? "blocked: non-ai mode"
                             : backendSpecs?.canRunAISeparation
                               ? "python / torch ready"
                               : "python missing or unmet"}
@@ -3286,7 +3488,7 @@ export default function ClassicConsole({
                   {simulationLog.length === 0 ? (
                     <div className="space-y-4 py-3 font-sans text-xs text-green-500/60 leading-normal">
                       <div className="text-center italic text-green-500/40 font-mono text-[11px] pb-2 border-b border-green-500/10">
-                        Console ready. Waiting for execution. No runtime logs present in active memory.
+                        No run logs yet. Select input, output folder, backend, and verified model before starting local separation.
                       </div>
 
                       {blockedReason && (
@@ -3298,7 +3500,7 @@ export default function ClassicConsole({
                             Current Blocker: <span className="font-bold underline">{blockedReason}</span>
                           </div>
                           <p className="text-[9.5px] text-red-400/70 leading-snug">
-                            The terminal subprocess execution engine is paused until all systemic prerequisites are verified. Ensure audio tracks are selected and python dependencies are found.
+                            Local execution is paused until required setup is verified. Check the blockers above before starting a run.
                           </p>
                         </div>
                       )}
@@ -3460,8 +3662,8 @@ export default function ClassicConsole({
                     <span className="text-slate-400 uppercase font-bold text-[10px]">
                       Audio-Separator CLI
                     </span>
-                    <span className={`font-bold ${backendSpecs.audioSeparatorInstalled ? "text-emerald-400" : "text-slate-500"}`}>
-                      {backendSpecs.audioSeparatorInstalled ? "READY" : "NOT FOUND (FFmpeg fallback)"}
+                    <span className={`font-bold ${backendSpecs.audioSeparatorInstalled && backendSpecs.audioSeparatorCliReady !== false ? "text-emerald-400" : "text-slate-500"}`}>
+                      {backendSpecs.audioSeparatorInstalled && backendSpecs.audioSeparatorCliReady !== false ? "READY" : "NOT READY"}
                     </span>
                   </div>
 
@@ -3487,14 +3689,14 @@ export default function ClassicConsole({
                     <span className="text-slate-400 uppercase font-bold text-[10px]">
                       Active Subprocess
                     </span>
-                    <span className={`font-bold uppercase ${backendSpecs.canRunAISeparation ? "text-violet-400 animate-pulse font-extrabold" : "text-cyan-400"}`}>
-                      {backendSpecs.canRunAISeparation ? "AI Model (audio-separator)" : "FFmpeg DSP Fallback (Non-AI static DSP filtering)"}
+                    <span className={`font-bold uppercase ${backendSpecs.canRunAISeparation ? "text-violet-400 animate-pulse font-extrabold" : "text-amber-400"}`}>
+                      {backendSpecs.canRunAISeparation ? "AI Model (audio-separator)" : "AI Backend Blocked"}
                     </span>
                   </div>
 
                   {(() => {
                     const activeModel = modelRegistryState.find(m => m.id === appState.selectedModelId);
-                    const isModelVerified = activeModel && activeModel.verifiedStatus === "verified";
+                    const isModelVerified = !!activeModel && !!verifiedModelLocalPath && modelProofEligibility.proofEligible && modelFileStatus === "hash_verified";
                     return (
                       <div className="p-2.5 bg-black/40 rounded-lg border border-white/5 space-y-1">
                         <div className="flex items-center justify-between">
@@ -3502,7 +3704,7 @@ export default function ClassicConsole({
                             Model Validation Status
                           </span>
                           <span className={`font-bold uppercase ${isModelVerified ? "text-emerald-400" : "text-rose-400 animate-pulse"}`}>
-                            {activeModel ? (isModelVerified ? "VERIFIED" : activeModel.verifiedStatus.toUpperCase().replace("_", " ")) : "NO MODEL"}
+                            {activeModel ? (isModelVerified ? "VERIFIED" : "PROOF BLOCKED") : "NO MODEL"}
                           </span>
                         </div>
                         {activeModel && (
@@ -3510,7 +3712,7 @@ export default function ClassicConsole({
                             Model: <span className="text-slate-300 font-bold">{activeModel.id}</span>
                             {activeModel.verifiedStatus !== 'verified' && (
                               <span className="text-rose-400 block font-bold mt-0.5">
-                                ✖ Refused: safety verification check failed.
+                                Refused: {modelProofEligibility.displayMessage}
                               </span>
                             )}
                           </div>
@@ -3587,7 +3789,7 @@ export default function ClassicConsole({
                 <p>
                   To unlock deep-learning AI separation, verify Python 3.10+, PyTorch, and `audio-separator` are installed on your host OS.
                 </p>
-                <p className="font-mono text-[10px] text-slate-400 select-all p-1 bg-black/55 rounded border border-white/5">$ pip install audio-separator[gpu]</p>
+                <p className="font-mono text-[10px] text-slate-400 select-all p-1 bg-black/55 rounded border border-white/5">$ pip install audio-separator[cpu]</p>
               </div>
             )}
           </div>
@@ -3613,6 +3815,7 @@ export default function ClassicConsole({
             selectedCategory={appState.processMethodId}
             selectedModelName={activeModel.name}
             parameters={`Sizing: Chunks=${appState.dropdownSettings.chunks}, Precision=Float32, Method=${appState.processMethodId.toUpperCase()}`}
+            loadedStems={realLoadedStems}
           />
         </motion.div>
       )}
@@ -3762,7 +3965,7 @@ export default function ClassicConsole({
                                 `[model_downloader] Updated custom registry mappings fetch URL: "${customRepoUrl}"`,
                               ]);
                               alert(
-                                `Dynamic repository endpoint registered! Weights loaded successfully without restarting interface.`,
+                              `Dynamic repository endpoint recorded for reference only. Model weights are not loaded or verified until a native download/import and SHA-256 check succeeds.`,
                               );
                             }}
                             className="px-3.5 py-2 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 text-indigo-400 font-bold rounded-lg cursor-pointer"
@@ -3927,17 +4130,15 @@ export default function ClassicConsole({
                     </div>
 
                     <p className="text-xs text-slate-300 leading-relaxed font-sans">
-                      You are requesting to immediately terminate the background
-                      vocal remover engine thread execution. Subprocesses will
-                      receive a SIGKILL interrupt, halting channel splitting and
-                      flushing GPU core allocations.
+                      You are requesting cancellation of the active background
+                      vocal remover subprocess. The native bridge will report
+                      whether a process was active and whether cancellation was requested.
                     </p>
 
                     <div className="bg-black/35 p-3.5 rounded-lg border border-white/5 text-[11px] text-slate-400 leading-relaxed font-mono">
-                      ✖ Active Spun PID: <code>PID_8102 (audio-separator)</code>
-                      <br />✖ Temp Cache State:{" "}
-                      <code>C:\\Temp\\_split_cache*.tmp</code> (To sweep
-                      filesystem traces securely)
+                      Native response: <code>cancel_requested</code>,{" "}
+                      <code>cancelled</code>, <code>no_active_process</code>, or{" "}
+                      <code>error</code>.
                     </div>
 
                     <div className="flex gap-2.5 text-xs font-bold pt-2.5">
@@ -3951,7 +4152,7 @@ export default function ClassicConsole({
                         onClick={handleHaltJobConfirm}
                         className="flex-grow py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg transition-colors cursor-pointer"
                       >
-                        Yes, SIGKILL Thread
+                        Yes, Request Stop
                       </button>
                     </div>
                   </motion.div>

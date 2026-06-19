@@ -115,6 +115,31 @@ export default function BatchEncoder() {
 
   // Check FFmpeg availability on mount
   useEffect(() => {
+    const uvr = (window as any).uvr;
+    if (uvr?.checkFFmpegReady) {
+      uvr.checkFFmpegReady()
+        .then((data: any) => {
+          setFfmpegStateLoaded(true);
+          if (data.ready) {
+            setIsFfmpegAvailable(true);
+            setFfmpegStatus("ACTIVE / SYSTEM PATH");
+            setFfmpegPath("Verified by Electron native bridge");
+          } else {
+            setIsFfmpegAvailable(false);
+            setFfmpegStatus("FFMPEG MISSING");
+            setFfmpegPath("Not detected on host PATH by Electron native bridge.");
+          }
+        })
+        .catch((err: any) => {
+          console.warn("Electron FFmpeg check failed:", err);
+          setFfmpegStateLoaded(true);
+          setIsFfmpegAvailable(false);
+          setFfmpegStatus("FFMPEG CHECK FAILED");
+          setFfmpegPath(err?.message || "Native FFmpeg check failed.");
+        });
+      return;
+    }
+
     fetch("/api/batch-encoder/check-ffmpeg")
       .then((res) => {
         if (!res.ok) throw new Error("Network status invalid");
@@ -1010,7 +1035,7 @@ export default function BatchEncoder() {
 
         <div className="flex flex-col sm:flex-row gap-4 justify-between items-stretch sm:items-center">
           <p className="text-[10px] text-slate-500 max-w-xl leading-normal">
-            FFmpeg conversions represent traditional CPU-bound format translations. Batch conversions do not isolation stems or use neural machine learning.
+            FFmpeg conversions represent traditional CPU-bound format translations. Batch conversions do not isolate stems or use neural machine learning.
           </p>
 
           <button

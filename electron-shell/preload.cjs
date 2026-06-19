@@ -13,10 +13,15 @@ contextBridge.exposeInMainWorld('uvr', {
   
   // Real Local Model Manager APIs (Task 1 & 4)
   getModelLibraryPath: () => ipcRenderer.invoke('get-model-library-path'),
+  checkPackagedRuntime: () => ipcRenderer.invoke('check-packaged-runtime'),
   listLocalModelsCustom: () => ipcRenderer.invoke('list-local-models-custom'),
   checkModelFileExists: (architecture, fileName) => ipcRenderer.invoke('check-model-file-exists', architecture, fileName),
-  importModelFile: (architecture) => ipcRenderer.invoke('import-model-file', architecture),
+  importModelFile: (architecture, targetModel) => ipcRenderer.invoke('import-model-file', architecture, targetModel),
   downloadModel: (modelId, url, architecture, fileName) => ipcRenderer.invoke('download-model', modelId, url, architecture, fileName),
+  verifyModelHash: (modelOrArchitecture, fileName, checksum) => ipcRenderer.invoke('verify-model-hash', modelOrArchitecture, fileName, checksum),
+  deleteModelFile: (modelOrArchitecture, fileName) => ipcRenderer.invoke('delete-model-file', modelOrArchitecture, fileName),
+  purgeModel: (modelOrArchitecture, fileName) => ipcRenderer.invoke('delete-model-file', modelOrArchitecture, fileName),
+  purgeModelCache: () => ipcRenderer.invoke('purge-model-cache'),
   checkFFmpegReady: () => ipcRenderer.invoke('check-ffmpeg-ready'),
   checkBackendDetails: (customPythonPath) => ipcRenderer.invoke('check-backend-details', customPythonPath),
   selectPythonPath: () => ipcRenderer.invoke('select-python-path'),

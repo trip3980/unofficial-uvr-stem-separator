@@ -4,10 +4,21 @@ dist/
 dist-electron/
 release/
 coverage/
+out/
+installer/
+tmp_test_runs/
+OpenStemProofOutput/
+proof_output/
+proof_outputs/
 .DS_Store
 *.log
+logs/
 .env*
 !.env.example
+.venv*/
+.venv-ai/
+.venv-openstem/
+.openstem-backend/
 
 # Deep learning weights (Rule 1)
 *.pth

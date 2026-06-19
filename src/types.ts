@@ -29,11 +29,30 @@ export interface ModelRegistryEntry {
   sourceType?: "hugging_face_repo" | "hugging_face_space" | "github_release" | "github_raw" | "manual_import" | "unknown";
   sourceUrl?: string;
   checksum?: string;
+  expectedSizeBytes?: number;
   requiredBackend?: "python-pytorch" | "onnxruntime" | "audio-separator" | "cpu-dsp";
   supportedExtensions?: string[];
   verifiedStatus?: 'verified' | 'needs_verification' | 'unavailable' | 'broken_link' | 'missing_hash' | 'hash_mismatch' | 'unsupported_backend' | 'experimental';
   gpuSupportStatus?: "yes" | "no" | "unknown";
   updateAvailable?: boolean;
+}
+
+export type ModelProofEligibilityReason =
+  | "hash_verified"
+  | "missing_file"
+  | "hash_mismatch"
+  | "hash_missing"
+  | "source_missing"
+  | "broken_link"
+  | "unsupported_backend"
+  | "license_missing"
+  | "manual_import_required"
+  | "size_mismatch";
+
+export interface ModelProofEligibility {
+  proofEligible: boolean;
+  reason: ModelProofEligibilityReason;
+  displayMessage: string;
 }
 
 export interface ProcessMethod {
@@ -106,8 +125,11 @@ export interface ProcessingRequest {
   outputFolder: string;
   format: OutputFormat;
   model: ModelRegistryEntry;
+  verifiedModelLocalPath?: string;
   method: ProcessMethod;
+  processMethod?: string;
   userSelectedMode?: "ai" | "ffmpeg";
+  selectedDevice?: "cpu" | "cuda" | "directml" | "auto" | "mps" | "dml";
   customPythonPath?: string;
   parameters: {
     chunks: string;

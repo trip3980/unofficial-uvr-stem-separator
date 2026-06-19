@@ -9,6 +9,20 @@ interface StepItem {
   command: string;
 }
 
+interface RuntimeDiagnostic {
+  ok: boolean;
+  isPackaged: boolean;
+  appPath: string;
+  resourcesPath: string;
+  requiredFiles: Array<{
+    name: string;
+    path: string;
+    exists: boolean;
+    required: boolean;
+  }>;
+  missingRequiredFiles: string[];
+}
+
 const PROOF_SUBMISSION_TEMPLATE = `=== REAL LOCAL AI GATE PROOF SUBMISSION ===
 
 Final Result: [PASS / BLOCKED / FAIL]
@@ -93,6 +107,7 @@ ffmpeg -version
     command: `# Define proof paths first:
 $PYTHON_EXE_PATH = ".\\.venv-ai\\Scripts\\python.exe"
 $MODEL_FILE_PATH = "<MODEL_FILE_PATH>"
+$EXPECTED_SHA256 = "<EXPECTED_SHA256>"
 $INPUT_AUDIO_PATH = "<INPUT_AUDIO_PATH>"
 $OUTPUT_FOLDER_PATH = "<OUTPUT_FOLDER_PATH>"
 
@@ -106,10 +121,10 @@ New-Item -ItemType Directory -Force -Path "$OUTPUT_FOLDER_PATH"
 Test-Path "$OUTPUT_FOLDER_PATH"
 
 # 1. Run CPU E2E Proof (Recommended baseline proof - simplest local AI E2E proof path):
-node electron-shell/test-ai-e2e.cjs --python "$PYTHON_EXE_PATH" --model "$MODEL_FILE_PATH" --input "$INPUT_AUDIO_PATH" --output "$OUTPUT_FOLDER_PATH" --device cpu
+node electron-shell/test-ai-e2e.cjs --python "$PYTHON_EXE_PATH" --model "$MODEL_FILE_PATH" --expected-sha256 "$EXPECTED_SHA256" --input "$INPUT_AUDIO_PATH" --output "$OUTPUT_FOLDER_PATH" --device cpu
 
-# 2. Run CUDA E2E Proof (Optional CUDA path - CUDA is not locally proven until this CUDA E2E proof passes with real non-empty separated stems):
-node electron-shell/test-ai-e2e.cjs --python "$PYTHON_EXE_PATH" --model "$MODEL_FILE_PATH" --input "$INPUT_AUDIO_PATH" --output "$OUTPUT_FOLDER_PATH" --device cuda`
+# 2. CUDA proof placeholder only. test-ai-e2e.cjs currently implements CPU proof and blocks non-CPU devices:
+node electron-shell/test-ai-e2e.cjs --python "$PYTHON_EXE_PATH" --model "$MODEL_FILE_PATH" --expected-sha256 "$EXPECTED_SHA256" --input "$INPUT_AUDIO_PATH" --output "$OUTPUT_FOLDER_PATH" --device cuda`
   },
   {
     id: "win_interpret_proof",
@@ -180,6 +195,7 @@ python -c "import torch; print('Torch:', torch.__version__); print('MPS Availabl
     command: `# Define proof paths first:
 PYTHON_EXE_PATH="./.venv-ai/bin/python"
 MODEL_FILE_PATH="<MODEL_FILE_PATH>"
+EXPECTED_SHA256="<EXPECTED_SHA256>"
 INPUT_AUDIO_PATH="<INPUT_AUDIO_PATH>"
 OUTPUT_FOLDER_PATH="<OUTPUT_FOLDER_PATH>"
 
@@ -187,10 +203,10 @@ OUTPUT_FOLDER_PATH="<OUTPUT_FOLDER_PATH>"
 mkdir -p "$OUTPUT_FOLDER_PATH"
 
 # 1. Run CPU E2E Proof first (Recommended baseline proof - simplest local AI E2E proof path):
-node electron-shell/test-ai-e2e.cjs --python "$PYTHON_EXE_PATH" --model "$MODEL_FILE_PATH" --input "$INPUT_AUDIO_PATH" --output "$OUTPUT_FOLDER_PATH" --device cpu
+node electron-shell/test-ai-e2e.cjs --python "$PYTHON_EXE_PATH" --model "$MODEL_FILE_PATH" --expected-sha256 "$EXPECTED_SHA256" --input "$INPUT_AUDIO_PATH" --output "$OUTPUT_FOLDER_PATH" --device cpu
 
-# 2. Run MPS E2E Proof (Apple Silicon only; only proven if this command passes successfully - MPS is not locally proven until a real E2E run passes):
-node electron-shell/test-ai-e2e.cjs --python "$PYTHON_EXE_PATH" --model "$MODEL_FILE_PATH" --input "$INPUT_AUDIO_PATH" --output "$OUTPUT_FOLDER_PATH" --device mps`
+# 2. MPS proof placeholder only. test-ai-e2e.cjs currently implements CPU proof and blocks non-CPU devices:
+node electron-shell/test-ai-e2e.cjs --python "$PYTHON_EXE_PATH" --model "$MODEL_FILE_PATH" --expected-sha256 "$EXPECTED_SHA256" --input "$INPUT_AUDIO_PATH" --output "$OUTPUT_FOLDER_PATH" --device mps`
   },
   {
     id: "mac_interpret_proof",
@@ -270,6 +286,7 @@ python -c "import torch; print(torch.cuda.is_available()); print(torch.version.c
     command: `# Define proof paths first:
 PYTHON_EXE_PATH="./.venv-ai/bin/python"
 MODEL_FILE_PATH="<MODEL_FILE_PATH>"
+EXPECTED_SHA256="<EXPECTED_SHA256>"
 INPUT_AUDIO_PATH="<INPUT_AUDIO_PATH>"
 OUTPUT_FOLDER_PATH="<OUTPUT_FOLDER_PATH>"
 
@@ -277,10 +294,10 @@ OUTPUT_FOLDER_PATH="<OUTPUT_FOLDER_PATH>"
 mkdir -p "$OUTPUT_FOLDER_PATH"
 
 # 1. Run CPU E2E Proof first (Recommended baseline proof - simplest local AI E2E proof path):
-node electron-shell/test-ai-e2e.cjs --python "$PYTHON_EXE_PATH" --model "$MODEL_FILE_PATH" --input "$INPUT_AUDIO_PATH" --output "$OUTPUT_FOLDER_PATH" --device cpu
+node electron-shell/test-ai-e2e.cjs --python "$PYTHON_EXE_PATH" --model "$MODEL_FILE_PATH" --expected-sha256 "$EXPECTED_SHA256" --input "$INPUT_AUDIO_PATH" --output "$OUTPUT_FOLDER_PATH" --device cpu
 
-# 2. Run CUDA E2E Proof (Linux NVIDIA only; only proven if this command passes successfully - CUDA is not locally proven until this CUDA E2E proof passes with real non-empty separated stems):
-node electron-shell/test-ai-e2e.cjs --python "$PYTHON_EXE_PATH" --model "$MODEL_FILE_PATH" --input "$INPUT_AUDIO_PATH" --output "$OUTPUT_FOLDER_PATH" --device cuda`
+# 2. CUDA proof placeholder only. test-ai-e2e.cjs currently implements CPU proof and blocks non-CPU devices:
+node electron-shell/test-ai-e2e.cjs --python "$PYTHON_EXE_PATH" --model "$MODEL_FILE_PATH" --expected-sha256 "$EXPECTED_SHA256" --input "$INPUT_AUDIO_PATH" --output "$OUTPUT_FOLDER_PATH" --device cuda`
   },
   {
     id: "linux_interpret_proof",
@@ -307,6 +324,9 @@ export const HostSetupGuide: React.FC = () => {
   const [osTab, setOsTab] = useState<"win" | "mac" | "linux">("win");
   const [activeStepId, setActiveStepId] = useState<string>("win_verify_project");
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [runtimeDiagnostic, setRuntimeDiagnostic] = useState<RuntimeDiagnostic | null>(null);
+  const [runtimeDiagnosticError, setRuntimeDiagnosticError] = useState<string | null>(null);
+  const [runtimeChecking, setRuntimeChecking] = useState(false);
 
   const activeSteps = osTab === "win" 
     ? WINDOWS_STEPS 
@@ -344,6 +364,27 @@ export const HostSetupGuide: React.FC = () => {
     }
   }, []);
 
+  const handleCheckPackagedRuntime = useCallback(async () => {
+    const uvr = (window as any).uvr;
+    if (!uvr?.checkPackagedRuntime) {
+      setRuntimeDiagnostic(null);
+      setRuntimeDiagnosticError("Packaged runtime diagnostics require the Electron desktop bridge.");
+      return;
+    }
+
+    setRuntimeChecking(true);
+    setRuntimeDiagnosticError(null);
+    try {
+      const result = await uvr.checkPackagedRuntime();
+      setRuntimeDiagnostic(result);
+    } catch (err: any) {
+      setRuntimeDiagnostic(null);
+      setRuntimeDiagnosticError(err?.message || "Packaged runtime diagnostics failed.");
+    } finally {
+      setRuntimeChecking(false);
+    }
+  }, []);
+
   return (
     <div className="p-4 bg-[#0a0e17]/80 border border-slate-800/80 rounded-xl space-y-4 font-sans text-xs text-slate-300">
       {/* Title */}
@@ -369,8 +410,78 @@ export const HostSetupGuide: React.FC = () => {
           Prerequisites Verification Instructions
         </div>
         <p className="text-slate-400 text-[10.5px]">
-          By default, UVR operates locally by running local Python backend processes for AI model execution. This guide helps prepare a local environment. Setup alone does not prove the AI backend. Copy and paste instructions into your command terminal interface manually. Note: No automated scripts or hidden packages will alter your system global configurations unless run manually on your end.
+          By default, OpenStem operates locally by running local Python backend processes for AI model execution. This guide helps prepare a local environment. Setup alone does not prove the AI backend. Copy and paste instructions into your command terminal interface manually. Note: No automated scripts or hidden packages will alter your system global configurations unless run manually on your end.
         </p>
+      </div>
+
+      <div className="bg-slate-950/45 px-3 py-2.5 border border-white/5 rounded-xl text-[10.5px] text-slate-400 leading-relaxed space-y-2 font-sans">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <div className="font-mono text-[9px] uppercase tracking-widest text-cyan-300 font-bold">
+              Packaged Runtime Diagnostic
+            </div>
+            <p className="mt-1">
+              Checks packaged app resources, helper scripts, and Electron bridge files without claiming backend readiness.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleCheckPackagedRuntime}
+            disabled={runtimeChecking}
+            className="px-3 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/20 font-mono text-[9px] uppercase font-bold transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {runtimeChecking ? "Checking..." : "Run Runtime Check"}
+          </button>
+        </div>
+
+        {runtimeDiagnosticError && (
+          <div className="text-amber-300 font-mono text-[9.5px]">
+            {runtimeDiagnosticError}
+          </div>
+        )}
+
+        {runtimeDiagnostic && (
+          <div className={`rounded-lg border p-2 space-y-1.5 ${
+            runtimeDiagnostic.ok
+              ? "bg-emerald-950/20 border-emerald-500/15 text-emerald-300"
+              : "bg-red-950/20 border-red-500/15 text-red-300"
+          }`}>
+            <div className="font-mono text-[9px] uppercase font-bold">
+              {runtimeDiagnostic.ok ? "Runtime resources present" : "Runtime resources missing"}
+            </div>
+            <div className="text-slate-400 font-mono text-[9px] break-all">
+              Packaged: {String(runtimeDiagnostic.isPackaged)} | Resources: {runtimeDiagnostic.resourcesPath}
+            </div>
+            {runtimeDiagnostic.missingRequiredFiles.length > 0 && (
+              <ul className="list-disc pl-4 text-[9px] space-y-0.5">
+                {runtimeDiagnostic.missingRequiredFiles.map((missingPath) => (
+                  <li key={missingPath} className="break-all">{missingPath}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-amber-950/20 px-3 py-2.5 border border-amber-500/15 rounded-xl text-[10.5px] text-slate-400 leading-relaxed space-y-2 font-sans">
+        <div className="flex items-center gap-1.5 font-bold text-amber-200 uppercase tracking-wide text-[10px]">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+          Current Release Gate
+        </div>
+        <p>
+          Electron packages the OpenStem desktop shell and native bridge. Python, FFmpeg, PyTorch,
+          audio-separator, CUDA, model files, and verified AI proof remain runtime-managed unless a
+          separate bundling and license strategy is created.
+        </p>
+        <ul className="list-disc pl-4 space-y-1">
+          <li>Local CPU backend detection has passed for a project-local <code>.venv-openstem</code> runtime with Python 3.11.9, audio-separator, PyTorch 2.12.1+cpu, FFmpeg present, and CUDA false.</li>
+          <li>CPU AI proof is blocked until at least one model has verified source integrity and a matching local SHA-256.</li>
+          <li>A local model with a hash mismatch must not be used for proof, release claims, or verified status.</li>
+          <li>The local <code>UVR-MDX-NET-Inst_HQ_1.onnx</code> candidate remains blocked because its SHA-256 does not match the registry checksum.</li>
+          <li>A model source returning HTTP 401 must be treated as unavailable or requiring manual source correction. The <code>5_HP-Karaoke-UVR.pth</code> registry source is currently unavailable to this app path because the checked endpoint returned HTTP 401.</li>
+          <li>Manual import is valid only when the user supplies model source metadata and expected SHA-256 values that can be verified against the local file.</li>
+          <li>Browser Preview remains not runnable for native downloads, model verification, backend execution, or output proof.</li>
+        </ul>
       </div>
 
       {/* OS Target Tabs */}
@@ -510,7 +621,7 @@ export const HostSetupGuide: React.FC = () => {
             </div>
           </div>
           <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
-            <strong>Proof Boundary Statement:</strong> This guide outlines reference setup pathways. Simply running these commands manually does not verify host AI compliance within this applet context. AI proof strictly requires executing <code>test-ai-e2e.cjs</code> resulting in a successful <strong>PASS / exit code 0</strong> with files greater than 0 bytes written to disk. The <strong>Beta Candidate release state remains blocked</strong>.
+            <strong>Proof Boundary Statement:</strong> This guide outlines reference setup pathways. Simply running these commands manually does not verify host AI compliance within this applet context. AI proof strictly requires executing <code>test-ai-e2e.cjs</code> with <code>--expected-sha256</code>, a successful <strong>PASS / exit code 0</strong>, and files greater than 0 bytes written to disk. The <strong>Beta Candidate release state remains blocked</strong>.
           </p>
         </div>
 

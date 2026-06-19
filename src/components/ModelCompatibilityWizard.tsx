@@ -425,7 +425,7 @@ export const ModelCompatibilityWizard: React.FC = () => {
             </div>
           </div>
           <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
-            <strong>Proof Boundary Warning:</strong> This database is a reference guide only. It does not prove that any model, GPU, ONNX provider, or backend operates on this machine. Local proof requires a successful real E2E run with a real model, input audio, backend runtime, and non-empty output files. No model architecture is guaranteed to yield perfect separation without artifacts or bleeding.
+            <strong>Proof Boundary Warning:</strong> This database is a reference guide only. It does not prove that any model, GPU, ONNX provider, or backend operates on this machine. Local proof requires a successful real E2E run with a real model, input audio, backend runtime, and non-empty output files. No model architecture is guaranteed to yield artifact-free separation or zero bleeding.
           </p>
         </div>
 
@@ -456,4 +456,3 @@ export const ModelCompatibilityWizard: React.FC = () => {
     </div>
   );
 };
-

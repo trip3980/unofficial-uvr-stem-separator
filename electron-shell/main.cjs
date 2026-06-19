@@ -2,12 +2,30 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
-const http = require('http');
 const urlModule = require('url');
-const { spawn, execSync } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
+const {
+  ALLOWED_MODEL_EXTENSIONS,
+  computeSha256,
+  deleteModelFile,
+  getModelProofEligibility,
+  isPathInside,
+  normalizeExpectedSha256,
+  purgeModelCache,
+  verifyModelHash
+} = require('./model-integrity.cjs');
+const {
+  checkPackagedRuntime,
+  createMissingHelperScriptResult,
+  fileExists,
+  getNodeRunnerEnv,
+  resolveScriptFile
+} = require('./runtime-paths.cjs');
+const aiSeparation = require('./ai-separation.cjs');
 
 let mainWindow;
 let activeChildProcess = null;
+let activeCancellationRequested = false;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -92,7 +110,7 @@ function getModelLibraryPath() {
   }
 
   // Ensure all framework weight directory trees exist
-  ['VR', 'MDX-Net', 'Demucs', 'RoFormer', 'MDXC', 'Custom', 'Ensemble'].forEach(sub => {
+    ['VR', 'MDX-Net', 'MDX_Net', 'Demucs', 'RoFormer', 'MDXC', 'Custom', 'Ensemble'].forEach(sub => {
     const subPath = path.join(modelDir, sub);
     if (!fs.existsSync(subPath)) {
       fs.mkdirSync(subPath, { recursive: true });
@@ -137,18 +155,27 @@ function listLocalModels() {
 }
 
 // Redirect-following chunk-based HTTPS Downloader (No packages required)
-function downloadFile(fileUrl, outputPath, onProgress) {
+function downloadFile(fileUrl, outputPath, onProgress, redirectCount = 0) {
   return new Promise((resolve, reject) => {
+    if (redirectCount > 5) {
+      reject(new Error('Download aborted after too many redirects.'));
+      return;
+    }
+
     function startDownload(currentUrl) {
       try {
-        const parsedUrl = urlModule.parse(currentUrl);
-        const protocolClient = parsedUrl.protocol === 'https:' ? https : http;
+        const parsedUrl = new URL(currentUrl);
+        if (parsedUrl.protocol !== 'https:') {
+          reject(new Error('Model downloads require an HTTPS source URL.'));
+          return;
+        }
+        const protocolClient = https;
 
         const request = protocolClient.get(currentUrl, (response) => {
           // Handle HTTP redirect codes (e.g. Hugging Face CDN redirection)
           if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
             const redirectUrl = urlModule.resolve(currentUrl, response.headers.location);
-            startDownload(redirectUrl);
+            downloadFile(redirectUrl, outputPath, onProgress, redirectCount + 1).then(resolve, reject);
             return;
           }
 
@@ -212,109 +239,46 @@ function downloadFile(fileUrl, outputPath, onProgress) {
 
 // Check if FFmpeg is installed and ready in host PATH
 function checkFFmpegReady() {
-  try {
-    // Check using standard CLI version indicators
-    const versionOutput = execSync('ffmpeg -version', { encoding: 'utf8', timeout: 3000 });
-    return versionOutput.toLowerCase().includes('ffmpeg version') || versionOutput.length > 0;
-  } catch (error) {
-    return false;
-  }
+  return aiSeparation.checkFFmpegReady();
 }
 
 // Check Python, audio-separator, PyTorch and hardware accelerators
 function checkBackendDetails(customPythonPath) {
-  const result = {
-    pythonFound: false,
-    pythonPath: '',
-    pythonVersion: 'None',
-    audioSeparatorInstalled: false,
-    torchInstalled: false,
-    torchVersion: 'None',
-    isCpuOnlyPytorch: true,
-    cudaAvailable: false,
-    cudaVersion: 'None',
-    cudaDeviceCount: 0,
-    gpuDeviceName: 'None',
-    totalVramBytes: 0,
-    vramDisplay: 'None',
-    mpsAvailable: false,
-    ffmpegReady: false,
-    canRunAISeparation: false
-  };
+  return aiSeparation.checkBackendDetails(customPythonPath);
+}
 
-  const commandsToTry = [];
-  if (customPythonPath) {
-    commandsToTry.push(customPythonPath);
+function getRuntimeNodeRunnerEnv() {
+  return getNodeRunnerEnv({}, {
+    isPackaged: app.isPackaged,
+    appRoot: app.getAppPath(),
+    resourcesPath: process.resourcesPath
+  });
+}
+
+function getHelperScriptOrMissing(filename) {
+  const helperPath = resolveScriptFile(filename, {
+    isPackaged: app.isPackaged,
+    appRoot: app.getAppPath(),
+    resourcesPath: process.resourcesPath
+  });
+  if (!fileExists(helperPath)) {
+    return createMissingHelperScriptResult(helperPath);
   }
-  commandsToTry.push('python', 'python3', 'py');
+  return { ok: true, path: helperPath };
+}
 
-  let workingCmd = null;
+function runNodeRunnerSync(args, timeout) {
+  return execFileSync(process.execPath, args, {
+    encoding: 'utf8',
+    timeout,
+    env: getRuntimeNodeRunnerEnv()
+  });
+}
 
-  for (const cmd of commandsToTry) {
-    if (!cmd) continue;
-    try {
-      const execCmd = cmd.includes(' ') && !cmd.startsWith('"') ? `"${cmd}"` : cmd;
-      const output = execSync(`${execCmd} --version`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2000 });
-      if (output && (output.toLowerCase().includes('python') || /^[0-9.]+/i.test(output.trim()))) {
-        workingCmd = execCmd;
-        result.pythonFound = true;
-        result.pythonPath = cmd;
-        result.pythonVersion = output.replace(/python/i, '').trim();
-        break;
-      }
-    } catch (e) {
-      // Continue to next command
-    }
-  }
-
-  // If we can execute Python, verify libraries
-  if (workingCmd) {
-    // 1. Check audio-separator module
-    try {
-      execSync(`${workingCmd} -c "import audio_separator"`, { stdio: 'ignore', timeout: 3000 });
-      result.audioSeparatorInstalled = true;
-    } catch (e) {
-      result.audioSeparatorInstalled = false;
-    }
-
-    // 2. Check PyTorch and CUDA/MPS status
-    try {
-      const torchCheckCode = "import torch, json; d = {'torchVersion': torch.__version__, 'isCpuOnlyPytorch': '+cpu' in torch.__version__, 'cudaAvailable': False, 'cudaVersion': 'None', 'cudaDeviceCount': 0, 'gpuDeviceName': 'None', 'totalVramBytes': 0, 'vramDisplay': 'None', 'mpsAvailable': False}; d['cudaAvailable'] = torch.cuda.is_available() if hasattr(torch, 'cuda') else False; d['mpsAvailable'] = torch.backends.mps.is_available() if hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') else False; d['isCpuOnlyPytorch'] = '+cpu' in d['torchVersion'] or not d['cudaAvailable']; d['cudaVersion'] = getattr(torch.version, 'cuda', 'Unknown') if d['cudaAvailable'] else 'None'; d['cudaDeviceCount'] = torch.cuda.device_count() if d['cudaAvailable'] else 0; d['gpuDeviceName'] = torch.cuda.get_device_name(0) if d['cudaAvailable'] else 'None'; d['totalVramBytes'] = torch.cuda.get_device_properties(0).total_memory if d['cudaAvailable'] else 0; d['vramDisplay'] = '{:.2f} GB'.format(d['totalVramBytes']/1073741824) if d['cudaAvailable'] else 'None'; print(json.dumps(d))";
-      const torchOutput = execSync(`${workingCmd} -c "${torchCheckCode}"`, { encoding: 'utf8', timeout: 5000 });
-      if (torchOutput) {
-        const details = JSON.parse(torchOutput.trim());
-        result.torchInstalled = true;
-        result.torchVersion = details.torchVersion || 'Unknown';
-        result.isCpuOnlyPytorch = details.isCpuOnlyPytorch;
-        result.cudaAvailable = details.cudaAvailable;
-        result.cudaVersion = details.cudaVersion;
-        result.cudaDeviceCount = details.cudaDeviceCount;
-        result.gpuDeviceName = details.gpuDeviceName;
-        result.totalVramBytes = details.totalVramBytes;
-        result.vramDisplay = details.vramDisplay;
-        result.mpsAvailable = details.mpsAvailable;
-      }
-    } catch (e) {
-      result.torchInstalled = false;
-      result.torchVersion = 'None';
-      result.isCpuOnlyPytorch = true;
-      result.cudaAvailable = false;
-      result.cudaVersion = 'None';
-      result.cudaDeviceCount = 0;
-      result.gpuDeviceName = 'None';
-      result.totalVramBytes = 0;
-      result.vramDisplay = 'None';
-      result.mpsAvailable = false;
-    }
-
-    // Is AI separation actually fully ready?
-    result.canRunAISeparation = result.audioSeparatorInstalled && result.torchInstalled;
-  }
-
-  // Check FFmpeg status
-  result.ffmpegReady = checkFFmpegReady();
-
-  return result;
+function spawnNodeRunner(args) {
+  return spawn(process.execPath, args, {
+    env: getRuntimeNodeRunnerEnv()
+  });
 }
 
 // --- IPC Handlers ---
@@ -326,6 +290,14 @@ ipcMain.handle('get-model-library-path', async () => {
 
 ipcMain.handle('list-local-models-custom', async () => {
   return listLocalModels();
+});
+
+ipcMain.handle('check-packaged-runtime', async () => {
+  return checkPackagedRuntime({
+    isPackaged: app.isPackaged,
+    appRoot: app.getAppPath(),
+    resourcesPath: process.resourcesPath
+  });
 });
 
 // Select input files with standard platform dialog
@@ -376,8 +348,47 @@ ipcMain.handle('check-model-file-exists', async (event, architecture, fileName) 
   return { exists: false };
 });
 
-// Import/sideload custom model file from local disk to model library
-ipcMain.handle('import-model-file', async (event, architecture) => {
+// Verify that a local model file exists and, when available, matches its expected SHA-256.
+ipcMain.handle('verify-model-hash', async (event, modelOrArchitecture, fileName, checksum) => {
+  const libraryPath = getModelLibraryPath();
+  return verifyModelHash(modelOrArchitecture, libraryPath, fileName, checksum);
+});
+
+// Delete one concrete model weights file only when it resolves inside the OpenStem model library.
+ipcMain.handle('delete-model-file', async (event, modelOrArchitecture, fileName) => {
+  const libraryPath = getModelLibraryPath();
+  const result = deleteModelFile(modelOrArchitecture, libraryPath, fileName);
+  if (result.deletedPaths.length > 0) {
+    console.log('[OpenStem Model Manager] Deleted model file(s):', result.deletedPaths);
+  }
+  if (result.skippedPaths.length > 0) {
+    console.log('[OpenStem Model Manager] Skipped model file delete target(s):', result.skippedPaths);
+  }
+  return result;
+});
+
+// Purge only approved model-manager cache artifacts, never model source or project folders.
+ipcMain.handle('purge-model-cache', async () => {
+  const libraryPath = getModelLibraryPath();
+  const result = purgeModelCache(libraryPath);
+  if (result.deletedPaths.length > 0) {
+    console.log('[OpenStem Model Manager] Purged model cache path(s):', result.deletedPaths);
+  }
+  if (result.skippedPaths.length > 0) {
+    console.log('[OpenStem Model Manager] Skipped model cache path(s):', result.skippedPaths);
+  }
+  return result;
+});
+
+function normalizeImportExpectedSize(model) {
+  const raw = model?.expected_size_bytes || model?.expectedSizeBytes || model?.sizeBytes;
+  if (raw === undefined || raw === null || raw === '') return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+// Import/sideload custom model file from local disk to model library after local integrity inspection.
+ipcMain.handle('import-model-file', async (event, architecture, targetModel) => {
   const result = await dialog.showOpenDialog({
     title: 'Select Local Model Weights File',
     properties: ['openFile'],
@@ -388,27 +399,116 @@ ipcMain.handle('import-model-file', async (event, architecture) => {
 
   if (result.filePaths && result.filePaths.length > 0) {
     const srcPath = result.filePaths[0];
-    const fileName = path.basename(srcPath);
+    const sourceFileName = path.basename(srcPath);
+    const importTarget = targetModel && typeof targetModel === 'object' ? targetModel : null;
+    const fileName = importTarget?.name || sourceFileName;
     const libraryPath = getModelLibraryPath();
-    const subFolder = architecture === 'MDX-Net' ? 'MDX_Net' : architecture;
+    const targetArchitecture = importTarget?.architecture || architecture;
+    const subFolder = targetArchitecture === 'MDX-Net' ? 'MDX_Net' : targetArchitecture;
     const destDir = path.join(libraryPath, subFolder);
-    
+    const destPath = path.resolve(path.join(destDir, fileName));
+
+    if (!isPathInside(libraryPath, destPath)) {
+      return { success: false, status: 'error', error: 'Import target resolved outside the approved OpenStem model library.' };
+    }
+
+    const stats = fs.statSync(srcPath);
+    if (!stats.isFile()) {
+      return { success: false, status: 'error', error: 'Selected import source is not a file.' };
+    }
+
+    const ext = path.extname(sourceFileName).toLowerCase();
+    if (!ALLOWED_MODEL_EXTENSIONS.has(ext)) {
+      return { success: false, status: 'error', error: `Unsupported model file extension "${ext}".` };
+    }
+
+    const expectedSha256 = normalizeExpectedSha256(importTarget || {});
+    const expectedSizeBytes = normalizeImportExpectedSize(importTarget);
+    const actualSha256 = computeSha256(srcPath);
+    const sizeMatches = expectedSizeBytes === null ? undefined : stats.size === expectedSizeBytes;
+
+    if (expectedSizeBytes !== null && !sizeMatches) {
+      return {
+        success: false,
+        ok: false,
+        exists: true,
+        status: 'size_mismatch',
+        name: fileName,
+        sourcePath: srcPath,
+        actualSha256,
+        fileSizeBytes: stats.size,
+        expectedSizeBytes,
+        error: 'Selected model size does not match the selected registry entry.'
+      };
+    }
+
+    if (expectedSha256 && actualSha256 !== expectedSha256) {
+      return {
+        success: false,
+        ok: false,
+        exists: true,
+        status: 'hash_mismatch',
+        name: fileName,
+        sourcePath: srcPath,
+        actualSha256,
+        expectedSha256,
+        fileSizeBytes: stats.size,
+        expectedSizeBytes: expectedSizeBytes === null ? undefined : expectedSizeBytes,
+        error: 'Selected model SHA-256 does not match the selected registry entry.'
+      };
+    }
+
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });
     }
 
-    const destPath = path.join(destDir, fileName);
-    
-    // Perform copy
+    if (fs.existsSync(destPath) && path.resolve(srcPath) !== destPath) {
+      const replace = await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        buttons: ['Cancel', 'Replace existing model'],
+        defaultId: 0,
+        cancelId: 0,
+        title: 'Replace existing model file?',
+        message: 'A model file already exists at the approved OpenStem model-library target.',
+        detail: destPath
+      });
+      if (replace.response !== 1) {
+        return { success: false, status: 'cancelled', message: 'Import cancelled before replacing existing model file.' };
+      }
+    }
+
     fs.copyFileSync(srcPath, destPath);
-    const stats = fs.statSync(destPath);
+    const copiedStats = fs.statSync(destPath);
+    const verification = verifyModelHash({
+      ...(importTarget || {}),
+      architecture: targetArchitecture,
+      name: fileName,
+      checksum: expectedSha256 || importTarget?.checksum,
+      local_path: destPath
+    }, libraryPath);
+    const proofEligibility = getModelProofEligibility({
+      ...(importTarget || {}),
+      architecture: targetArchitecture,
+      name: fileName,
+      checksum: expectedSha256 || importTarget?.checksum,
+      license: importTarget?.license || 'User-supplied / not verified',
+      sourceType: importTarget?.sourceType || 'manual_import',
+      requiredBackend: importTarget?.requiredBackend || 'audio-separator'
+    }, verification);
 
     return {
       success: true,
       name: fileName,
       absolutePath: destPath,
-      size: stats.size,
-      fileSize: `${(stats.size / (1024 * 1024)).toFixed(1)} MB`
+      sourcePath: srcPath,
+      size: copiedStats.size,
+      fileSize: `${(copiedStats.size / (1024 * 1024)).toFixed(1)} MB`,
+      actualSha256,
+      expectedSha256: expectedSha256 || undefined,
+      status: verification.status,
+      verification,
+      proofEligibility,
+      verified: proofEligibility.proofEligible
     };
   }
   return { success: false, message: 'Import cancelled.' };
@@ -419,13 +519,26 @@ ipcMain.handle('download-model', async (event, modelId, url, architecture, fileN
   if (!url) {
     return { success: false, error: "Download URL source is missing for this model index entry." };
   }
+  if (!fileName || typeof fileName !== 'string' || path.basename(fileName) !== fileName) {
+    return { success: false, error: "Download target filename is missing or unsafe." };
+  }
 
   const libraryPath = getModelLibraryPath();
   const subFolder = architecture === 'MDX-Net' ? 'MDX_Net' : architecture;
   const destDir = path.join(libraryPath, subFolder);
-  const destPath = path.join(destDir, fileName);
+  const destPath = path.resolve(path.join(destDir, fileName));
+  const ext = path.extname(fileName).toLowerCase();
+
+  if (!ALLOWED_MODEL_EXTENSIONS.has(ext)) {
+    return { success: false, error: `Download blocked for unsupported model file extension "${ext}".` };
+  }
+  if (!isPathInside(libraryPath, destPath)) {
+    return { success: false, error: "Download target resolved outside the approved OpenStem model library." };
+  }
 
   try {
+    fs.mkdirSync(destDir, { recursive: true });
+
     // Send initial log
     event.sender.send('backend-progress', {
       type: 'log',
@@ -482,7 +595,7 @@ ipcMain.handle('download-model', async (event, modelId, url, architecture, fileN
 
 // Check FFmpeg command status
 ipcMain.handle('check-ffmpeg-ready', async () => {
-  return { ready: checkFFmpegReady() };
+  return checkFFmpegReady();
 });
 
 // Check Python backend ready and dependency states
@@ -504,33 +617,12 @@ ipcMain.handle('select-python-path', async () => {
 
 // Verify output folder exists and is writable
 ipcMain.handle('verify-output-folder', async (event, folderPath) => {
-  if (!folderPath) return { success: false, status: 'missing' };
-  try {
-    if (!fs.existsSync(folderPath)) {
-      return { success: false, status: 'missing' };
-    }
-    const testFile = path.join(folderPath, '.write_test_' + Date.now());
-    fs.writeFileSync(testFile, 'test');
-    fs.unlinkSync(testFile);
-    return { success: true, status: 'writable' };
-  } catch (err) {
-    return { success: false, status: 'invalid', error: err.message };
-  }
+  return aiSeparation.verifyOutputFolder(folderPath);
 });
 
 // Verify custom python path behaves correctly
 ipcMain.handle('verify-python-path', async (event, pythonPath) => {
-  if (!pythonPath) return { success: false, status: 'system_default' };
-  try {
-    const execCmd = pythonPath.includes(' ') && !pythonPath.startsWith('"') ? `"${pythonPath}"` : pythonPath;
-    const output = execSync(`${execCmd} --version`, { encoding: 'utf8', timeout: 2000 });
-    if (output && (output.toLowerCase().includes('python') || /^[0-9.]+/i.test(output.trim()))) {
-      return { success: true, status: 'verified', version: output.trim() };
-    }
-    return { success: false, status: 'invalid' };
-  } catch (err) {
-    return { success: false, status: 'invalid', error: err.message };
-  }
+  return aiSeparation.verifyPythonPath(pythonPath);
 });
 
 // Clear temporary processed directories
@@ -578,6 +670,9 @@ ipcMain.handle('reset-weights-cache', async () => {
 // Real Local YuE Engine integration processes
 ipcMain.handle('validate-yue-environment', async (event, config) => {
   const { pythonPath, yueRoot, genreTxt, lyricsTxt, outputDir, deviceRequested, stage1Model, stage2Model } = config;
+  const helperCheck = getHelperScriptOrMissing('yue_probe.py');
+  if (!helperCheck.ok) return helperCheck;
+
   const runnerScript = path.join(__dirname, 'yue-probe.cjs');
   const args = [
     runnerScript,
@@ -593,8 +688,7 @@ ipcMain.handle('validate-yue-environment', async (event, config) => {
   ];
   
   try {
-    const runString = `node "${args.join('" "')}"`;
-    execSync(runString, { encoding: 'utf8', timeout: 10000 });
+    runNodeRunnerSync(args, 10000);
     const reportPath = path.join(outputDir || process.cwd(), 'yue_e2e_proof.json');
     if (fs.existsSync(reportPath)) {
       const data = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
@@ -613,6 +707,9 @@ ipcMain.handle('run-yue-generation', async (event, config) => {
     useAudioPrompt, audioPromptPath, useDualTracksPrompt, vocalTrackPromptPath, instrumentalTrackPromptPath,
     promptStartTime, promptEndTime
   } = config;
+
+  const helperCheck = getHelperScriptOrMissing('yue_probe.py');
+  if (!helperCheck.ok) return helperCheck;
 
   const runnerScript = path.join(__dirname, 'yue-probe.cjs');
   const cmdArgs = [
@@ -648,7 +745,7 @@ ipcMain.handle('run-yue-generation', async (event, config) => {
   event.sender.send('backend-progress', { type: 'log', message: '[yue-runner] Launching custom local YuE model generation script' });
 
   try {
-    const child = spawn('node', cmdArgs);
+    const child = spawnNodeRunner(cmdArgs);
     activeChildProcess = child;
 
     child.stdout.on('data', (data) => {
@@ -723,6 +820,9 @@ ipcMain.handle('validate-basic-pitch-environment', async (event, config) => {
     multiplePitchBends,
     midiTempo
   } = config;
+  const helperCheck = getHelperScriptOrMissing('basic_pitch_probe.py');
+  if (!helperCheck.ok) return helperCheck;
+
   const runnerScript = path.join(__dirname, 'basic-pitch-probe.cjs');
   const args = [
     runnerScript,
@@ -746,8 +846,7 @@ ipcMain.handle('validate-basic-pitch-environment', async (event, config) => {
   if (midiTempo) args.push('--midi-tempo', String(midiTempo));
   
   try {
-    const runString = `node "${args.join('" "')}"`;
-    execSync(runString, { encoding: 'utf8', timeout: 15000 });
+    runNodeRunnerSync(args, 15000);
     const reportPath = path.join(outputDir || process.cwd(), 'basic_pitch_e2e_proof.json');
     if (fs.existsSync(reportPath)) {
       const data = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
@@ -778,6 +877,9 @@ ipcMain.handle('run-basic-pitch-transcription', async (event, config) => {
     midiTempo
   } = config;
 
+  const helperCheck = getHelperScriptOrMissing('basic_pitch_probe.py');
+  if (!helperCheck.ok) return helperCheck;
+
   const runnerScript = path.join(__dirname, 'basic-pitch-probe.cjs');
   const args = [
     runnerScript,
@@ -803,7 +905,7 @@ ipcMain.handle('run-basic-pitch-transcription', async (event, config) => {
   event.sender.send('backend-progress', { type: 'log', message: '[basic-pitch-runner] Launching custom local Basic Pitch audio-to-MIDI transcription...' });
 
   try {
-    const child = spawn('node', args);
+    const child = spawnNodeRunner(args);
     activeChildProcess = child;
 
     child.stdout.on('data', (data) => {
@@ -885,291 +987,59 @@ ipcMain.handle('verify-audio-file', async (event, filePath) => {
   }
 });
 
-// Start processing - executes real separation pipeline using native processes (FFmpeg fallback or Python spawn)
+// Start processing - executes real CPU AI separation only. FFmpeg fallback is not proof eligible.
 ipcMain.handle('start-processing', async (event, config) => {
-  const { inputs, outputFolder, model, options, format, userSelectedMode, customPythonPath, parameters } = config;
-  event.sender.send('backend-progress', { type: 'log', message: '[backend] INITIATING REAL-TIME AUDIO PROCESSING PIPELINE' });
+  activeCancellationRequested = false;
+  event.sender.send('backend-progress', { type: 'log', message: '[backend] INITIATING REAL CPU AI SEPARATION PIPELINE' });
 
-  // 1. Check outputs folder
-  if (!outputFolder || !fs.existsSync(outputFolder)) {
-    event.sender.send('backend-progress', { type: 'log', message: `[backend] Error: Output folder path does not exist on disk: "${outputFolder}"` });
-    return { success: false, error: "Output directory path does not exist." };
-  }
-
-  // 2. Check input tracks are verified
-  if (!inputs || inputs.length === 0) {
-    event.sender.send('backend-progress', { type: 'log', message: '[backend] Error: Empty input file collection queue.' });
-    return { success: false, error: "No input files selected." };
-  }
-
-  for (const track of inputs) {
-    if (!fs.existsSync(track)) {
-      event.sender.send('backend-progress', { type: 'log', message: `[backend] Error: Input target audio track not found on disk: "${track}"` });
-      return { success: false, error: `Input track not found: ${path.basename(track)}` };
-    }
-  }
-
-  // 3. Confirm Model Weights exists inside library
-  const libraryPath = getModelLibraryPath();
-  const subFolder = model.architecture === 'MDX-Net' ? 'MDX_Net' : model.architecture;
-  const modelFileDisk = path.join(libraryPath, subFolder, model.name);
-  
-  if (!fs.existsSync(modelFileDisk)) {
-    event.sender.send('backend-progress', { type: 'log', message: `[backend] Error: Selected model weights file is missing on local disk. Please import or download it first. Expected: "${modelFileDisk}"` });
-    return { success: false, error: "Model file not found inside local model library." };
-  }
-
-  // 4. Validate FFmpeg
-  const ffmpegInstalled = checkFFmpegReady();
-  if (!ffmpegInstalled) {
-    event.sender.send('backend-progress', { type: 'log', message: '[backend] Error: FFmpeg is missing from your host computer system. Subprocess separation cannot proceed.' });
-    return { success: false, error: "FFmpeg is required and was not found in systemic PATH." };
-  }
-
-  event.sender.send('backend-progress', { type: 'log', message: '[backend] Verification gates passed: FFmpeg is installed, input targets found, model file verified.' });
-
-  // 5. Run Separation using actual Native Spawner
-  // If the user has python/audio-separator, we attempt to run it. Otherwise we execute a genuine high-fidelity FFmpeg spectral channel filter as a real local separation backend!
-  // This produces REAL split files to disk that are fully playable, making the app 100% honest and functional.
-  const backendDetails = checkBackendDetails(customPythonPath);
-  const pythonAvailable = backendDetails.canRunAISeparation;
-  const pythonExecutable = backendDetails.pythonPath || 'python';
-  const runAISeparation = pythonAvailable && (userSelectedMode !== 'ffmpeg');
-
-  try {
-    const allCreatedStems = [];
-    
-    for (const inputTrack of inputs) {
-      const fileName = path.basename(inputTrack);
-      const ext = path.extname(inputTrack);
-      const outputBaseName = path.basename(inputTrack, ext);
-
-      // Create folder per track option
-      let targetOutDir = outputFolder;
-      if (options.createFolderPerTrack) {
-        targetOutDir = path.join(outputFolder, `${outputBaseName}_Stems`);
-        if (!fs.existsSync(targetOutDir)) {
-          fs.mkdirSync(targetOutDir, { recursive: true });
-        }
+  const result = await aiSeparation.runCpuAiSeparation(
+    {
+      ...config,
+      selectedDevice: 'cpu',
+      parameters: {
+        ...(config?.parameters || {}),
+        executionDevice: 'cpu'
       }
-
-      event.sender.send('backend-progress', { type: 'log', message: `[backend] Processing: "${fileName}" -> Destination: "${targetOutDir}"` });
-
-      // Scan directory before to dynamically catch newly created files
-      const filesBefore = new Set(fs.existsSync(targetOutDir) ? fs.readdirSync(targetOutDir) : []);
-
-      if (runAISeparation) {
-        // True PyTorch CLI separation: clearly label as AI model separation output
-        event.sender.send('backend-progress', { type: 'log', message: '[backend-cli] AI model separation output. Launching python-based deep-learning model separation process...' });
-        
-        // 5b. Map and validate requested hardware execution devices
-        const devMode = parameters?.executionDevice || 'cpu';
-        let deviceArg = 'cpu';
-
-        if (devMode === 'cuda') {
-          if (!backendDetails.cudaAvailable) {
-            const blockError = "CUDA requested but unavailable. Click 'Auto' or switch to 'CPU' mode.";
-            event.sender.send('backend-progress', { type: 'log', message: `[backend-error] Critical Block: ${blockError}` });
-            return { success: false, error: blockError };
-          }
-          deviceArg = 'cuda';
-        } else if (devMode === 'mps') {
-          if (!backendDetails.mpsAvailable) {
-            const blockError = "Metal Performance Shaders (MPS) requested but unavailable on this platform.";
-            event.sender.send('backend-progress', { type: 'log', message: `[backend-error] Critical Block: ${blockError}` });
-            return { success: false, error: blockError };
-          }
-          deviceArg = 'mps';
-        } else if (devMode === 'dml' || devMode === 'directml') {
-          deviceArg = 'dml';
-        } else if (devMode === 'auto') {
-          if (backendDetails.cudaAvailable) {
-            deviceArg = 'cuda';
-          } else if (backendDetails.mpsAvailable) {
-            deviceArg = 'mps';
-          } else {
-            deviceArg = 'cpu';
-          }
-        } else {
-          deviceArg = 'cpu';
-        }
-
-        event.sender.send('backend-progress', { type: 'log', message: `[backend-cli] Mapped execution device parameter: "${deviceArg}" (Selector: "${devMode}")` });
-
-        // Spawn Python separation
-        const cmdArgs = [
-          '-m', 'audio_separator.cli',
-          inputTrack,
-          '--model_filename', modelFileDisk,
-          '--output_dir', targetOutDir,
-          '--output_format', format.toLowerCase(),
-          '--device', deviceArg
-        ];
-
-        // Append architecture specific CLI parameters safely
-        if (model.architecture === 'MDX-Net') {
-          const overlapVal = Number(parameters?.chunks) / 10;
-          cmdArgs.push('--mdx_overlap', String(overlapVal || 0.6));
-          if (options.postProcessActive) {
-            cmdArgs.push('--denoise', 'true');
-          }
-        } else if (model.architecture === 'RoFormer') {
-          cmdArgs.push('--mdx_segment_size', '256');
-          cmdArgs.push('--overlap', options.ttaActive ? '8' : '4');
-        } else if (model.architecture === 'VR') {
-          cmdArgs.push('--vr_window_size', String(parameters?.chunks || 512));
-        }
-        
-        event.sender.send('backend-progress', { type: 'log', message: `[backend-cli] CLI Command: ${pythonExecutable} ${cmdArgs.join(' ')}` });
-
-        const child = spawn(pythonExecutable, cmdArgs);
+    },
+    {
+      modelLibraryPath: getModelLibraryPath(),
+      allowExternalModelPath: false,
+      isCancellationRequested: () => activeCancellationRequested,
+      onChild: (child) => {
         activeChildProcess = child;
-        
-        child.stdout.on('data', (data) => {
-          event.sender.send('backend-progress', { type: 'log', message: `[cli-stdout] ${data.toString().trim()}` });
-        });
-
-        child.stderr.on('data', (data) => {
-          const logMsg = data.toString().trim();
-          // Detect device-specific and hardware runtime allocation failures
-          let errorTranslation = '';
-          if (logMsg.includes('OutOfMemoryError') || logMsg.includes('CUDA out of memory')) {
-            errorTranslation = ' [VRAM Peak Constraint Alert: NVIDIA CUDA ran out of memory. Try reducing chunk/segment sizes or enabling vram sweep mode.]';
-          } else if (logMsg.includes('CUDA driver version is insufficient')) {
-            errorTranslation = ' [Driver Incompatibility Alert: Selected CUDA version is incompatible with your system NVIDIA drivers.]';
-          } else if (logMsg.includes('DllNotFoundException') || logMsg.includes('cublas64') || logMsg.includes('cudart64')) {
-            errorTranslation = ' [Missing Dynamic Libraries Alert: CUDA runtime DLL files are missing from system PATH. Verify CUDA Toolkit is installed.]';
-          } else if (logMsg.includes('CPUExecutionProvider is not enabled') || (logMsg.includes('RuntimeException') && logMsg.includes('Provider'))) {
-            errorTranslation = ' [ONNX Runtime Provider Constraint Alert: Target execution provider is not loaded under ONNX Runtime.]';
-          }
-          
-          event.sender.send('backend-progress', { type: 'log', message: `[cli-stderr] ${logMsg}${errorTranslation}` });
-        });
-
-        await new Promise((resolve, reject) => {
-          child.on('close', (code) => {
-            activeChildProcess = null;
-            if (code === 0) resolve();
-            else reject(new Error(`Python separation exited with code ${code}`));
-          });
-        });
-
-      } else {
-        // High-Fidelity local FFmpeg-based active spectral/harmonic channel isolator (Honest fallback)
-        event.sender.send('backend-progress', { type: 'log', message: '[backend-ffmpeg] FFmpeg DSP fallback output. Activating local high-fidelity FFmpeg spectral separator fallback...' });
-
-        // Generate Vocals (Highpass spectral cutoff + boost center frequency bands)
-        const vStemFile = path.join(targetOutDir, `${outputBaseName}_(Vocals).${format.toLowerCase()}`);
-        event.sender.send('backend-progress', { type: 'log', message: `[backend-ffmpeg] Extracting vocal frequencies (Highpass 180Hz) to: "${path.basename(vStemFile)}"` });
-        
-        const ffmpegVocals = spawn('ffmpeg', [
-          '-y', '-i', inputTrack,
-          '-af', 'highpass=f=180,equalizer=f=1000:width_type=h:width=200:g=3',
-          vStemFile
-        ]);
-        activeChildProcess = ffmpegVocals;
-
-        await new Promise((resolve) => {
-          ffmpegVocals.on('close', () => {
-            activeChildProcess = null;
-            resolve();
-          });
-        });
-
-        // Generate Instrumentals (Lowpass spectral bandpass)
-        const iStemFile = path.join(targetOutDir, `${outputBaseName}_(Instrumental).${format.toLowerCase()}`);
-        event.sender.send('backend-progress', { type: 'log', message: `[backend-ffmpeg] Isolating instrumental frequencies (Lowpass 8000Hz) to: "${path.basename(iStemFile)}"` });
-
-        const ffmpegInstr = spawn('ffmpeg', [
-          '-y', '-i', inputTrack,
-          '-af', 'lowpass=f=8000,equalizer=f=250:width_type=h:width=100:g=4',
-          iStemFile
-        ]);
-        activeChildProcess = ffmpegInstr;
-
-        await new Promise((resolve) => {
-          ffmpegInstr.on('close', () => {
-            activeChildProcess = null;
-            resolve();
-          });
-        });
-      }
-
-      // Scan directory after to find the real output stems
-      const filesAfter = fs.existsSync(targetOutDir) ? fs.readdirSync(targetOutDir) : [];
-      const newlyCreated = filesAfter.filter(f => !filesBefore.has(f)).map(f => path.join(targetOutDir, f));
-      
-      const validStems = [];
-      for (const stem of newlyCreated) {
-        if (fs.existsSync(stem)) {
-          const stats = fs.statSync(stem);
-          if (stats.size > 0) {
-            validStems.push(stem);
-            event.sender.send('backend-progress', { type: 'log', message: `[backend] Verified output stem exists on disk: "${path.basename(stem)}" (${stats.size} bytes)` });
-          } else {
-            event.sender.send('backend-progress', { type: 'log', message: `[backend-error] Warning: Output stem is 0 bytes: "${path.basename(stem)}". Removing invalid file.` });
-            try { fs.unlinkSync(stem); } catch (e) {}
-          }
+      },
+      onChildExit: (child) => {
+        if (!child || activeChildProcess === child) {
+          activeChildProcess = null;
         }
+      },
+      onLog: (message) => {
+        event.sender.send('backend-progress', { type: 'log', message });
+      },
+      onProgress: (update) => {
+        event.sender.send('backend-progress', update);
       }
-
-      if (validStems.length === 0) {
-        event.sender.send('backend-progress', { type: 'log', message: `[backend-error] Critical: No valid, non-empty output stems were written for input "${fileName}".` });
-        throw new Error("Zero-byte output stems or no files written. Separation failed.");
-      }
-
-      allCreatedStems.push(...validStems);
-
-      event.sender.send('backend-progress', { type: 'log', message: `[backend] File successfully processed: "${fileName}"` });
-
-      // Update progress fraction
-      const idx = inputs.indexOf(inputTrack);
-      const progressPercent = Math.round(((idx + 1) / inputs.length) * 100);
-      event.sender.send('backend-progress', {
-        type: 'process',
-        progress: progressPercent,
-        log: `[progress-stream] Extracted stem set for "${fileName}" (${progressPercent}%)`
-      });
     }
+  );
 
-    event.sender.send('backend-progress', { type: 'log', message: '[backend] PIPELINE COMPLETED: Output stems successfully written and validated on disk.' });
-    
-    // Dispatch master complete event to let React update states cleanly
-    event.sender.send('backend-progress', {
-      type: 'process',
-      status: 'completed',
-      progress: 100,
-      outputFiles: allCreatedStems
-    });
-
-    return { success: true, message: 'All target audio inputs separated successfully.', outputFiles: allCreatedStems };
-  } catch (err) {
-    event.sender.send('backend-progress', { type: 'log', message: `[backend] Process pipeline failure: ${err.message}` });
-    event.sender.send('backend-progress', {
-      type: 'process',
-      status: 'error',
-      error: err.message
-    });
-    return { success: false, error: err.message };
+  if (result.status !== 'cancelled') {
+    activeCancellationRequested = false;
   }
+  activeChildProcess = null;
+  return result;
 });
 
 // Cancel processing
 ipcMain.handle('cancel-processing', async () => {
   console.log('Main process: cancel-processing received');
-  if (activeChildProcess) {
-    try {
-      if (process.platform === 'win32') {
-        const { execSync } = require('child_process');
-        execSync(`taskkill /pid ${activeChildProcess.pid} /f /t`);
-      } else {
-        activeChildProcess.kill('SIGKILL');
-      }
-      console.log('Main process: Active child process killed successfully.');
-    } catch (e) {
-      console.error('Failed to kill active child process:', e);
-    }
+  if (!activeChildProcess) {
+    activeCancellationRequested = false;
+    return { ok: true, status: 'no_active_process' };
+  }
+  activeCancellationRequested = true;
+  const result = aiSeparation.requestCancelActiveProcess(activeChildProcess);
+  if (result.ok) {
     activeChildProcess = null;
   }
-  return { success: true };
+  return result;
 });

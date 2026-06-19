@@ -1,6 +1,11 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync, spawn } = require('child_process');
+const { execFileSync, spawn } = require('child_process');
+const {
+  createMissingHelperScriptResult,
+  fileExists,
+  resolveScriptFile
+} = require('./runtime-paths.cjs');
 
 // Parse CLI Arguments
 const args = {};
@@ -54,6 +59,7 @@ let basicPitchInstalled = false;
 let basicPitchVersion = 'None';
 let cliAvailable = false;
 let pythonWorking = false;
+let helperMissing = null;
 
 // 1. Validate Output Directory first
 let mainLogDir = process.cwd();
@@ -73,7 +79,7 @@ if (outputDir) {
 
 // 2. Verify Python executable path
 try {
-  const versionOut = execSync(`"${pythonPath}" --version`, { encoding: 'utf8', timeout: 3000 });
+  const versionOut = execFileSync(pythonPath, ['--version'], { encoding: 'utf8', timeout: 3000 });
   if (versionOut && (versionOut.toLowerCase().includes('python') || /^[0-9.]+/i.test(versionOut.trim()))) {
     pythonWorking = true;
     pythonVersion = versionOut.replace(/python/i, '').trim();
@@ -85,10 +91,9 @@ try {
 // 3. Run Python readiness probe
 if (pythonWorking) {
   try {
-    const probeScriptPath = path.join(__dirname, '../scripts/basic_pitch_probe.py');
-    if (fs.existsSync(probeScriptPath)) {
-      const probeRunCmd = `"${pythonPath}" "${probeScriptPath}" --input "${inputAudio || ''}" --output "${outputDir || ''}"`;
-      const probeOut = execSync(probeRunCmd, { encoding: 'utf8', timeout: 8000 });
+    const probeScriptPath = resolveScriptFile('basic_pitch_probe.py');
+    if (fileExists(probeScriptPath)) {
+      const probeOut = execFileSync(pythonPath, [probeScriptPath, '--input', inputAudio || '', '--output', outputDir || ''], { encoding: 'utf8', timeout: 8000 });
       if (probeOut) {
         const pData = JSON.parse(probeOut.trim());
         basicPitchInstalled = !!pData.basicPitchInstalled;
@@ -106,7 +111,8 @@ if (pythonWorking) {
         }
       }
     } else {
-      blockers.push("Required probe helper scripts/basic_pitch_probe.py is missing.");
+      helperMissing = createMissingHelperScriptResult(probeScriptPath);
+      blockers.push(`${helperMissing.message} Missing: ${helperMissing.missingPath}`);
     }
   } catch (err) {
     blockers.push(`Failed executing Basic Pitch python probe: ${err.message}`);
@@ -314,6 +320,8 @@ function writeReport() {
     modelOutputNpzFiles: modelOutputNpzFiles,
     generatedFileSizes: generatedFileSizes,
     proofStatus: proofStatus,
+    status: helperMissing ? helperMissing.status : proofStatus,
+    helperMissing: helperMissing,
     blockers: blockers
   };
 

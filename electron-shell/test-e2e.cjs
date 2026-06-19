@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 console.log("==========================================================");
 console.log("    Ffmpeg DSP fallback E2E test - Desktop Mechanics      ");
@@ -21,7 +21,7 @@ if (!fs.existsSync(outputDir)) {
 // 2. Generate a valid, real audio test file using FFmpeg
 console.log("\n[1/5] Synthesizing Real Audio Source via FFmpeg...");
 try {
-  execSync(`ffmpeg -f lavfi -i anullsrc=r=44100:cl=stereo -t 2 "${inputTrack}" -y`, { stdio: 'ignore' });
+  execFileSync('ffmpeg', ['-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo', '-t', '2', inputTrack, '-y'], { stdio: 'ignore' });
   console.log(`  --> OK: Generated stereo WAV track (2.0s) at:\n      "${inputTrack}"`);
 } catch (err) {
   console.error("  --> FAILED: Cannot generate WAV using FFmpeg.", err.message);
@@ -32,7 +32,7 @@ try {
 console.log("\n[2/5] Running Subprocess Dependency Diagnostics...");
 let ffmpegReady = false;
 try {
-  const ffOut = execSync('ffmpeg -version', { encoding: 'utf8' });
+  const ffOut = execFileSync('ffmpeg', ['-version'], { encoding: 'utf8' });
   ffmpegReady = ffOut.toLowerCase().includes('ffmpeg version') || ffOut.length > 0;
 } catch (e) {}
 
@@ -47,7 +47,7 @@ let preferedPythonPath = 'python';
 const cmds = ['python', 'python3', 'py'];
 for (const cmd of cmds) {
   try {
-    const pyv = execSync(`${cmd} --version`, { encoding: 'utf8' });
+    const pyv = execFileSync(cmd, ['--version'], { encoding: 'utf8' });
     pythonFound = true;
     pythonVersion = pyv.trim().split('\n')[0];
     preferedPythonPath = cmd;
@@ -57,12 +57,12 @@ for (const cmd of cmds) {
 
 if (pythonFound) {
   try {
-    execSync(`${preferedPythonPath} -c "import audio_separator"`, { stdio: 'ignore', timeout: 3000 });
+    execFileSync(preferedPythonPath, ['-c', 'import audio_separator'], { stdio: 'ignore', timeout: 3000 });
     audioSeparatorReady = true;
   } catch (e) {}
 
   try {
-    execSync(`${preferedPythonPath} -c "import torch"`, { stdio: 'ignore', timeout: 3000 });
+    execFileSync(preferedPythonPath, ['-c', 'import torch'], { stdio: 'ignore', timeout: 3000 });
     torchReady = true;
   } catch (e) {}
 }
@@ -97,8 +97,8 @@ const vFile = path.join(outputDir, `${baseName}_(Vocals).wav`);
 const iFile = path.join(outputDir, `${baseName}_(Instrumental).wav`);
 
 try {
-  execSync(`ffmpeg -y -i "${inputTrack}" -af "highpass=f=180,equalizer=f=1000:width_type=h:width=200:g=3" "${vFile}"`, { stdio: 'ignore' });
-  execSync(`ffmpeg -y -i "${inputTrack}" -af "lowpass=f=8000,equalizer=f=250:width_type=h:width=100:g=4" "${iFile}"`, { stdio: 'ignore' });
+  execFileSync('ffmpeg', ['-y', '-i', inputTrack, '-af', 'highpass=f=180,equalizer=f=1000:width_type=h:width=200:g=3', vFile], { stdio: 'ignore' });
+  execFileSync('ffmpeg', ['-y', '-i', inputTrack, '-af', 'lowpass=f=8000,equalizer=f=250:width_type=h:width=100:g=4', iFile], { stdio: 'ignore' });
   console.log("  --> OK: DSP pipeline outputs generated successfully.");
 } catch (err) {
   console.error("  --> Error running FFmpeg pipeline:", err.message);

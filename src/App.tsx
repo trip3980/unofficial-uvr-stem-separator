@@ -236,7 +236,7 @@ export default function App() {
                 </span>
               </h1>
               <p className="text-[11px] text-green-500/50 font-mono tracking-widest uppercase mt-1.5">
-                Local AI audio separation and stem workflow tools.
+                Input audio to verified local run to checked stems. Proof remains blocked until a verified model passes local AI E2E.
               </p>
             </div>
           </div>

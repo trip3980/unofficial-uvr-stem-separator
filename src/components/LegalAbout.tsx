@@ -38,7 +38,7 @@ export default function LegalAbout() {
           <div className="p-5 border-t border-yellow-500/20">
             <h3 className="text-yellow-400 font-bold font-mono text-sm uppercase tracking-wider mb-2">Hardened Functional Alpha Build Active</h3>
             <p className="text-slate-300 text-xs leading-relaxed">
-              This workstation is an independent alpha implementation. Features related to the original Ultimate Vocal Remover software's "Official Release Mode" or direct unverified downloads are deactivated or unavailable here for source integrity and safety.
+              This workstation is an independent alpha implementation. Upstream-only release controls and direct unverified downloads are deactivated or unavailable here for source integrity and safety.
             </p>
           </div>
         )}
@@ -65,7 +65,7 @@ export default function LegalAbout() {
                   SANDBOX DEMO MODE
                 </div>
                 <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
-                  Applet is running in-browser. Actions will be high-fidelity simulations. Install Electron target to separate real audio.
+                  Applet is running in-browser. Actions are preview-only and cannot run native downloads, model verification, or real audio separation.
                 </p>
               </div>
             ) : (
@@ -75,7 +75,7 @@ export default function LegalAbout() {
                   NATIVE DESKTOP ACTIVE
                 </div>
                 <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
-                  Running in safe desktop wrapper with complete access to native Python stems backend processes and local uvr_models.
+                  Running in the desktop wrapper with access to native Python checks, local model folders, and proof-gated separation flows.
                 </p>
               </div>
             )}
@@ -116,7 +116,7 @@ export default function LegalAbout() {
               <div className="bg-[#0f111c]/80 border border-slate-700/30 rounded-lg p-3 flex-1 flex items-start gap-3">
                  <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
                  <p className="text-slate-300 text-xs font-sans leading-relaxed">
-                   <strong>Independent Project Notice:</strong> OpenStem uses user-configured local models and backend tools where available. OpenStem is not the official Ultimate Vocal Remover project and is not affiliated with, certified by, endorsed by, or maintained by the original Ultimate Vocal Remover developers.
+                   <strong>Independent Project Notice:</strong> OpenStem uses user-configured local models and backend tools where available. OpenStem is not the official Ultimate Vocal Remover project and is not affiliated with, approved by, endorsed by, or maintained by the original Ultimate Vocal Remover developers.
                  </p>
               </div>
             </div>
