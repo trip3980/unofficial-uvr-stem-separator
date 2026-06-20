@@ -32,7 +32,7 @@ import {
   Heart,
   Tag,
   AlertTriangle,
-  ShieldCheck
+  ShieldCheck,
 } from "lucide-react";
 
 interface SunoMusicLabProps {
@@ -53,7 +53,7 @@ interface AudioTrack {
   duration: number; // in seconds
   createdAt: string;
   status: "complete" | "queued" | "failed";
-  
+
   // YuE specific properties
   stageMode?: "vocal_generation" | "full_orchestra";
   audioPromptFile?: string;
@@ -70,13 +70,31 @@ interface AudioTrack {
   proofReportPath?: string | null;
 }
 
+function randomInteger(minInclusive: number, maxInclusive: number): number {
+  return Math.floor(minInclusive + Math.random() * (maxInclusive - minInclusive + 1));
+}
+
+function randomChoice<T>(items: readonly T[]): T {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+function makeTrackId(prefix: string, suffix?: string | number): string {
+  const tail = suffix === undefined ? "" : `-${suffix}`;
+  return `${prefix}-${Date.now()}${tail}`;
+}
+
+function todayDateStamp(): string {
+  return new Date().toISOString().split("T")[0] || "";
+}
+
 // Pre-seeded high-quality demo tracks to make the workspace functional immediately
 const PRE_SEEDED_TRACKS: AudioTrack[] = [
   {
     id: "suno-1",
     source: "suno",
     title: "Vaporwave Neon Horizon",
-    prompt: "A retro-futuristic 80s vaporwave song about cruising through endless neon highways at midnight with slow retro synthesizers.",
+    prompt:
+      "A retro-futuristic 80s vaporwave song about cruising through endless neon highways at midnight with slow retro synthesizers.",
     lyrics: `[Verse 1]
 Grid lines in the digital sky
 Glow of the cathode rays going by
@@ -106,13 +124,14 @@ Chasing the ghosts of our golden years`,
     canSendToSeparator: false,
     canSendToMixer: false,
     proofSource: "demo",
-    generatedByProof: false
+    generatedByProof: false,
   },
   {
     id: "yue-1",
     source: "yue",
     title: "Celestial Drift (YuE 7B)",
-    prompt: "genre: gothic electronic metal, aggressive pipe organ, symphonic drums, gothic male backing choral chanting, epic guitar duel solos",
+    prompt:
+      "genre: gothic electronic metal, aggressive pipe organ, symphonic drums, gothic male backing choral chanting, epic guitar duel solos",
     lyrics: `[genre: electronic gothic symphonic metal, pipe organ, fast drums]
 [verse]
 Shadows climb the temple stairs
@@ -145,13 +164,14 @@ No more temples keeping you`,
     canSendToSeparator: false,
     canSendToMixer: false,
     proofSource: "demo",
-    generatedByProof: false
+    generatedByProof: false,
   },
   {
     id: "suno-3",
     source: "suno",
     title: "Acoustic Forest Solitude",
-    prompt: "Folk fingerpicking acoustic guitar with organic layered backing vocals and woodwind accents, peaceful mood.",
+    prompt:
+      "Folk fingerpicking acoustic guitar with organic layered backing vocals and woodwind accents, peaceful mood.",
     lyrics: `[Verse 1]
 Golden leaves brushing on the clay
 Stretching shadows at the end of day
@@ -181,15 +201,16 @@ Just sitting still beneath the fading sun`,
     canSendToSeparator: false,
     canSendToMixer: false,
     proofSource: "demo",
-    generatedByProof: false
-  }
+    generatedByProof: false,
+  },
 ];
 
 // Interactive Aesthetic Presets for YuE Full Song Foundation Model
 const YUE_PRESETS = [
   {
     name: "Symphonic Power Metal",
-    genre: "symphonic power metal, rapid double-bass percussion, sweep picking electric guitar solos, male dramatic vocals, medieval keyboard harmonies, high intensity",
+    genre:
+      "symphonic power metal, rapid double-bass percussion, sweep picking electric guitar solos, male dramatic vocals, medieval keyboard harmonies, high intensity",
     lyrics: `[genre: symphonic power metal, heavy guitar riffs, rapid keyboard]
 [verse]
 The iron gates are breaking wide
@@ -208,11 +229,12 @@ We shall not let their empires burn!
 Victory is won!`,
     tags: "power metal, rapid double-bass, electric guitar, male vocal, 140 bpm",
     vocalTemp: 0.85,
-    instTemp: 0.9
+    instTemp: 0.9,
   },
   {
     name: "Cyber-Industrial Techno",
-    genre: "dark industrial techno, heavy 4-to-the-floor kick, glitch synthesized modulations, whispered vocoder speech, neon rain theme, 128 bpm",
+    genre:
+      "dark industrial techno, heavy 4-to-the-floor kick, glitch synthesized modulations, whispered vocoder speech, neon rain theme, 128 bpm",
     lyrics: `[genre: industrial techno, heavy kick, modular synth, vocoder]
 [verse]
 Carbon shell, artificial mind
@@ -231,11 +253,12 @@ Watch the cybernetic drive reclaim control
 System restart completed.`,
     tags: "industrial techno, heavy kick, vocoder, glitchy synth, 128 bpm",
     vocalTemp: 0.7,
-    instTemp: 0.95
+    instTemp: 0.95,
   },
   {
     name: "Acoustic Warm Ballad",
-    genre: "wooden fingerstyle acoustic guitar, grand concert piano chords, warm cello backing riffs, soft organic female soprano, gentle room ambiance, 72 bpm",
+    genre:
+      "wooden fingerstyle acoustic guitar, grand concert piano chords, warm cello backing riffs, soft organic female soprano, gentle room ambiance, 72 bpm",
     lyrics: `[genre: acoustic folk ballad, fingerstyle guitar, backing soft cello]
 [verse]
 A single mug of steaming tea
@@ -254,15 +277,11 @@ Where our tired hearts belong
 Fade into the fireplace ember glow...`,
     tags: "acoustic folk, fingerstyle guitar, female vocal, grand cello, 72 bpm",
     vocalTemp: 0.75,
-    instTemp: 0.85
-  }
+    instTemp: 0.85,
+  },
 ];
 
-export default function SunoMusicLab({
-  selectedInputs,
-  setSelectedInputs,
-  setActiveTab
-}: SunoMusicLabProps) {
+export default function SunoMusicLab({ selectedInputs, setSelectedInputs, setActiveTab }: SunoMusicLabProps) {
   // Tab Navigation: Suno vs YuE
   const [labStudio, setLabStudio] = useState<"suno" | "yue">("suno");
 
@@ -279,14 +298,28 @@ export default function SunoMusicLab({
   const [yueRepoPath, setYueRepoPath] = useState(() => localStorage.getItem("yue_repo_path") || "");
   const [yuePythonPath, setYuePythonPath] = useState(() => localStorage.getItem("yue_python_path") || "");
   const [yueOutputDir, setYueOutputDir] = useState(() => localStorage.getItem("yue_output_dir") || "");
-  const [yueStage1Model, setYueStage1Model] = useState(() => localStorage.getItem("yue_stage1_model") || "m-a-p/YuE-s1-7B-anneal-en-cot-sf");
-  const [yueStage2Model, setYueStage2Model] = useState(() => localStorage.getItem("yue_stage2_model") || "m-a-p/YuE-s2-7B-cot");
+  const [yueStage1Model, setYueStage1Model] = useState(
+    () => localStorage.getItem("yue_stage1_model") || "m-a-p/YuE-s1-7B-anneal-en-cot-sf",
+  );
+  const [yueStage2Model, setYueStage2Model] = useState(
+    () => localStorage.getItem("yue_stage2_model") || "m-a-p/YuE-s2-7B-cot",
+  );
   const [yueSegments, setYueSegments] = useState(() => Number(localStorage.getItem("yue_segments") || "1"));
-  const [yueMaxNewTokens, setYueMaxNewTokens] = useState(() => Number(localStorage.getItem("yue_max_new_tokens") || "3000"));
-  const [yueStage2BatchSize, setYueStage2BatchSize] = useState(() => Number(localStorage.getItem("yue_stage2_batch_size") || "2"));
-  const [yueRepetitionPenalty, setYueRepetitionPenalty] = useState(() => Number(localStorage.getItem("yue_repetition_penalty") || "1.1"));
-  const [yuePromptStartTime, setYuePromptStartTime] = useState(() => Number(localStorage.getItem("yue_prompt_start_time") || "0"));
-  const [yuePromptEndTime, setYuePromptEndTime] = useState(() => Number(localStorage.getItem("yue_prompt_end_time") || "30"));
+  const [yueMaxNewTokens, setYueMaxNewTokens] = useState(() =>
+    Number(localStorage.getItem("yue_max_new_tokens") || "3000"),
+  );
+  const [yueStage2BatchSize, setYueStage2BatchSize] = useState(() =>
+    Number(localStorage.getItem("yue_stage2_batch_size") || "2"),
+  );
+  const [yueRepetitionPenalty, setYueRepetitionPenalty] = useState(() =>
+    Number(localStorage.getItem("yue_repetition_penalty") || "1.1"),
+  );
+  const [yuePromptStartTime, setYuePromptStartTime] = useState(() =>
+    Number(localStorage.getItem("yue_prompt_start_time") || "0"),
+  );
+  const [yuePromptEndTime, setYuePromptEndTime] = useState(() =>
+    Number(localStorage.getItem("yue_prompt_end_time") || "30"),
+  );
 
   const [yuePreflightStatus, setYuePreflightStatus] = useState<any>(null);
   const [yueScanning, setYueScanning] = useState(false);
@@ -317,10 +350,12 @@ export default function SunoMusicLab({
   // YuE Self-Hosting Deployment Config Drawer
   const [showYueDeploy, setShowYueDeploy] = useState(false);
   const [yueDevice, setYueDevice] = useState("cuda:0");
-  const [yueWeightsPath, setYueWeightsPath] = useState("~/.cache/huggingface/hub/models--multimodal-art-projection--YuE/");
+  const [yueWeightsPath, setYueWeightsPath] = useState(
+    "~/.cache/huggingface/hub/models--multimodal-art-projection--YuE/",
+  );
   const [vramQuantize, setVramQuantize] = useState("none");
 
-  // Auxiliary AI Generation State (Gemini Lyric Writer)
+  // Auxiliary text-drafting assistant state
   const [aiAssistantIdea, setAiAssistantIdea] = useState("");
   const [isGeneratingLyrics, setIsGeneratingLyrics] = useState(false);
   const [aiAssistantExpanded, setAiAssistantExpanded] = useState(false);
@@ -351,7 +386,21 @@ export default function SunoMusicLab({
   const intervalRef = useRef<number | null>(null);
   const logsEndRef = useRef<HTMLDivElement | null>(null);
   const lyricsInputRef = useRef<HTMLTextAreaElement | null>(null);
-  const serverRoutesAvailable = !(typeof window !== "undefined" && !!(window as any).uvr && window.location.protocol === "file:");
+  const serverRoutesAvailable = !(
+    typeof window !== "undefined" &&
+    !!(window as any).uvr &&
+    window.location.protocol === "file:"
+  );
+  const sunoConnectorConfigured = false;
+  const geminiApiConfigured = false;
+  const yueLocalWeightsConfigured = !!yueWeightsPath && !!yueRepoPath;
+  const yueBackendConfigured =
+    yueApiMode === "local" ? !!yueRepoPath && !!yueOutputDir : yueApiMode === "real" && !!yueBaseUrl;
+  const yueGenerationReady =
+    yueApiMode === "local" &&
+    yueBackendConfigured &&
+    yuePreflightStatus?.proofStatus === "DRY_RUN_READY" &&
+    termsAcknowledged;
 
   // Sync state to local storage
   useEffect(() => {
@@ -368,19 +417,19 @@ export default function SunoMusicLab({
   // Poll real status of Suno tracks if in real apiMode
   useEffect(() => {
     let activePoll = true;
-    const queuedTracks = tracks.filter(t => t.status === "queued" && t.source === "suno");
+    const queuedTracks = tracks.filter((t) => t.status === "queued" && t.source === "suno");
     if (queuedTracks.length === 0 || apiMode !== "real" || !serverRoutesAvailable) return;
 
     const interval = setInterval(async () => {
-      const ids = queuedTracks.map(t => t.id).join(",");
+      const ids = queuedTracks.map((t) => t.id).join(",");
       try {
         const response = await fetch("/api/suno/proxy", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             targetUrl: `${baseUrl}/api/get?ids=${ids}`,
-            method: "GET"
-          })
+            method: "GET",
+          }),
         });
 
         if (!response.ok) return;
@@ -388,13 +437,14 @@ export default function SunoMusicLab({
         const data = await response.json();
         if (Array.isArray(data) && data.length > 0) {
           let updated = false;
-          const newTracks = tracks.map(track => {
+          const newTracks = tracks.map((track) => {
             const serverTrack = data.find((st: any) => st.id === track.id || st.clip_id === track.id);
             if (serverTrack) {
               const oldStatus = track.status;
-              const isFinished = serverTrack.status === "complete" || (serverTrack.audio_url && serverTrack.audio_url.length > 5);
+              const isFinished =
+                serverTrack.status === "complete" || (serverTrack.audio_url && serverTrack.audio_url.length > 5);
               const newStatus = isFinished ? "complete" : "queued";
-              
+
               if (oldStatus !== newStatus || serverTrack.audio_url !== track.audioUrl) {
                 updated = true;
                 return {
@@ -404,7 +454,7 @@ export default function SunoMusicLab({
                   lyrics: serverTrack.lyric || track.lyrics,
                   title: serverTrack.title || track.title,
                   duration: serverTrack.duration || track.duration,
-                  status: newStatus as any
+                  status: newStatus as any,
                 };
               }
             }
@@ -514,7 +564,7 @@ export default function SunoMusicLab({
     const after = text.substring(end, text.length);
     const updatedVal = before + `\n${tag}\n` + after;
     setYueLyrics(updatedVal);
-    
+
     setTimeout(() => {
       if (lyricsInputRef.current) {
         lyricsInputRef.current.focus();
@@ -525,16 +575,16 @@ export default function SunoMusicLab({
   };
 
   // Apply visual YuE templates
-  const handleApplyYuePreset = (preset: typeof YUE_PRESETS[0]) => {
+  const handleApplyYuePreset = (preset: (typeof YUE_PRESETS)[0]) => {
     setYueGenre(preset.genre);
     setYueLyrics(preset.lyrics);
     setTempVocal(preset.vocalTemp);
     setTempInst(preset.instTemp);
-    
+
     // Auto fabricate a fitting title
-    const randomSeedId = Math.floor(100 + Math.random() * 900);
+    const randomSeedId = randomInteger(100, 999);
     setYueTitle(`${preset.name} Opus ${randomSeedId}`);
-    
+
     triggerToast(`Applied ${preset.name} template complete with specialized YuE segment annotations!`);
   };
 
@@ -545,13 +595,15 @@ export default function SunoMusicLab({
       return;
     }
     if (!serverRoutesAvailable) {
-      triggerToast("Gemini helper route is dev/server-only in packaged file mode. Using local text-only drafting fallback.");
+      triggerToast(
+        "Gemini helper route is dev/server-only in packaged file mode. Using local text-only drafting fallback.",
+      );
       simulateLocalComposerFallback();
       return;
     }
 
     setIsGeneratingLyrics(true);
-    triggerToast("Preparing style tags and drafted lyrics with Gemini...");
+    triggerToast("Preparing text-only style tags and drafted lyrics...");
 
     try {
       const response = await fetch("/api/gemini/generate", {
@@ -560,8 +612,8 @@ export default function SunoMusicLab({
         body: JSON.stringify({
           prompt: aiAssistantIdea,
           isCustom: true,
-          songIdea: aiAssistantIdea
-        })
+          songIdea: aiAssistantIdea,
+        }),
       });
 
       if (!response.ok) {
@@ -588,13 +640,13 @@ export default function SunoMusicLab({
           .replace(/\[Chorus\]/gi, "[chorus]")}\n[outro]`;
         setYueLyrics(formattedYuELyrics);
         setYueGenre(genreTagsOutput);
-        triggerToast("Gemini has prepared a text-only draft with style tags!");
+        triggerToast("Text-only draft prepared with style tags.");
       } else {
         setSongTitle(title);
         setCustomLyrics(rawLyricsStr);
         setStyleTags(genreTagsOutput);
         setIsCustomMode(true);
-        triggerToast("Gemini has prepared a text-only draft with style tags!");
+        triggerToast("Text-only draft prepared with style tags.");
       }
     } catch (err: any) {
       console.warn("Failed Gemini request, initiating localized creative composer engine fallback:", err);
@@ -657,7 +709,9 @@ We are the kings of the feedback tonight`;
       setYueTitle(title);
       setYueGenre(tags);
       // Convert standard brackets to yue syntax tags
-      setYueLyrics(`[genre: ${tags}]\n[verse]\n${lyrics.replace(/\[Verse \d+\]/gi, "").replace(/\[Chorus\]/gi, "[chorus]")}\n[outro]`);
+      setYueLyrics(
+        `[genre: ${tags}]\n[verse]\n${lyrics.replace(/\[Verse \d+\]/gi, "").replace(/\[Chorus\]/gi, "[chorus]")}\n[outro]`,
+      );
     } else {
       setSongTitle(title);
       setStyleTags(tags);
@@ -667,8 +721,15 @@ We are the kings of the feedback tonight`;
     triggerToast("Offline Composer formulated text-only draft, style tags, and metadata successfully!");
   };
 
-  // Suno music generator (routes through CORS proxy or simulated local engine)
+  // Suno connector handler. Blocked until a supported user-authorized connector exists.
   const handleGenerateSunoTrack = async () => {
+    if (!sunoConnectorConfigured) {
+      triggerToast(
+        "Suno Connector: Not configured. Generation unavailable until a supported connector is configured. Code: GENERATIVE_CONNECTOR_NOT_CONFIGURED",
+      );
+      return;
+    }
+
     const activePrompt = isCustomMode ? customLyrics : prompt;
     if (!activePrompt.trim()) {
       triggerToast("Input a prompt or lyrics to generate music!");
@@ -691,7 +752,12 @@ We are the kings of the feedback tonight`;
     const isUrlApproved = (url: string) => {
       try {
         const parsed = new URL(url);
-        return parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname.startsWith("192.168.") || parsed.hostname.startsWith("10.");
+        return (
+          parsed.hostname === "localhost" ||
+          parsed.hostname === "127.0.0.1" ||
+          parsed.hostname.startsWith("192.168.") ||
+          parsed.hostname.startsWith("10.")
+        );
       } catch {
         return false;
       }
@@ -700,11 +766,15 @@ We are the kings of the feedback tonight`;
     // Forwarding to real gcui-art/suno-api server
     addLog(`[Suno-API Node Wrapper] Spawning Suno compiler client instance...`);
     addLog(`[Suno-API Node Wrapper] Mode: ${apiMode === "real" ? "REAL HOST COMPILER" : "FREE PLAY SANDBOX"}`);
-    
+
     if (apiMode === "real") {
       if (!serverRoutesAvailable) {
-        addLog(`[Suno-API Proxy] Packaged file mode detected. server.ts HTTP proxy routes are not running inside the packaged renderer.`);
-        addLog(`[Suno-API Proxy] Use sandbox mode or run the dev/server target explicitly; no hidden backend will be started.`);
+        addLog(
+          `[Suno-API Proxy] Packaged file mode detected. server.ts HTTP proxy routes are not running inside the packaged renderer.`,
+        );
+        addLog(
+          `[Suno-API Proxy] Use sandbox mode or run the dev/server target explicitly; no hidden backend will be started.`,
+        );
         triggerToast("Suno proxy is dev/server-only in packaged mode.");
         setIsGenerating(false);
         return;
@@ -712,7 +782,9 @@ We are the kings of the feedback tonight`;
 
       const isApproved = isUrlApproved(baseUrl);
       if (!isApproved) {
-        addLog(`[Suno-API Proxy] Connection blocked: Only localhost or trusted user-approved local bridge URLs are permitted for local proxy routing.`);
+        addLog(
+          `[Suno-API Proxy] Connection blocked: Only localhost or trusted user-approved local bridge URLs are permitted for local proxy routing.`,
+        );
         triggerToast("Proxy blocked: Use localhost or trusted local network URLs only.");
         setIsGenerating(false);
         return;
@@ -720,23 +792,23 @@ We are the kings of the feedback tonight`;
 
       addLog(`[Suno-API Node Wrapper] Forwarding request to local host server...`);
       addLog(`[Suno-API Node Wrapper] Target endpoint parsed: ${baseUrl}/api/custom_generate`);
-      
-      try {
-        const targetEndpoint = isCustomMode 
-          ? `${baseUrl}/api/custom_generate` 
-          : `${baseUrl}/api/generate`;
 
-        const requestBody = isCustomMode ? {
-          prompt: customLyrics,
-          tags: styleTags,
-          title: songTitle || "AI Generated Song",
-          make_instrumental: makeInstrumental,
-          wait_audio: false
-        } : {
-          prompt: prompt,
-          make_instrumental: makeInstrumental,
-          wait_audio: false
-        };
+      try {
+        const targetEndpoint = isCustomMode ? `${baseUrl}/api/custom_generate` : `${baseUrl}/api/generate`;
+
+        const requestBody = isCustomMode
+          ? {
+              prompt: customLyrics,
+              tags: styleTags,
+              title: songTitle || "Connector Draft Song",
+              make_instrumental: makeInstrumental,
+              wait_audio: false,
+            }
+          : {
+              prompt: prompt,
+              make_instrumental: makeInstrumental,
+              wait_audio: false,
+            };
 
         const res = await fetch("/api/suno/proxy", {
           method: "POST",
@@ -744,9 +816,9 @@ We are the kings of the feedback tonight`;
           body: JSON.stringify({
             targetUrl: targetEndpoint,
             method: "POST",
-            headers: {}, // strictly remove raw cookie/session-token header forwarding completely
-            body: requestBody
-          })
+            headers: {}, // no credential header forwarding
+            body: requestBody,
+          }),
         });
 
         if (!res.ok) {
@@ -756,28 +828,30 @@ We are the kings of the feedback tonight`;
 
         const data = await res.json();
         addLog(`[Suno-API Node Wrapper] Server accepted request! Received track descriptors.`);
-        
+
         const trackList = Array.isArray(data) ? data : [data];
         if (trackList.length > 0) {
           const newGeneratedTracks: AudioTrack[] = trackList.map((t: any, idx: number) => ({
-            id: t.id || t.clip_id || `suno-gen-real-${Date.now()}-${idx}`,
+            id: t.id || t.clip_id || makeTrackId("suno-gen-real", idx),
             source: "suno",
             title: t.title || songTitle || `Suno Real iteration #${idx + 1}`,
             prompt: activePrompt,
             lyrics: t.lyric || (isCustomMode ? customLyrics : "Generation vibe prompt"),
             tags: t.tags || styleTags || "suno integration",
             audioUrl: t.audio_url || "",
-            imageUrl: t.image_url || "https://images.unsplash.com/photo-1614149162883-504ce4d13909?w=500&auto=format&fit=crop&q=60",
+            imageUrl:
+              t.image_url ||
+              "https://images.unsplash.com/photo-1614149162883-504ce4d13909?w=500&auto=format&fit=crop&q=60",
             duration: t.duration || 180,
             createdAt: new Date().toISOString().split("T")[0],
-            status: (t.audio_url && t.audio_url.length > 5) ? "complete" : "queued",
+            status: t.audio_url && t.audio_url.length > 5 ? "complete" : "queued",
             isDemo: false,
             localFilePath: null,
             fileExists: false,
             canSendToSeparator: false,
             canSendToMixer: false,
             proofSource: "remote_url",
-            generatedByProof: false
+            generatedByProof: false,
           }));
 
           setTracks([...newGeneratedTracks, ...tracks]);
@@ -786,7 +860,7 @@ We are the kings of the feedback tonight`;
           }
           triggerToast(`Suno Soundscape tracks successfully queued! Processing on local server...`);
           setIsGenerating(false);
-          
+
           // Clear form
           setPrompt("");
           setSongTitle("");
@@ -798,7 +872,7 @@ We are the kings of the feedback tonight`;
         }
       } catch (err: any) {
         addLog(`[Suno-API Real Exception] Direct connection failed: ${err.message}`);
-        addLog(`[Suno-API Recovery] Falling back to high-reliability local Sandbox synthesis...`);
+        addLog(`[Suno-API Recovery] Falling back to sandbox preview placeholder mode...`);
       }
     }
 
@@ -821,35 +895,37 @@ We are the kings of the feedback tonight`;
     setIsGenerating(false);
 
     // Create resulting track
-    const randomSeedId = Math.floor(1000 + Math.random() * 9000);
+    const randomSeedId = randomInteger(1000, 9999);
     const audioUrlsFallback = [
       "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
       "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
       "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
       "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3",
     ];
-    
-    const randomAudioUrl = audioUrlsFallback[Math.floor(Math.random() * audioUrlsFallback.length)];
+
+    const randomAudioUrl = randomChoice(audioUrlsFallback);
     const fallbackImages = [
       "https://images.unsplash.com/photo-1614149162883-504ce4d13909?w=500&auto=format&fit=crop&q=60",
       "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500&auto=format&fit=crop&q=60",
       "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=500&auto=format&fit=crop&q=60",
       "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&auto=format&fit=crop&q=60",
     ];
-    const randomImageUrl = fallbackImages[Math.floor(Math.random() * fallbackImages.length)];
+    const randomImageUrl = randomChoice(fallbackImages);
 
     const finalTitle = songTitle.trim() || `Suno Symphony #${randomSeedId}`;
     const generatedTrack: AudioTrack = {
-      id: `suno-gen-${Date.now()}`,
+      id: makeTrackId("suno-gen"),
       source: "suno",
       title: finalTitle,
       prompt: activePrompt,
-      lyrics: isCustomMode ? customLyrics : `[Verse 1]\nStructured prompt tracks have no lyric scripts.\nEnjoy the custom generated composition details.`,
+      lyrics: isCustomMode
+        ? customLyrics
+        : `[Verse 1]\nStructured prompt tracks have no lyric scripts.\nEnjoy the custom generated composition details.`,
       tags: styleTags || "electric fusion, experimental instrumental",
       audioUrl: randomAudioUrl,
       imageUrl: randomImageUrl,
       duration: 295,
-      createdAt: new Date().toISOString().split("T")[0],
+      createdAt: todayDateStamp(),
       status: "complete",
       isDemo: true,
       localFilePath: null,
@@ -857,14 +933,14 @@ We are the kings of the feedback tonight`;
       canSendToSeparator: false,
       canSendToMixer: false,
       proofSource: "demo",
-      generatedByProof: false
+      generatedByProof: false,
     };
 
     setTracks([generatedTrack, ...tracks]);
     setActiveTrack(generatedTrack);
     setIsPlaying(false);
     triggerToast(`Suno Sandbox Placeholder "${finalTitle}" created successfully!`);
-    
+
     // Clear form
     setPrompt("");
     setSongTitle("");
@@ -957,7 +1033,7 @@ We are the kings of the feedback tonight`;
         promptEndTime: yuePromptEndTime || null,
         useDualTracksPrompt: false,
         vocalTrackPromptPath: null,
-        instrumentalTrackPromptPath: null
+        instrumentalTrackPromptPath: null,
       };
 
       const status = await (window as any).uvr.validateYuEEnvironment(config);
@@ -979,6 +1055,15 @@ We are the kings of the feedback tonight`;
 
   // --- YuE Open Source Model Music Generator ---
   const handleGenerateYueTrack = async () => {
+    const currentYueApiMode: "sandbox" | "real" | "local" = yueApiMode;
+
+    if (!yueGenerationReady) {
+      triggerToast(
+        "YuE State: Planned / Not active. Local weights, backend wiring, dry-run preflight, and acknowledgement are required.",
+      );
+      return;
+    }
+
     if (!yueLyrics.trim() || !yueGenre.trim()) {
       triggerToast("YuE requires both structured genre descriptors and lyrics annotated with tags!");
       return;
@@ -1000,9 +1085,11 @@ We are the kings of the feedback tonight`;
     addLog(`[YuE PyTorch Core] Initializing YuE Deep Music Generator...`);
     addLog(`[YuE PyTorch Core] Target execution device configured: ${yueDevice.toUpperCase()}`);
     addLog(`[YuE PyTorch Core] Loading model checkpoint directories from: ${yueWeightsPath}`);
-    addLog(`[YuE PyTorch Core] VRAM Compression profile: ${vramQuantize === "none" ? "Full Precision (BF16)" : `8-Bit Int Quantized (${vramQuantize})`}`);
+    addLog(
+      `[YuE PyTorch Core] VRAM Compression profile: ${vramQuantize === "none" ? "Full Precision (BF16)" : `8-Bit Int Quantized (${vramQuantize})`}`,
+    );
 
-    if (yueApiMode === "local") {
+    if (currentYueApiMode === "local") {
       addLog(`[YuE Subprocess] Spawning local PyTorch runner subprocess...`);
       addLog(`[YuE Subprocess] Python Path: ${yuePythonPath}`);
       addLog(`[YuE Subprocess] Repo Path: ${yueRepoPath}`);
@@ -1013,8 +1100,8 @@ We are the kings of the feedback tonight`;
           pythonPath: yuePythonPath,
           yueRoot: yueRepoPath,
           outputDir: yueOutputDir,
-          genreText: yueGenre, 
-          lyricsText: yueLyrics, 
+          genreText: yueGenre,
+          lyricsText: yueLyrics,
           runSegments: yueSegments,
           stage1Model: yueStage1Model,
           stage2Model: yueStage2Model,
@@ -1027,7 +1114,7 @@ We are the kings of the feedback tonight`;
           promptEndTime: yuePromptEndTime || null,
           useDualTracksPrompt: false,
           vocalTrackPromptPath: null,
-          instrumentalTrackPromptPath: null
+          instrumentalTrackPromptPath: null,
         };
 
         const result = await (window as any).uvr.runYuEGeneration(config);
@@ -1040,7 +1127,9 @@ We are the kings of the feedback tonight`;
         }
 
         if (result.proofStatus !== "PASS") {
-          throw new Error(result.blockers && result.blockers.length > 0 ? result.blockers.join("; ") : "Subprocess execution failed.");
+          throw new Error(
+            result.blockers && result.blockers.length > 0 ? result.blockers.join("; ") : "Subprocess execution failed.",
+          );
         }
 
         addLog(`[YuE Subprocess] Subprocess execution finished with code 0!`);
@@ -1056,26 +1145,26 @@ We are the kings of the feedback tonight`;
           const localPath = yueOutputDir ? `${yueOutputDir}/${mainFileName}` : mainFileName;
 
           let fileVerified = false;
-          let fileSize = 0;
           if ((window as any).uvr?.verifyAudioFile) {
             try {
               const checkInfo = await (window as any).uvr.verifyAudioFile(localPath);
-              fileVerified = checkInfo.exists;
-              fileSize = checkInfo.sizeBytes;
+              fileVerified = !!(checkInfo.exists && checkInfo.sizeBytes > 0 && checkInfo.isAudio);
             } catch (e) {
               console.error("Subprocess file exists validation failed:", e);
-              fileVerified = true; // fallback
+              addLog(`[YuE Verification] Local output verification failed; track will not be reusable.`);
             }
           } else {
-            fileVerified = true;
+            addLog(`[YuE Verification] Native audio-file verifier is unavailable; track will not be reusable.`);
           }
 
           if (fileVerified) {
-            triggerToast("YuE local generation proof passed.");
+            triggerToast("YuE local generation completed. This does not count as UVR-style AI stem-separation proof.");
+          } else {
+            triggerToast("YuE finished, but OpenStem could not verify a non-empty local audio output file.");
           }
 
           const generatedTrack: AudioTrack = {
-            id: `yue-local-${Date.now()}`,
+            id: makeTrackId("yue-local"),
             source: "yue",
             title: finalTitle,
             prompt: `genre: ${yueGenre}`,
@@ -1084,7 +1173,7 @@ We are the kings of the feedback tonight`;
             audioUrl: "", // Do not use a SoundHelix fallback URL
             imageUrl: "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=500&auto=format&fit=crop&q=60",
             duration: 0, // representing unread metadata
-            createdAt: new Date().toISOString().split("T")[0],
+            createdAt: todayDateStamp(),
             status: "complete",
             stageMode: yueStage,
             audioPromptFile: yueAudioPrompt,
@@ -1093,21 +1182,25 @@ We are the kings of the feedback tonight`;
             isDemo: false,
             localFilePath: localPath,
             fileExists: fileVerified,
-            canSendToSeparator: true,
-            canSendToMixer: true,
+            canSendToSeparator: fileVerified,
+            canSendToMixer: fileVerified,
             proofSource: "local_generated",
-            generatedByProof: true,
-            proofReportPath: yueOutputDir ? `${yueOutputDir}/yue_e2e_proof.json` : null
+            generatedByProof: false,
+            proofReportPath: null,
           };
 
           setTracks([generatedTrack, ...tracks]);
           setActiveTrack(generatedTrack);
           setIsPlaying(false);
-          triggerToast(`YuE Local Subprocess Master "${finalTitle}" generated and added to AI Library successfully!`);
+          triggerToast(
+            `YuE Local Subprocess Master "${finalTitle}" added as a local generative track. Not source-separation proof.`,
+          );
           setIsGenerating(false);
           return;
         } else {
-          addLog(`⚠️ Process completed successfully, but no master .mp3 or .wav outputs were compiled inside "${yueOutputDir}"`);
+          addLog(
+            `⚠️ Process completed successfully, but no master .mp3 or .wav outputs were compiled inside "${yueOutputDir}"`,
+          );
         }
       } catch (err: any) {
         addLog(`❌ [YuE Subprocess Error] ${err.message}`);
@@ -1121,16 +1214,25 @@ We are the kings of the feedback tonight`;
     const isUrlApproved = (url: string) => {
       try {
         const parsed = new URL(url);
-        return parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname.startsWith("192.168.") || parsed.hostname.startsWith("10.");
+        return (
+          parsed.hostname === "localhost" ||
+          parsed.hostname === "127.0.0.1" ||
+          parsed.hostname.startsWith("192.168.") ||
+          parsed.hostname.startsWith("10.")
+        );
       } catch {
         return false;
       }
     };
 
-    if (yueApiMode === "real") {
+    if (currentYueApiMode === "real") {
       if (!serverRoutesAvailable) {
-        addLog(`[YuE API Client] Packaged file mode detected. server.ts HTTP proxy routes are not running inside the packaged renderer.`);
-        addLog(`[YuE API Client] Use Direct Local CLI Subprocess mode for packaged Electron, or run a dev/server target explicitly.`);
+        addLog(
+          `[YuE API Client] Packaged file mode detected. server.ts HTTP proxy routes are not running inside the packaged renderer.`,
+        );
+        addLog(
+          `[YuE API Client] Use Direct Local CLI Subprocess mode for packaged Electron, or run a dev/server target explicitly.`,
+        );
         triggerToast("YuE remote proxy is dev/server-only in packaged mode.");
         setIsGenerating(false);
         return;
@@ -1138,7 +1240,9 @@ We are the kings of the feedback tonight`;
 
       const isApproved = isUrlApproved(yueBaseUrl);
       if (!isApproved) {
-        addLog(`[YuE Direct Client] Connection blocked: Only localhost or trusted user-approved local backend URLs are permitted for proxy routing.`);
+        addLog(
+          `[YuE Direct Client] Connection blocked: Only localhost or trusted user-approved local backend URLs are permitted for proxy routing.`,
+        );
         triggerToast("Proxy blocked: Use localhost or trusted local network URLs only.");
         setIsGenerating(false);
         return;
@@ -1157,7 +1261,7 @@ We are the kings of the feedback tonight`;
           seed: Number(yueSeed) || 42,
           stage_mode: yueStage,
           precision: yuePrecision,
-          device: yueDevice
+          device: yueDevice,
         };
 
         const res = await fetch("/api/suno/proxy", {
@@ -1166,8 +1270,8 @@ We are the kings of the feedback tonight`;
           body: JSON.stringify({
             targetUrl: `${yueBaseUrl}/api/generate`,
             method: "POST",
-            body: payload
-          })
+            body: payload,
+          }),
         });
 
         if (!res.ok) {
@@ -1178,18 +1282,20 @@ We are the kings of the feedback tonight`;
         const data = await res.json();
         addLog(`[YuE API Client] Generation successfully completed! Received compiled media link.`);
 
-        const finalTitle = yueTitle.trim() || `YuE Opus #${Math.floor(1000 + Math.random() * 9000)}`;
+        const finalTitle = yueTitle.trim() || `YuE Opus #${randomInteger(1000, 9999)}`;
         const generatedTrack: AudioTrack = {
-          id: `yue-gen-${Date.now()}`,
+          id: makeTrackId("yue-gen"),
           source: "yue",
           title: finalTitle,
           prompt: `genre: ${yueGenre}`,
           lyrics: yueLyrics,
           tags: yueGenre,
           audioUrl: data.audio_url || `${yueBaseUrl}/outputs/latest.wav`,
-          imageUrl: data.image_url || "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=500&auto=format&fit=crop&q=60",
+          imageUrl:
+            data.image_url ||
+            "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=500&auto=format&fit=crop&q=60",
           duration: data.duration || 240,
-          createdAt: new Date().toISOString().split("T")[0],
+          createdAt: todayDateStamp(),
           status: "complete",
           stageMode: yueStage,
           audioPromptFile: yueAudioPrompt,
@@ -1201,13 +1307,15 @@ We are the kings of the feedback tonight`;
           canSendToSeparator: false,
           canSendToMixer: false,
           proofSource: "remote_url",
-          generatedByProof: false
+          generatedByProof: false,
         };
 
         setTracks([generatedTrack, ...tracks]);
         setActiveTrack(generatedTrack);
         setIsPlaying(false);
-        triggerToast(`YuE Open-Source Master "${finalTitle}" generated and added to AI Library successfully!`);
+        triggerToast(
+          `YuE Open-Source Master "${finalTitle}" added from external backend. Not source-separation proof.`,
+        );
         setIsGenerating(false);
 
         // Reset inputs
@@ -1239,24 +1347,24 @@ We are the kings of the feedback tonight`;
     setIsGenerating(false);
 
     // Create resulting track
-    const randomSeedId = Math.floor(1000 + Math.random() * 9000);
+    const randomSeedId = randomInteger(1000, 9999);
     const audioUrlsFallback = [
       "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
       "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3",
       "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3",
       "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-14.mp3",
     ];
-    const randomAudioUrl = audioUrlsFallback[Math.floor(Math.random() * audioUrlsFallback.length)];
+    const randomAudioUrl = randomChoice(audioUrlsFallback);
     const fallbackImages = [
       "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=500&auto=format&fit=crop&q=60",
       "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&auto=format&fit=crop&q=60",
-      "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=60"
+      "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=60",
     ];
-    const randomImageUrl = fallbackImages[Math.floor(Math.random() * fallbackImages.length)];
+    const randomImageUrl = randomChoice(fallbackImages);
 
     const finalTitle = yueTitle.trim() || `YuE Opus #${randomSeedId}`;
     const generatedTrack: AudioTrack = {
-      id: `yue-gen-${Date.now()}`,
+      id: makeTrackId("yue-gen"),
       source: "yue",
       title: finalTitle,
       prompt: `genre: ${yueGenre}`,
@@ -1265,7 +1373,7 @@ We are the kings of the feedback tonight`;
       audioUrl: randomAudioUrl,
       imageUrl: randomImageUrl,
       duration: 278,
-      createdAt: new Date().toISOString().split("T")[0],
+      createdAt: todayDateStamp(),
       status: "complete",
       stageMode: yueStage,
       audioPromptFile: yueAudioPrompt,
@@ -1277,14 +1385,14 @@ We are the kings of the feedback tonight`;
       canSendToSeparator: false,
       canSendToMixer: false,
       proofSource: "demo",
-      generatedByProof: false
+      generatedByProof: false,
     };
 
     setTracks([generatedTrack, ...tracks]);
     setActiveTrack(generatedTrack);
     setIsPlaying(false);
     triggerToast(`YuE Sandbox Placeholder "${finalTitle}" created successfully!`);
-    
+
     // Reset inputs
     setYueGenre("");
     setYueLyrics("");
@@ -1333,7 +1441,7 @@ We are the kings of the feedback tonight`;
     if (!currentList.includes(track.localFilePath)) {
       setSelectedInputs([track.localFilePath, ...currentList]);
     }
-    
+
     // Redirect Active Workspace Tab
     setActiveTab("classic_console");
     triggerToast(`Loaded "${track.localFilePath}". Notice: Generative files do NOT count for UVR AI E2E Proof!`);
@@ -1368,7 +1476,7 @@ We are the kings of the feedback tonight`;
     if (!currentList.includes(track.localFilePath)) {
       setSelectedInputs([track.localFilePath, ...currentList]);
     }
-    
+
     setActiveTab("mixer");
     triggerToast(`Armed channel with "${track.localFilePath}" (not part of UVR AI E2E Proof).`);
   };
@@ -1379,10 +1487,10 @@ We are the kings of the feedback tonight`;
 
   // Get file name options for YuE Prompt Audio guidance (includes selectedInputs and tracks)
   const getAudioPromptOptions = () => {
-    const inputOptions = selectedInputs.map(file => file);
+    const inputOptions = selectedInputs.map((file) => file);
     const generatedOptions = tracks
-      .filter(track => !track.isDemo && track.localFilePath)
-      .map(track => track.localFilePath as string);
+      .filter((track) => !track.isDemo && track.localFilePath)
+      .map((track) => track.localFilePath as string);
     return Array.from(new Set([...inputOptions, ...generatedOptions]));
   };
 
@@ -1439,7 +1547,10 @@ We are the kings of the feedback tonight`;
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-1 max-w-xl leading-relaxed">
-              This sandbox environment is for drafting song prompts, organizing AI-generated music, and preparing completed audio files for separation. Use only supported, user-authorized connection methods. Do not paste raw browser cookies or session tokens.
+              This sandbox environment is for drafting song prompts, organizing demo music references, and preparing
+              eligible local audio files for separation. Use only supported, user-authorized connection methods.
+              OpenStem does not support raw cookies, session-token pasting, service-limit bypassing, paywall bypassing,
+              or unauthorized account access.
             </p>
           </div>
 
@@ -1504,44 +1615,56 @@ We are the kings of the feedback tonight`;
           <span>Release State Notice: Hardened Functional Alpha</span>
         </div>
         <p className="text-slate-400 leading-relaxed text-[11px]">
-          The generative music capabilities below are experimental. 
-          Generative music output is <strong>not part of UVR AI separation proof</strong> and does not count as AI proof. 
-          <span className="text-orange-300"> Beta Candidate remains strictly blocked.</span>
+          The generative music capabilities below are experimental. Generative music output is{" "}
+          <strong>not part of UVR-style AI separation proof</strong> and does not count as AI proof.
+          <span className="text-orange-300"> Beta status is governed by separator proof evidence and final review.</span>
         </p>
         <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-slate-500 pt-1 border-t border-white/5">
-          <span>Lab Status: <span className="text-orange-400 font-bold">Experimental / Connector-dependent / Not part of UVR AI proof</span></span>
-          <span>Proof validation state: <span className="text-rose-400 font-bold">Locked</span></span>
+          <span>
+            Lab Status:{" "}
+            <span className="text-orange-400 font-bold">
+              Experimental / connector-dependent / Not part of UVR-style AI proof
+            </span>
+          </span>
+          <span>
+            Proof validation state: <span className="text-rose-400 font-bold">Locked</span>
+          </span>
         </div>
       </div>
 
       {/* SECTION 2: ENGINE SELECTION & HONEST STATUS CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Card A: Suno Connector */}
-        <div className={`p-4 rounded-xl border transition-all flex flex-col justify-between h-full bg-[#080a13]/60 relative ${
-          labStudio === "suno" ? "border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.1)]" : "border-white/5"
-        }`}>
+        <div
+          className={`p-4 rounded-xl border transition-all flex flex-col justify-between h-full bg-[#080a13]/60 relative ${
+            labStudio === "suno" ? "border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.1)]" : "border-white/5"
+          }`}
+        >
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-[10px] uppercase font-bold font-mono tracking-wider text-slate-400 flex items-center gap-1.5">
                 <Disc className="w-3.5 h-3.5 text-green-400 animate-spin-slow" />
-                Suno Connector
+                Suno Connector: Not configured
               </span>
               <span className="px-1.5 py-0.5 rounded text-[8px] bg-red-950/40 text-red-400 border border-red-500/10 font-mono uppercase font-bold">
-                Not active
+                Not configured
               </span>
             </div>
             <p className="text-[11px] text-slate-400 leading-relaxed">
-              Third-party integration. Access depends on external services and accounts. This app does not bypass service limits, terms, or authorization.
+              Generation unavailable until a supported connector is configured. This panel can prepare prompts and
+              settings, but it cannot generate or fetch songs until a supported user-authorized connector is configured.
             </p>
             <ul className="text-[9px] font-mono text-slate-500 space-y-1 pl-1 list-disc list-inside">
-              <li>Third-party service</li>
-              <li>Not bundled with UVR</li>
+              <li>External third-party service — not bundled with OpenStem</li>
               <li>Requires user-configured access</li>
-              <li>No bypass of paywalls</li>
+              <li>No service-limit or paywall bypass</li>
+              <li>No raw cookies, session tokens, or unauthorized account access</li>
             </ul>
           </div>
           <div className="pt-3 border-t border-white/5 mt-3 flex items-center justify-between">
-            <span className="text-[10px] font-mono text-slate-500">State: <span className="text-rose-400 font-bold">Not configured</span></span>
+            <span className="text-[10px] font-mono text-slate-500">
+              State: <span className="text-rose-400 font-bold">Not configured</span>
+            </span>
             <button
               onClick={() => {
                 setLabStudio("suno");
@@ -1559,9 +1682,11 @@ We are the kings of the feedback tonight`;
         </div>
 
         {/* Card B: YuE Local Engine */}
-        <div className={`p-4 rounded-xl border transition-all flex flex-col justify-between h-full bg-[#080a13]/60 relative ${
-          labStudio === "yue" ? "border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.1)]" : "border-white/5"
-        }`}>
+        <div
+          className={`p-4 rounded-xl border transition-all flex flex-col justify-between h-full bg-[#080a13]/60 relative ${
+            labStudio === "yue" ? "border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.1)]" : "border-white/5"
+          }`}
+        >
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-[10px] uppercase font-bold font-mono tracking-wider text-slate-400 flex items-center gap-1.5">
@@ -1569,21 +1694,32 @@ We are the kings of the feedback tonight`;
                 YuE Local Engine
               </span>
               <span className="px-1.5 py-0.5 rounded text-[8px] bg-red-950/40 text-red-400 border border-red-500/10 font-mono uppercase font-bold">
-                Not active
+                Planned / Not active
               </span>
             </div>
             <p className="text-[11px] text-slate-400 leading-relaxed">
-              Local open-source model execution. Requires significant compute resources, PyTorch environment, and local weights directories.
+              Experimental local model workflow. Requires local weights, Python/PyTorch, a wired backend, and enough
+              compute resources before any real run is available.
             </p>
             <ul className="text-[9px] font-mono text-slate-500 space-y-1 pl-1 list-disc list-inside">
               <li>Requires local weights (~7B params)</li>
               <li>Requires PyTorch runtime</li>
               <li>Not locally proven on host</li>
-              <li>High-VRAM CUDA requirement</li>
+              <li>YuE generation is separate from OpenStem's source-separation proof</li>
+              <li>A YuE run does not count as UVR-style AI stem-separation proof</li>
             </ul>
           </div>
           <div className="pt-3 border-t border-white/5 mt-3 flex items-center justify-between">
-            <span className="text-[10px] font-mono text-slate-500">State: <span className="text-purple-400 font-bold">Not wired</span></span>
+            <span className="text-[10px] font-mono text-slate-500">
+              State:{" "}
+              <span className="text-purple-400 font-bold">
+                {yueLocalWeightsConfigured
+                  ? yueBackendConfigured
+                    ? "Not locally proven"
+                    : "Backend missing"
+                  : "Not wired / local weights missing"}
+              </span>
+            </span>
             <button
               onClick={() => {
                 setLabStudio("yue");
@@ -1613,21 +1749,30 @@ We are the kings of the feedback tonight`;
               </span>
             </div>
             <p className="text-[11px] text-slate-400 leading-relaxed">
-              Text-only drafting assist. Employs Gemini API to blueprint lyrics structures and tags. Does not synthesize standalone WAV files.
+              Generate text-only lyric drafts, song sections, and style tags. This does not create audio files.
             </p>
             <ul className="text-[9px] font-mono text-slate-500 space-y-1 pl-1 list-disc list-inside">
-              <li>Text-only creator</li>
-              <li>Does not create audio</li>
-              <li>Gemini-backed assistance</li>
-              <li>Excellent for brainstorming</li>
+              <li>Text-only assistant. Does not create WAV, MP3, stems, or generated audio.</li>
+              <li>
+                {geminiApiConfigured
+                  ? "Gemini-backed text assistance"
+                  : "Gemini API not configured / text assistant unavailable"}
+              </li>
+              <li>Local fallback drafts copy only when Gemini is unavailable</li>
+              <li>No audio generation, music synthesis, or song rendering</li>
             </ul>
           </div>
           <div className="pt-3 border-t border-white/5 mt-3 flex items-center justify-between">
-            <span className="text-[10px] font-mono text-slate-500 font-bold">State: <span className="text-cyan-400">Functional</span></span>
+            <span className="text-[10px] font-mono text-slate-500 font-bold">
+              State:{" "}
+              <span className="text-cyan-400">
+                {geminiApiConfigured ? "Gemini-backed text assistance" : "Text-only local drafting fallback"}
+              </span>
+            </span>
             <button
               onClick={() => {
                 setAiAssistantExpanded(true);
-                triggerToast("Gemini lyric draft assistant opened!");
+                triggerToast("Text-only lyric draft assistant opened.");
               }}
               className="px-2.5 py-1 rounded text-[10px] uppercase font-bold font-mono tracking-wider bg-cyan-950/40 text-cyan-300 border border-cyan-500/15 hover:bg-cyan-900/30 transition-all cursor-pointer"
             >
@@ -1637,7 +1782,7 @@ We are the kings of the feedback tonight`;
         </div>
       </div>
 
-      {/* DRAWER: Suno Cookie / Proxy Configuration */}
+      {/* DRAWER: Suno Connector / Proxy Configuration */}
       <AnimatePresence>
         {showConfig && labStudio === "suno" && (
           <motion.div
@@ -1649,18 +1794,20 @@ We are the kings of the feedback tonight`;
             <div className="p-5 space-y-4 text-xs font-sans">
               <h3 className="text-xs font-bold text-slate-200 tracking-wider uppercase font-mono border-b border-white/10 pb-2 flex justify-between items-center">
                 <span>Suno-API Connection & Workspace Settings</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full ${apiMode === "real" ? "bg-amber-500/25 text-amber-300" : "bg-cyan-500/25 text-cyan-300"}`}>
+                <span
+                  className={`text-[10px] px-2 py-0.5 rounded-full ${apiMode === "real" ? "bg-amber-500/25 text-amber-300" : "bg-cyan-500/25 text-cyan-300"}`}
+                >
                   {apiMode === "real" ? "External API (Planned)" : "Sandbox Simulation Active"}
                 </span>
               </h3>
               <p className="text-slate-400 leading-relaxed text-[11px]">
-                To explore native connector layouts, you can launch a local <span className="text-green-400">suno-api</span> server. Use only supported, user-authorized connection methods. Do not paste raw browser cookies or session tokens into the app.
+                To explore native connector layouts, you can connect only to a supported, user-authorized local bridge.
+                OpenStem does not support raw cookies, session-token pasting, service-limit bypassing, paywall
+                bypassing, or unauthorized account access.
               </p>
 
               <div className="space-y-1.5 pt-1">
-                <label className="text-[10px] uppercase font-bold text-slate-400 font-mono">
-                  Suno Connection Mode
-                </label>
+                <label className="text-[10px] uppercase font-bold text-slate-400 font-mono">Suno Connection Mode</label>
                 <div className="grid grid-cols-2 gap-2 bg-black/40 p-1.5 rounded-lg border border-white/5">
                   <button
                     type="button"
@@ -1706,7 +1853,8 @@ We are the kings of the feedback tonight`;
                     className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-green-500/50"
                   />
                   <p className="text-[10px] text-slate-500 font-mono mt-1">
-                    Unofficial connector / user-managed local server. This app does not bypass third-party service restrictions. Users are responsible for following the terms of the service they connect to.
+                    Unofficial connector / user-managed local bridge. A local connector/server is only needed for
+                    connector types that explicitly use one. OpenStem does not bypass third-party service restrictions.
                   </p>
                 </div>
               </div>
@@ -1716,7 +1864,8 @@ We are the kings of the feedback tonight`;
                 <div className="space-y-1">
                   <span className="font-bold text-[11px] text-slate-300 block">Connection Warning & Rules:</span>
                   <p className="text-[10px] text-slate-500 leading-normal font-sans">
-                    This section does not bypass service paywalls. If using a local bridge, users are solely responsible for ensuring authorization and respect for service boundaries.
+                    Use only supported, user-authorized connection methods. OpenStem does not support raw cookies,
+                    session-token pasting, service-limit bypassing, paywall bypassing, or unauthorized account access.
                   </p>
                 </div>
               </div>
@@ -1741,19 +1890,28 @@ We are the kings of the feedback tonight`;
                   <Cpu className="w-4 h-4" />
                   YuE Foundation Deep PyTorch Deployment Configuration
                 </span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full ${yuePreflightStatus?.proofStatus === "PASS" ? "bg-green-500/20 text-green-300" : "bg-rose-500/10 text-rose-300"}`}>
-                  {yuePreflightStatus?.proofStatus === "PASS" ? "PASS: Verified Locally!" : "Not Locally Proven"}
+                <span
+                  className={`text-[10px] px-2 py-0.5 rounded-full ${yuePreflightStatus?.proofStatus === "DRY_RUN_READY" ? "bg-green-500/20 text-green-300" : "bg-rose-500/10 text-rose-300"}`}
+                >
+                  {yuePreflightStatus?.proofStatus === "DRY_RUN_READY"
+                    ? "Dry-run preflight ready"
+                    : "Not locally proven"}
                 </span>
               </h3>
               <p className="text-slate-400 leading-relaxed text-[11px]">
-                YuE local generation requires a compatible local model setup, model weights, Python/PyTorch runtime, and enough compute resources. Configure local paths to test and execute models directly.
+                YuE local generation requires a compatible local model setup, local weights, Python/PyTorch runtime, a
+                wired backend, and enough compute resources. YuE generation is separate from OpenStem's
+                source-separation proof. A YuE run does not count as UVR-style AI stem-separation proof.
               </p>
 
               <div className="space-y-1.5 pt-1">
                 <label className="text-[10px] uppercase font-bold text-purple-400 font-mono">
                   YuE Integration Connection Mode
                 </label>
-                <div className="grid grid-cols-3 gap-2 bg-black/40 p-1.5 rounded-lg border border-white/5" id="yue_connection_mode_selector_group">
+                <div
+                  className="grid grid-cols-3 gap-2 bg-black/40 p-1.5 rounded-lg border border-white/5"
+                  id="yue_connection_mode_selector_group"
+                >
                   <button
                     id="btn_mode_sandbox"
                     type="button"
@@ -1816,7 +1974,8 @@ We are the kings of the feedback tonight`;
                     className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-purple-500/50"
                   />
                   <p className="text-[10px] text-slate-500 leading-normal">
-                    Provide the host of a running FastAPI service for YuE (such as <code>api.py</code> representing your PyTorch workstation).
+                    Provide the host of a running FastAPI service for YuE (such as <code>api.py</code> representing your
+                    PyTorch workstation).
                   </p>
                 </div>
               )}
@@ -1824,8 +1983,10 @@ We are the kings of the feedback tonight`;
               {yueApiMode === "local" && (
                 <div className="space-y-4 pt-1" id="config_panel_local">
                   <div className="p-4 rounded-xl bg-purple-950/10 border border-purple-500/10 space-y-3">
-                    <span className="font-bold text-[11px] text-purple-300 block font-mono">1. Local Paths Configuration</span>
-                    
+                    <span className="font-bold text-[11px] text-purple-300 block font-mono">
+                      1. Local Paths Configuration
+                    </span>
+
                     <div className="space-y-1.5">
                       <label className="text-[9px] uppercase font-bold text-slate-400 font-mono flex justify-between">
                         <span>Python Executable Path</span>
@@ -1912,11 +2073,15 @@ We are the kings of the feedback tonight`;
                   </div>
 
                   <div className="p-4 rounded-xl bg-slate-950/30 border border-white/5 space-y-3">
-                    <span className="font-bold text-[11px] text-purple-300 block font-mono">2. Inference Hyperparameters Settings</span>
-                    
+                    <span className="font-bold text-[11px] text-purple-300 block font-mono">
+                      2. Inference Hyperparameters Settings
+                    </span>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
-                        <label className="text-[9px] uppercase font-bold text-slate-400 font-mono">Stage 1 Model Checkpoint</label>
+                        <label className="text-[9px] uppercase font-bold text-slate-400 font-mono">
+                          Stage 1 Model Checkpoint
+                        </label>
                         <input
                           id="input_stage1_model"
                           type="text"
@@ -1929,7 +2094,9 @@ We are the kings of the feedback tonight`;
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[9px] uppercase font-bold text-slate-400 font-mono">Stage 2 Model Checkpoint</label>
+                        <label className="text-[9px] uppercase font-bold text-slate-400 font-mono">
+                          Stage 2 Model Checkpoint
+                        </label>
                         <input
                           id="input_stage2_model"
                           type="text"
@@ -2041,7 +2208,7 @@ We are the kings of the feedback tonight`;
                       CLI Command Preview (Constructed Subprocess call)
                     </label>
                     <div className="bg-black/80 text-purple-300 px-3.5 py-3 rounded-lg border border-white/10 font-mono text-[10px] select-all leading-normal overflow-x-auto whitespace-pre">
-                      {`"${yuePythonPath || 'python'}" "${yueRepoPath ? yueRepoPath.replace(/\\/g, '/') : '...'}/inference/infer.py" \\\n  --stage1_model "${yueStage1Model}" \\\n  --stage2_model "${yueStage2Model}" \\\n  --genre_txt "temp_genre.txt" \\\n  --lyrics_txt "temp_lyrics.txt" \\\n  --run_n_segments ${yueSegments} \\\n  --stage2_batch_size ${yueStage2BatchSize} \\\n  --output_dir "${yueOutputDir || '...'}" \\\n  --max_new_tokens ${yueMaxNewTokens} \\\n  --repetition_penalty ${yueRepetitionPenalty} ${yueAudioPrompt ? ` \\\n  --use_audio_prompt \\\n  --audio_prompt_path "${yueAudioPrompt}" \\\n  --prompt_start_time ${yuePromptStartTime} \\\n  --prompt_end_time ${yuePromptEndTime}` : ''}`}
+                      {`"${yuePythonPath || "python"}" "${yueRepoPath ? yueRepoPath.replace(/\\/g, "/") : "..."}/inference/infer.py" \\\n  --stage1_model "${yueStage1Model}" \\\n  --stage2_model "${yueStage2Model}" \\\n  --genre_txt "temp_genre.txt" \\\n  --lyrics_txt "temp_lyrics.txt" \\\n  --run_n_segments ${yueSegments} \\\n  --stage2_batch_size ${yueStage2BatchSize} \\\n  --output_dir "${yueOutputDir || "..."}" \\\n  --max_new_tokens ${yueMaxNewTokens} \\\n  --repetition_penalty ${yueRepetitionPenalty} ${yueAudioPrompt ? ` \\\n  --use_audio_prompt \\\n  --audio_prompt_path "${yueAudioPrompt}" \\\n  --prompt_start_time ${yuePromptStartTime} \\\n  --prompt_end_time ${yuePromptEndTime}` : ""}`}
                     </div>
                   </div>
 
@@ -2154,9 +2321,20 @@ We are the kings of the feedback tonight`;
               <div className="p-4 rounded-xl bg-[#140c11] border border-purple-500/10 flex gap-3.5">
                 <Info className="w-5 h-5 text-purple-400 shrink-0" />
                 <div className="space-y-1">
-                  <span className="font-bold text-[11px] text-slate-300 block">YuE (岳) Open-Source Integration details:</span>
+                  <span className="font-bold text-[11px] text-slate-300 block">
+                    YuE (岳) Open-Source Integration details:
+                  </span>
                   <p className="text-[10px] text-slate-500 leading-normal font-sans">
-                    Designed by multimodal-art-projection, YuE can generate vocal tracks with backing audio when the real local/server backend is configured. Learn more at: <a href="https://github.com/multimodal-art-projection/YuE" target="_blank" className="text-purple-400 hover:underline inline-flex items-center gap-0.5">https://github.com/multimodal-art-projection/YuE <ExternalLink className="w-2.5 h-2.5" /></a>
+                    Designed by multimodal-art-projection, YuE is an experimental external model workflow. Real
+                    generation requires a configured backend, local weights, and a successful dry-run preflight. It is
+                    not part of OpenStem source-separation proof. Learn more at:{" "}
+                    <a
+                      href="https://github.com/multimodal-art-projection/YuE"
+                      target="_blank"
+                      className="text-purple-400 hover:underline inline-flex items-center gap-0.5"
+                    >
+                      https://github.com/multimodal-art-projection/YuE <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
                   </p>
                 </div>
               </div>
@@ -2177,17 +2355,15 @@ We are the kings of the feedback tonight`;
               <div className="flex items-center justify-between border-b border-white/5 pb-3 mb-4">
                 <div className="text-[10px] uppercase font-bold font-mono tracking-wider text-slate-400 flex items-center gap-1.5">
                   <Disc className="w-3.5 h-3.5 text-green-400" />
-                  Suno Parameters Setting
+                  Suno Draft Parameters — Preview Only
                 </div>
-                
+
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => setIsCustomMode(false)}
                     className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold uppercase transition-all cursor-pointer ${
-                      !isCustomMode
-                        ? "bg-green-500/20 text-green-300"
-                        : "text-slate-500 hover:text-slate-300"
+                      !isCustomMode ? "bg-green-500/20 text-green-300" : "text-slate-500 hover:text-slate-300"
                     }`}
                   >
                     Vibe Prompt
@@ -2196,22 +2372,30 @@ We are the kings of the feedback tonight`;
                     type="button"
                     onClick={() => setIsCustomMode(true)}
                     className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold uppercase transition-all cursor-pointer ${
-                      isCustomMode
-                        ? "bg-green-500/20 text-green-300"
-                        : "text-slate-500 hover:text-slate-300"
+                      isCustomMode ? "bg-green-500/20 text-green-300" : "text-slate-500 hover:text-slate-300"
                     }`}
                   >
                     custom lyrics
                   </button>
                 </div>
               </div>
+              <p className="text-[10px] text-slate-500 leading-relaxed mb-4">
+                These settings are for planning and copy/paste preparation only. They are not sent to Suno until a
+                supported connector is configured.
+              </p>
 
               {/* Form Fields for Suno */}
-              <div className="space-y-4">
+              <div
+                className={`space-y-4 ${!sunoConnectorConfigured ? "opacity-80" : ""}`}
+                aria-disabled={!sunoConnectorConfigured}
+              >
                 {!isCustomMode ? (
                   <div className="space-y-1.5">
                     <label className="text-[10px] uppercase font-bold text-slate-400 font-mono flex justify-between items-center">
-                      <span className="flex items-center gap-1">Song Description & Mood Vibe <HelpTooltipIcon content="A natural-language prompt describing the instrumental genres, pacing, vocals, or thematic environment to synthesize." /></span>
+                      <span className="flex items-center gap-1">
+                        Song Description & Mood Vibe{" "}
+                        <HelpTooltipIcon content="A natural-language prompt describing instrumental genres, pacing, vocals, or thematic environment for connector-ready draft settings." />
+                      </span>
                       <span className="text-slate-500 lowercase font-normal">limit 200 chars</span>
                     </label>
                     <textarea
@@ -2225,9 +2409,7 @@ We are the kings of the feedback tonight`;
                 ) : (
                   <div className="space-y-4">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] uppercase font-bold text-slate-400 font-mono">
-                        Song Title
-                      </label>
+                      <label className="text-[10px] uppercase font-bold text-slate-400 font-mono">Song Title</label>
                       <input
                         type="text"
                         value={songTitle}
@@ -2239,7 +2421,10 @@ We are the kings of the feedback tonight`;
 
                     <div className="space-y-1.5">
                       <label className="text-[10px] uppercase font-bold text-slate-400 font-mono flex justify-between items-center">
-                        <span className="flex items-center gap-1">Interactive Song Lyrics Input <HelpTooltipIcon content="Format lyrics using brackets, e.g. [Verse 1], [Chorus], [Outro], to instruct the generator when to trigger vocals versus instrumentals." /></span>
+                        <span className="flex items-center gap-1">
+                          Interactive Song Lyrics Input{" "}
+                          <HelpTooltipIcon content="Format lyrics using brackets, e.g. [Verse 1], [Chorus], [Outro], to instruct the generator when to trigger vocals versus instrumentals." />
+                        </span>
                         <span className="text-slate-500">Provide [Verse] and [Chorus] breaks</span>
                       </label>
                       <textarea
@@ -2341,25 +2526,33 @@ We are the kings of the feedback tonight`;
                     <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
                     <span>Suno Workstation Preflight Checklist:</span>
                   </div>
+                  {!sunoConnectorConfigured && (
+                    <div className="text-[11px] text-rose-300 font-bold">
+                      Blocked: Connector not configured
+                      <span className="block text-slate-500 font-mono mt-0.5">
+                        Code: GENERATIVE_CONNECTOR_NOT_CONFIGURED
+                      </span>
+                    </div>
+                  )}
                   <div className="space-y-1.5 text-[11px]">
                     <div className="flex justify-between items-center">
-                      <span>Connector Configured:</span>
+                      <span>Connector configured:</span>
                       <span className="text-red-400 font-bold">Missing</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span>Auth Method Supported:</span>
-                      <span className="text-red-400 font-bold">Unsupported</span>
+                      <span>Supported auth method:</span>
+                      <span className="text-red-400 font-bold">Not configured</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span>Local Server Reachable:</span>
-                      <span className="text-slate-500">Not Checked</span>
+                      <span>Local connector/server reachable:</span>
+                      <span className="text-slate-500">Not checked</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span>Output Folder Selected:</span>
+                      <span>Output folder selected:</span>
                       <span className="text-red-400 font-bold">Missing</span>
                     </div>
                     <div className="flex justify-between items-center pt-1 border-t border-white/5">
-                      <span className="text-slate-300">Terms warning acknowledged:</span>
+                      <span className="text-slate-300">Terms and rights warning:</span>
                       <label className="flex items-center gap-1.5 cursor-pointer">
                         <input
                           type="checkbox"
@@ -2368,7 +2561,7 @@ We are the kings of the feedback tonight`;
                           className="rounded border-white/15 text-rose-500 bg-black/40 focus:ring-0 w-3.5 h-3.5"
                         />
                         <span className={termsAcknowledged ? "text-green-400" : "text-amber-400"}>
-                          {termsAcknowledged ? "Acknowledged" : "Click to acknowledge"}
+                          {termsAcknowledged ? "Acknowledged" : "Not acknowledged"}
                         </span>
                       </label>
                     </div>
@@ -2379,6 +2572,7 @@ We are the kings of the feedback tonight`;
                 <div className="space-y-2">
                   <button
                     type="button"
+                    onClick={handleGenerateSunoTrack}
                     disabled={true}
                     className="w-full py-3.5 rounded-xl font-bold font-sans text-xs tracking-wider uppercase bg-slate-900/60 border border-white/5 text-slate-500 cursor-not-allowed flex items-center justify-center gap-2"
                   >
@@ -2386,7 +2580,8 @@ We are the kings of the feedback tonight`;
                     Blocked: Connector not configured
                   </button>
                   <p className="text-[10px] text-slate-500 text-center font-sans italic">
-                    To start drafting songs lyrically, use the "Lyric Coprocessor" panel below.
+                    Generation unavailable until a supported connector is configured. To draft text-only lyrics, use the
+                    Lyric Coprocessor panel below.
                   </p>
                 </div>
               </div>
@@ -2432,7 +2627,9 @@ We are the kings of the feedback tonight`;
                       type="button"
                       onClick={() => {
                         setYueStage("vocal_generation");
-                        triggerToast("YuE Stage 1: Focusing exclusively on raw vocal track synthesis from lyrics.");
+                        triggerToast(
+                          "YuE Stage 1 selected. Real vocal generation requires configured local weights and backend preflight.",
+                        );
                       }}
                       className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase transition-all cursor-pointer ${
                         yueStage === "vocal_generation"
@@ -2446,7 +2643,9 @@ We are the kings of the feedback tonight`;
                       type="button"
                       onClick={() => {
                         setYueStage("full_orchestra");
-                        triggerToast("YuE Stage 2: Full Orchestra mode selected. Real synthesis requires a configured YuE backend.");
+                        triggerToast(
+                          "YuE Stage 2 selected. Real generation requires configured local weights and backend preflight.",
+                        );
                       }}
                       className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase transition-all cursor-pointer ${
                         yueStage === "full_orchestra"
@@ -2537,8 +2736,10 @@ We are the kings of the feedback tonight`;
                       className="w-full bg-black/40 border border-white/10 rounded-lg px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-purple-500/50 cursor-pointer"
                     >
                       <option value="">-- No reference audio prompt (Free generate new singer) --</option>
-                      {getAudioPromptOptions().map(opt => (
-                        <option key={opt} value={opt}>{opt}</option>
+                      {getAudioPromptOptions().map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -2547,7 +2748,10 @@ We are the kings of the feedback tonight`;
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-white/5 pt-3 mt-1">
                     <div className="space-y-1">
                       <div className="flex justify-between text-[10px] font-mono text-slate-400 items-center">
-                        <span className="flex items-center">Vocal Creativity (s1_temp) <HelpTooltipIcon content="Higher values increase the vocality variation and lyrics expressiveness. Lower values keep the voice clean, stable, and rigid." /></span>
+                        <span className="flex items-center">
+                          Vocal Creativity (s1_temp){" "}
+                          <HelpTooltipIcon content="Higher values increase the vocality variation and lyrics expressiveness. Lower values keep the voice clean, stable, and rigid." />
+                        </span>
                         <span className="text-purple-400 font-bold">{tempVocal}</span>
                       </div>
                       <input
@@ -2658,7 +2862,10 @@ We are the kings of the feedback tonight`;
                 </AnimatePresence>
 
                 {/* SECTION 4: ENGINE READINESS & BLOCKERS */}
-                <div className="p-4 rounded-xl bg-purple-950/10 border border-purple-500/10 space-y-3.5 mt-4 text-xs font-mono text-slate-400" id="yue_preflight_checklist_card">
+                <div
+                  className="p-4 rounded-xl bg-purple-950/10 border border-purple-500/10 space-y-3.5 mt-4 text-xs font-mono text-slate-400"
+                  id="yue_preflight_checklist_card"
+                >
                   <div className="text-[10px] uppercase font-bold text-purple-400 flex items-center gap-1.5 pb-2 border-b border-white/5">
                     <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0" />
                     <span>YuE Local Subprocess Environment Checklist:</span>
@@ -2672,7 +2879,8 @@ We are the kings of the feedback tonight`;
 
                   {yueApiMode === "real" && (
                     <div className="text-[11px] text-purple-300 leading-relaxed italic p-1">
-                      🔗 External FastAPI Server Mode is Active. Preflight environment compatibility checks are managed at the target server side: <code>{yueBaseUrl}</code>.
+                      🔗 External FastAPI Server Mode is Active. Preflight environment compatibility checks are managed
+                      at the target server side: <code>{yueBaseUrl}</code>.
                     </div>
                   )}
 
@@ -2680,43 +2888,80 @@ We are the kings of the feedback tonight`;
                     <div className="space-y-1.5 text-[11px]">
                       {!yuePreflightStatus ? (
                         <div className="text-[10px] text-amber-400 py-1 leading-normal italic">
-                          ℹ️ No diagnostics reports found. Please fill in the local paths in the configuration drawer above, then click "Execute Preflight Probe" to run diagnostics.
+                          ℹ️ No diagnostics reports found. Please fill in the local paths in the configuration drawer
+                          above, then click "Execute Preflight Probe" to run diagnostics.
                         </div>
                       ) : (
                         <>
                           <div className="flex justify-between items-center">
                             <span>Python Runtime Available:</span>
-                            <span className={yuePreflightStatus.pythonVersion !== "None" ? "text-green-400 font-bold" : "text-red-400 font-bold"}>
-                              {yuePreflightStatus.pythonVersion !== "None" ? `v${yuePreflightStatus.pythonVersion}` : "Missing"}
+                            <span
+                              className={
+                                yuePreflightStatus.pythonVersion !== "None"
+                                  ? "text-green-400 font-bold"
+                                  : "text-red-400 font-bold"
+                              }
+                            >
+                              {yuePreflightStatus.pythonVersion !== "None"
+                                ? `v${yuePreflightStatus.pythonVersion}`
+                                : "Missing"}
                             </span>
                           </div>
                           <div className="flex justify-between items-center">
                             <span>PyTorch Loaded:</span>
-                            <span className={yuePreflightStatus.torchVersion !== "None" ? "text-green-400 font-bold" : "text-red-400 font-bold"}>
-                              {yuePreflightStatus.torchVersion !== "None" ? `Loaded (${yuePreflightStatus.torchVersion})` : "Missing"}
+                            <span
+                              className={
+                                yuePreflightStatus.torchVersion !== "None"
+                                  ? "text-green-400 font-bold"
+                                  : "text-red-400 font-bold"
+                              }
+                            >
+                              {yuePreflightStatus.torchVersion !== "None"
+                                ? `Loaded (${yuePreflightStatus.torchVersion})`
+                                : "Missing"}
                             </span>
                           </div>
                           <div className="flex justify-between items-center">
                             <span>Transformers Package:</span>
-                            <span className={yuePreflightStatus.transformersInstalled ? "text-green-400 font-bold" : "text-red-400 font-bold"}>
+                            <span
+                              className={
+                                yuePreflightStatus.transformersInstalled
+                                  ? "text-green-400 font-bold"
+                                  : "text-red-400 font-bold"
+                              }
+                            >
                               {yuePreflightStatus.transformersInstalled ? "Installed" : "Missing"}
                             </span>
                           </div>
                           <div className="flex justify-between items-center">
                             <span>Flash-Attention:</span>
-                            <span className={yuePreflightStatus.flashAttentionInstalled ? "text-green-400 font-bold" : "text-slate-500 font-bold"}>
+                            <span
+                              className={
+                                yuePreflightStatus.flashAttentionInstalled
+                                  ? "text-green-400 font-bold"
+                                  : "text-slate-500 font-bold"
+                              }
+                            >
                               {yuePreflightStatus.flashAttentionInstalled ? "Ready" : "Not Found (Optional)"}
                             </span>
                           </div>
                           <div className="flex justify-between items-center">
                             <span>YuE Repo Directory:</span>
-                            <span className={yuePreflightStatus.yueRootExists ? "text-green-400 font-bold" : "text-red-400 font-bold"}>
+                            <span
+                              className={
+                                yuePreflightStatus.yueRootExists ? "text-green-400 font-bold" : "text-red-400 font-bold"
+                              }
+                            >
                               {yuePreflightStatus.yueRootExists ? "Found" : "Not Found"}
                             </span>
                           </div>
                           <div className="flex justify-between items-center">
                             <span>Inference logic (infer.py):</span>
-                            <span className={yuePreflightStatus.inferPyExists ? "text-green-400 font-bold" : "text-red-400 font-bold"}>
+                            <span
+                              className={
+                                yuePreflightStatus.inferPyExists ? "text-green-400 font-bold" : "text-red-400 font-bold"
+                              }
+                            >
                               {yuePreflightStatus.inferPyExists ? "Accessible" : "Missing"}
                             </span>
                           </div>
@@ -2727,15 +2972,25 @@ We are the kings of the feedback tonight`;
                             </span>
                           </div>
                           <div className="flex justify-between items-center pt-1 border-t border-white/5">
-                            <span>Local Generation Proof:</span>
-                            <span className={yuePreflightStatus.proofStatus === "PASS" ? "text-green-400 font-bold" : "text-rose-400 font-bold"}>
-                              {yuePreflightStatus.proofStatus === "PASS" ? "PASS: proven locally!" : "Not Proven yet"}
+                            <span>Local YuE runtime state:</span>
+                            <span
+                              className={
+                                yuePreflightStatus.proofStatus === "DRY_RUN_READY"
+                                  ? "text-green-400 font-bold"
+                                  : "text-rose-400 font-bold"
+                              }
+                            >
+                              {yuePreflightStatus.proofStatus === "DRY_RUN_READY"
+                                ? "Dry-run preflight ready"
+                                : "Not active / not locally proven"}
                             </span>
                           </div>
 
                           {yuePreflightStatus.blockers && yuePreflightStatus.blockers.length > 0 && (
                             <div className="mt-2.5 p-2 bg-red-950/40 border border-red-500/20 rounded text-[10px] text-rose-300 space-y-1">
-                              <span className="font-bold flex items-center gap-1"><AlertTriangle className="w-3 h-3 shrink-0" /> Blockers detected:</span>
+                              <span className="font-bold flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3 shrink-0" /> Blockers detected:
+                              </span>
                               <ul className="list-disc pl-3.5 space-y-0.5">
                                 {yuePreflightStatus.blockers.map((b: string, i: number) => (
                                   <li key={i}>{b}</li>
@@ -2767,22 +3022,16 @@ We are the kings of the feedback tonight`;
                 {/* Submit YuE generation */}
                 <div className="space-y-2">
                   <button
-                    id="btn_synthesize_yue"
+                    id="btn_run_yue"
                     type="button"
-                    disabled={
-                      isGenerating ||
-                      (yueApiMode === "local" && (!yueRepoPath || !yueOutputDir || !termsAcknowledged)) ||
-                      (yueApiMode === "real" && !yueBaseUrl)
-                    }
+                    disabled={isGenerating || !yueGenerationReady}
                     onClick={handleGenerateYueTrack}
                     className={`w-full py-3.5 rounded-xl font-bold font-sans text-xs tracking-wider uppercase flex items-center justify-center gap-2 cursor-pointer transition-all border ${
                       isGenerating
                         ? "bg-slate-900 border-white/5 text-slate-500 cursor-not-allowed"
-                        : (yueApiMode === "local" && (!yueRepoPath || !yueOutputDir || !termsAcknowledged))
-                        ? "bg-slate-900/60 border-white/5 text-slate-500 cursor-not-allowed"
-                        : (yueApiMode === "real" && !yueBaseUrl)
-                        ? "bg-slate-900/60 border-white/5 text-slate-500 cursor-not-allowed"
-                        : "bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 border-purple-500/20 active:scale-[0.99] shadow-lg shadow-purple-500/5 hover:border-purple-500/40"
+                        : !yueGenerationReady
+                          ? "bg-slate-900/60 border-white/5 text-slate-500 cursor-not-allowed"
+                          : "bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 border-purple-500/20 active:scale-[0.99] shadow-lg shadow-purple-500/5 hover:border-purple-500/40"
                     }`}
                   >
                     {isGenerating ? (
@@ -2791,40 +3040,41 @@ We are the kings of the feedback tonight`;
                         Generating Audio Track via Subprocess...
                       </>
                     ) : yueApiMode === "local" ? (
-                      yuePreflightStatus?.proofStatus === "PASS" ? (
+                      yueGenerationReady ? (
                         <>
                           <Cpu className="w-4 h-4 text-purple-400" />
-                          🚀 Generate Local PyTorch Audio Master
+                          Run Local YuE Generation
                         </>
                       ) : (
                         <>
                           <AlertTriangle className="w-4 h-4 text-amber-500" />
-                          ⚠️ Execute Local Subprocess (Untested Preflight)
+                          State: Not wired / local weights missing
+                          <span className="text-[9px] text-slate-500 ml-1">Code: YUE_LOCAL_ENGINE_NOT_WIRED</span>
                         </>
                       )
                     ) : yueApiMode === "real" ? (
                       <>
                         <ExternalLink className="w-4 h-4 text-purple-400" />
-                        Generate Track via External API Server
+                        State: Backend missing
                       </>
                     ) : (
                       <>
                         <Sparkles className="w-4 h-4 text-cyan-400" />
-                        Generate Sandbox Simulation Track
+                        State: Planned / Not active
                       </>
                     )}
                   </button>
                   <p className="text-[10px] text-slate-500 text-center font-sans italic">
-                    {yueApiMode === "local" 
-                      ? "Direct GPU inference requires ~44GB constant VRAM allocation. Press Escape or click Stop anytime to exit subprocess."
-                      : "To draft concepts lyrically offline first, leverage the lyric co-processor copilot below."}
+                    {yueApiMode === "local"
+                      ? "Direct YuE runs require local weights, backend wiring, successful dry-run preflight, acknowledgement, and enough VRAM. They do not count as UVR-style AI stem-separation proof."
+                      : "YuE is planned / not active until a supported backend and local weights are configured. To draft concepts, use the text-only Lyric Coprocessor below."}
                   </p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Gemini AI Powered Songwriter assistant (Suno & YuE combined support) */}
+          {/* Text-only songwriter assistant (Suno & YuE combined support) */}
           <div className="p-5 rounded-2xl bg-[#080c14] border border-white/5 shadow-xl relative overflow-hidden">
             <div className="absolute top-[-20%] left-[-10%] w-44 h-44 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -2838,13 +3088,13 @@ We are the kings of the feedback tonight`;
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-200 flex items-center gap-1.5">
-                    Gemini AI Lyric & Descriptor Assistant
+                    Lyric & Descriptor Assistant
                     <span className="px-1.5 py-0.5 rounded text-[8px] bg-cyan-500/10 text-cyan-300 tracking-widest font-mono uppercase font-bold">
                       coprocessor
                     </span>
                   </h3>
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    Synthesize ready-to-paste lyrics, structural segments, and style tags.
+                    Draft ready-to-paste lyrics, structural segments, and style tags.
                   </p>
                 </div>
               </div>
@@ -2888,12 +3138,12 @@ We are the kings of the feedback tonight`;
                     {isGeneratingLyrics ? (
                       <>
                         <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
-                        Gemini Compiling Creative Score...
+                        Drafting text-only lyrics and tags...
                       </>
                     ) : (
                       <>
                         <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                        Compose Lyrics, Tags & Title
+                        Draft Text-Only Lyrics, Tags & Title
                       </>
                     )}
                   </button>
@@ -2944,11 +3194,13 @@ We are the kings of the feedback tonight`;
                     {/* Metadata */}
                     <div className="flex-1 min-w-0 pr-6 space-y-0.5">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className={`px-1 rounded text-[8px] tracking-wider uppercase font-extrabold font-mono shrink-0 ${
-                          track.source === "yue"
-                            ? "bg-purple-500/15 text-purple-300 border border-purple-500/10"
-                            : "bg-green-500/15 text-green-300 border border-green-500/10"
-                        }`}>
+                        <span
+                          className={`px-1 rounded text-[8px] tracking-wider uppercase font-extrabold font-mono shrink-0 ${
+                            track.source === "yue"
+                              ? "bg-purple-500/15 text-purple-300 border border-purple-500/10"
+                              : "bg-green-500/15 text-green-300 border border-green-500/10"
+                          }`}
+                        >
                           {track.source}
                         </span>
                         {track.isDemo ? (
@@ -2960,12 +3212,16 @@ We are the kings of the feedback tonight`;
                             Remote URL / Not local proof
                           </span>
                         ) : track.proofSource === "local_generated" ? (
-                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-mono shrink-0 scale-90 origin-left ${track.fileExists ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/10" : "bg-rose-500/10 text-rose-400 border border-rose-500/10"}`}>
-                            {track.fileExists ? "Local generated file / Verified on disk" : "Missing file"}
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[8px] font-mono shrink-0 scale-90 origin-left ${track.fileExists ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/10" : "bg-rose-500/10 text-rose-400 border border-rose-500/10"}`}
+                          >
+                            {track.fileExists ? "Local generative file / Exists on disk" : "Missing file"}
                           </span>
                         ) : track.proofSource === "local_imported" ? (
-                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-mono shrink-0 scale-90 origin-left ${track.fileExists ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/10" : "bg-rose-500/10 text-rose-400 border border-rose-500/10"}`}>
-                            {track.fileExists ? "Local imported file / Verified on disk" : "Missing file"}
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[8px] font-mono shrink-0 scale-90 origin-left ${track.fileExists ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/10" : "bg-rose-500/10 text-rose-400 border border-rose-500/10"}`}
+                          >
+                            {track.fileExists ? "Local imported file / Exists on disk" : "Missing file"}
                           </span>
                         ) : (
                           <span className="px-1.5 py-0.5 rounded text-[8px] font-mono shrink-0 bg-yellow-500/10 text-yellow-400 border border-yellow-500/10 scale-90 origin-left">
@@ -2975,19 +3231,21 @@ We are the kings of the feedback tonight`;
 
                         {track.proofReportPath && (
                           <span className="px-1.5 py-0.5 rounded text-[8px] font-mono shrink-0 bg-purple-500/10 text-purple-400 border border-purple-500/10 scale-90 origin-left">
-                            Proof report attached
+                            Run report attached
                           </span>
                         )}
-                        <h4 className={`text-xs font-bold truncate w-full ${isCurrentActive ? "text-green-300" : "text-slate-200"}`}>
+                        <h4
+                          className={`text-xs font-bold truncate w-full ${isCurrentActive ? "text-green-300" : "text-slate-200"}`}
+                        >
                           {track.title}
                         </h4>
                       </div>
-                      <div className="text-[10px] text-slate-500 font-mono uppercase truncate">
-                        {track.tags}
-                      </div>
+                      <div className="text-[10px] text-slate-500 font-mono uppercase truncate">{track.tags}</div>
                       <div className="flex justify-between items-center text-[9px] font-mono text-slate-600 pt-1">
                         <span>{track.createdAt}</span>
-                        <span>{Math.floor(track.duration / 60)}:{(track.duration % 60).toString().padStart(2, "0")}</span>
+                        <span>
+                          {Math.floor(track.duration / 60)}:{(track.duration % 60).toString().padStart(2, "0")}
+                        </span>
                       </div>
                     </div>
 
@@ -3006,7 +3264,9 @@ We are the kings of the feedback tonight`;
               {tracks.length === 0 && (
                 <div className="text-center py-10 text-slate-600 border border-dashed border-white/5 rounded-xl">
                   <HelpCircle className="w-8 h-8 mx-auto text-slate-700 mb-2" />
-                  <p className="text-[11px]">No tracks generated yet. Click generate above to experience AI!</p>
+                  <p className="text-[11px]">
+                    No local generative tracks loaded. Configure a supported backend or use demo references only.
+                  </p>
                 </div>
               )}
             </div>
@@ -3016,7 +3276,9 @@ We are the kings of the feedback tonight`;
               <div className="p-4 rounded-xl bg-black border border-white/5 space-y-4 shadow-inner">
                 {/* Visual Spin cover detail */}
                 <div className="flex items-center gap-3.5">
-                  <div className={`w-14 h-14 rounded-full border border-white/10 overflow-hidden shrink-0 relative ${isPlaying ? "animate-spin-slow" : ""}`}>
+                  <div
+                    className={`w-14 h-14 rounded-full border border-white/10 overflow-hidden shrink-0 relative ${isPlaying ? "animate-spin-slow" : ""}`}
+                  >
                     <img
                       src={activeTrack.imageUrl}
                       alt="Spinning Record"
@@ -3028,7 +3290,7 @@ We are the kings of the feedback tonight`;
 
                   <div className="flex-1 min-w-0">
                     <span className="text-[8px] uppercase tracking-widest text-green-400 font-mono leading-none block mb-1">
-                      {activeTrack.source === "yue" ? "now playing (YuE 7B Full Song)" : "now playing (Suno Cloud)"}
+                      {activeTrack.source === "yue" ? "previewing YuE reference" : "previewing Suno reference"}
                     </span>
                     <h4 className="text-xs font-bold text-slate-100 truncate leading-tight">{activeTrack.title}</h4>
                     <p className="text-[10px] font-mono text-slate-400 truncate mt-0.5">{activeTrack.tags}</p>
@@ -3037,12 +3299,15 @@ We are the kings of the feedback tonight`;
 
                 {/* Micro Audio Time Seek Control */}
                 <div className="space-y-1.5">
-                  <div className="w-full bg-white/5 rounded-full h-1 relative cursor-pointer group" onClick={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const clickX = e.clientX - rect.left;
-                    const pct = (clickX / rect.width) * 100;
-                    handleSeek(pct);
-                  }}>
+                  <div
+                    className="w-full bg-white/5 rounded-full h-1 relative cursor-pointer group"
+                    onClick={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const clickX = e.clientX - rect.left;
+                      const pct = (clickX / rect.width) * 100;
+                      handleSeek(pct);
+                    }}
+                  >
                     <div
                       className="bg-[#00ffb7] h-full rounded-full transition-all"
                       style={{ width: `${audioProgress}%` }}
@@ -3055,10 +3320,16 @@ We are the kings of the feedback tonight`;
 
                   <div className="flex justify-between text-[9px] font-mono text-slate-500">
                     <span>
-                      {Math.floor(currentTime / 60)}:{(Math.floor(currentTime % 60)).toString().padStart(2, "0")}
+                      {Math.floor(currentTime / 60)}:
+                      {Math.floor(currentTime % 60)
+                        .toString()
+                        .padStart(2, "0")}
                     </span>
                     <span>
-                      {Math.floor(duration / 60)}:{(Math.floor(duration % 60)).toString().padStart(2, "0")}
+                      {Math.floor(duration / 60)}:
+                      {Math.floor(duration % 60)
+                        .toString()
+                        .padStart(2, "0")}
                     </span>
                   </div>
                 </div>
@@ -3076,13 +3347,16 @@ We are the kings of the feedback tonight`;
                 {/* Direct Action UVR & Mixer integrators (Bolsters) */}
                 <div className="space-y-2 border-t border-white/5 pt-3">
                   <div className="text-[9px] uppercase font-bold text-slate-500 font-mono mb-1">
-                    Direct UVR model separation (Loops back to system)
+                    OpenStem source-separation loopback
                   </div>
 
                   <div className="p-2.5 rounded-lg bg-red-950/20 border border-red-500/15 text-[10px] font-sans text-slate-400 space-y-1">
-                    <span className="font-bold text-red-400 uppercase font-mono block">⚠️ E2E Proof Verification Exclusion:</span>
+                    <span className="font-bold text-red-400 uppercase font-mono block">
+                      ⚠️ E2E Proof Verification Exclusion:
+                    </span>
                     <p className="leading-snug text-slate-400">
-                      Only verified local audio files can be looped back into UVR tools. Generative audio does not count as UVR AI E2E proof.
+                      Only verified local audio files can be looped back into OpenStem tools. Generative audio does not
+                      count as UVR-style AI separation proof.
                     </p>
                   </div>
 
@@ -3136,7 +3410,6 @@ We are the kings of the feedback tonight`;
           </div>
         </div>
       </div>
-
     </div>
   );
 }

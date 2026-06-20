@@ -23,7 +23,7 @@ import {
   History,
   Binary,
   Maximize2,
-  FolderOpen
+  FolderOpen,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { HelpToggle, HelpText } from "./HelpSystem";
@@ -56,19 +56,10 @@ interface PreflightStatus {
 
 export default function BasicPitchMidiLab() {
   // Input Queue
-  const [inputFiles, setInputFiles] = useState<QueuedFile[]>([
-    {
-      name: "isolated_vocal_melody.wav",
-      path: "C:\\Users\\Consumer\\Music_Stems\\isolated_vocal_melody.wav",
-      size: 15420310,
-      format: "WAV",
-      duration: "01:27",
-      status: "Ready"
-    }
-  ]);
+  const [inputFiles, setInputFiles] = useState<QueuedFile[]>([]);
 
   // Output configurations
-  const [outputDir, setOutputDir] = useState<string>("C:\\Users\\Consumer\\MIDI_Exports\\");
+  const [outputDir, setOutputDir] = useState<string>("");
   const [keepOriginalFilename, setKeepOriginalFilename] = useState<boolean>(true);
   const [appendSuffix, setAppendSuffix] = useState<string>("_basic_pitch");
   const [appendTimestamp, setAppendTimestamp] = useState<boolean>(false);
@@ -102,7 +93,7 @@ export default function BasicPitchMidiLab() {
   const [isElectronEnvironment, setIsElectronEnvironment] = useState<boolean>(false);
   const [logs, setLogs] = useState<string[]>([
     "[Basic Pitch MIDI Lab] Workspace initialized. Hardened Functional Alpha active.",
-    "Ready for preflight check. Native Electron is required for real MIDI file generation."
+    "Ready for preflight check. Native Electron is required for real MIDI file generation.",
   ]);
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -129,7 +120,7 @@ export default function BasicPitchMidiLab() {
   useEffect(() => {
     const isElec = !!(window as any).uvr;
     setIsElectronEnvironment(isElec);
-    
+
     // Attempt to load settings from localStorage
     const cachedPy = localStorage.getItem("yue_python_path");
     if (cachedPy) {
@@ -144,7 +135,9 @@ export default function BasicPitchMidiLab() {
       addLog("🟢 Native Electron bridge found. Basic Pitch subprocess execution is available.");
       // Auto run scan if possible
     } else {
-      addLog("⚠️ Browser Preview / Not runnable for local MIDI generation; sandbox preview only.");
+      addLog(
+        "⚠️ Browser Preview / Not runnable for local MIDI generation; sandbox preview only. Code: BASIC_PITCH_DRY_RUN_ONLY",
+      );
     }
   }, []);
 
@@ -179,14 +172,14 @@ export default function BasicPitchMidiLab() {
       maxFreq,
       includePitchBends,
       multiplePitchBends,
-      midiTempo
+      midiTempo,
     };
 
     if (!(window as any).uvr?.validateBasicPitchEnvironment) {
       // Browser-only sandbox preview
       setPreflightScanning(true);
-      addLog("Running browser-only MIDI preflight preview...");
-      
+      addLog("Running browser-only MIDI preflight preview. Code: BASIC_PITCH_DRY_RUN_ONLY");
+
       setTimeout(() => {
         const mock: PreflightStatus = {
           ok: pythonPath !== "" && outputDir !== "",
@@ -201,7 +194,7 @@ export default function BasicPitchMidiLab() {
           midoInstalled: true,
           inputFileExists: activeInput ? true : false,
           outputDirReady: outputDir !== "",
-          blockers: []
+          blockers: [],
         };
 
         if (!activeInput) {
@@ -216,7 +209,9 @@ export default function BasicPitchMidiLab() {
         setPreflightData(mock);
         setIsPreflightScanned(true);
         setPreflightScanning(false);
-        addLog(`🎉 Browser preflight preview compiled. Status: ${mock.ok ? "DRY_RUN_ONLY" : "BLOCKERS DETECTED"}`);
+        addLog(
+          `🎉 Browser preflight preview compiled. Status: ${mock.ok ? "DRY_RUN_ONLY" : "BLOCKERS DETECTED"}; Code: BASIC_PITCH_DRY_RUN_ONLY`,
+        );
         triggerToast("Browser preflight preview completed.");
       }, 8000);
       return;
@@ -250,10 +245,10 @@ export default function BasicPitchMidiLab() {
   // Active Run execution command generator preview
   const previewCommandText = useMemo(() => {
     const activeFile = inputFiles[0];
-    const inp = activeFile ? activeFile.path : "input_audio.wav";
-    const out = outputDir || "C:\\MIDI_Output\\";
-    
-    let args = [`basic-pitch`, `"${out}"`, `"${inp}"`];
+    const inp = activeFile?.path || "<INPUT_AUDIO_REQUIRED>";
+    const out = outputDir || "<OUTPUT_FOLDER_REQUIRED>";
+
+    let args = [`basic-pitch`, `"${out || "<OUTPUT_FOLDER_REQUIRED>"}"`, `"${inp || "<INPUT_AUDIO_REQUIRED>"}"`];
     if (saveSonifiedWav) args.push(`--sonify-midi`);
     if (saveModelOutputsNpz) args.push(`--save-model-outputs`);
     if (saveNoteEventsCsv) args.push(`--save-note-events`);
@@ -269,9 +264,19 @@ export default function BasicPitchMidiLab() {
 
     return args.join(" ");
   }, [
-    inputFiles, outputDir, saveSonifiedWav, saveModelOutputsNpz, saveNoteEventsCsv,
-    onsetThreshold, frameThreshold, minNoteLength, minFreq, maxFreq, includePitchBends,
-    multiplePitchBends, midiTempo
+    inputFiles,
+    outputDir,
+    saveSonifiedWav,
+    saveModelOutputsNpz,
+    saveNoteEventsCsv,
+    onsetThreshold,
+    frameThreshold,
+    minNoteLength,
+    minFreq,
+    maxFreq,
+    includePitchBends,
+    multiplePitchBends,
+    midiTempo,
   ]);
 
   // Execute transcription
@@ -297,7 +302,7 @@ export default function BasicPitchMidiLab() {
       maxFreq,
       includePitchBends,
       multiplePitchBends,
-      midiTempo
+      midiTempo,
     };
 
     setIsProcessing(true);
@@ -306,7 +311,9 @@ export default function BasicPitchMidiLab() {
 
     if (!(window as any).uvr?.runBasicPitchTranscription) {
       // Browser-only preview; no local MIDI/WAV/CSV files are written.
-      addLog("[Sandbox Preview] Rendering audio-to-MIDI result names only; no local files will be written.");
+      addLog(
+        "[Sandbox Preview] Rendering audio-to-MIDI result names only; no local files will be written. Code: BASIC_PITCH_DRY_RUN_ONLY",
+      );
       const interval = setInterval(() => {
         setTranscriptionProgress((prev) => {
           if (prev >= 90) {
@@ -323,7 +330,7 @@ export default function BasicPitchMidiLab() {
         setIsProcessing(false);
 
         // Generate custom sandboxed outputs
-        const baseName = activeFile.name.substring(0, activeFile.name.lastIndexOf('.')) || activeFile.name;
+        const baseName = activeFile.name.substring(0, activeFile.name.lastIndexOf(".")) || activeFile.name;
         const midiOut = `${baseName}_basic_pitch.mid`;
         const sonifiedOut = `${baseName}_basic_pitch_sonified.wav`;
         const csvOut = `${baseName}_basic_pitch_note_events.csv`;
@@ -334,27 +341,26 @@ export default function BasicPitchMidiLab() {
           sonifiedFiles: saveSonifiedWav ? [sonifiedOut] : [],
           csvFiles: saveNoteEventsCsv ? [csvOut] : [],
           npzFiles: [],
-          fileSizes: {
-            [midiOut]: 12042,
-            [sonifiedOut]: 15420310,
-            [csvOut]: 8452
-          },
+          fileSizes: {},
           commandExecuted: previewCommandText,
-          stdout: "[cli-stdout] Initializing MIDI Transcription...\nLoading Spotify model layers...\nTranscription successful!",
-          stderr: "[cli-stderr] Warning: running in in-browser virtualization frame."
+          stdout:
+            "[cli-stdout] Initializing MIDI Transcription...\nLoading Spotify model layers...\nTranscription successful!",
+          stderr: "[cli-stderr] Warning: running in in-browser virtualization frame. Code: BASIC_PITCH_DRY_RUN_ONLY",
         });
 
         // Mark file list as finished
-        setInputFiles(prev => prev.map(f => ({ ...f, status: "Complete" })));
+        setInputFiles((prev) => prev.map((f) => ({ ...f, status: "Complete" })));
 
-        addLog("🎉 [Sandbox Preview] Spotify Basic Pitch result preview completed; no local files were written.");
+        addLog(
+          "🎉 [Sandbox Preview] Spotify Basic Pitch result preview completed; no local files were written. Code: BASIC_PITCH_DRY_RUN_ONLY",
+        );
         triggerToast("Browser preview completed - no local MIDI files were written.");
       }, 6000);
       return;
     }
 
     addLog(`[IPC Bridge] Spawning child wrapper to execute CLI command: ${previewCommandText}`);
-    setInputFiles(prev => prev.map(f => ({ ...f, status: "Transcribing" })));
+    setInputFiles((prev) => prev.map((f) => ({ ...f, status: "Transcribing" })));
 
     try {
       const result = await (window as any).uvr.runBasicPitchTranscription(finalConfig);
@@ -370,19 +376,19 @@ export default function BasicPitchMidiLab() {
           fileSizes: r.generatedFileSizes || {},
           commandExecuted: r.commandExecuted,
           stdout: r.stdoutSummary,
-          stderr: r.stderrSummary
+          stderr: r.stderrSummary,
         });
 
-        setInputFiles(prev => prev.map(f => ({ ...f, status: "Complete" })));
+        setInputFiles((prev) => prev.map((f) => ({ ...f, status: "Complete" })));
         addLog(`🎉 Subprocess completed successfully with exit code 0! Saved ${r.midiFiles?.length || 0} MIDI assets.`);
         triggerToast("🎉 Spotify Basic Pitch Transcription Completed Successfully!");
       } else {
-        setInputFiles(prev => prev.map(f => ({ ...f, status: "Failed" })));
+        setInputFiles((prev) => prev.map((f) => ({ ...f, status: "Failed" })));
         addLog(`❌ Transcription execution failed: ${result.error || "Unexpected subprocess crash"}`);
         triggerToast(`Process crashed: ${result.error || "Check logs"}`);
       }
     } catch (err: any) {
-      setInputFiles(prev => prev.map(f => ({ ...f, status: "Failed" })));
+      setInputFiles((prev) => prev.map((f) => ({ ...f, status: "Failed" })));
       addLog(`❌ Exception during Electron spool run: ${err.message}`);
       triggerToast(`Command failure: ${err.message}`);
     } finally {
@@ -406,14 +412,23 @@ export default function BasicPitchMidiLab() {
 
   const addPickedFiles = (files: any[]) => {
     const formatted = files.map((f) => {
-      const isAudio = f.type.startsWith("audio/") || f.name.endsWith(".wav") || f.name.endsWith(".mp3") || f.name.endsWith(".flac") || f.name.endsWith(".ogg");
+      const isAudio =
+        f.type.startsWith("audio/") ||
+        f.name.endsWith(".wav") ||
+        f.name.endsWith(".mp3") ||
+        f.name.endsWith(".flac") ||
+        f.name.endsWith(".ogg");
       return {
         name: f.name,
-        path: (f as any).path || `C:\\FakePath\\${f.name}`, // Node / electron provides .path
+        path: (f as any).path || "",
         size: f.size,
         format: f.name.split(".").pop()?.toUpperCase() || "Audio",
         duration: "Metadata not checked",
-        status: isAudio ? "Ready" as const : "Unsupported" as const
+        status: isAudio
+          ? (f as any).path || isElectronEnvironment
+            ? ("Ready" as const)
+            : ("Queued" as const)
+          : ("Unsupported" as const),
       };
     });
     setInputFiles((prev) => [...prev, ...formatted]);
@@ -498,7 +513,7 @@ export default function BasicPitchMidiLab() {
     if (inputFiles.length === 0) {
       blockersList.push("No input audio file selected");
     } else {
-      const unSupportedFiles = inputFiles.filter(x => x.status === "Unsupported");
+      const unSupportedFiles = inputFiles.filter((x) => x.status === "Unsupported");
       if (unSupportedFiles.length === inputFiles.length) {
         blockersList.push("No playable audio files found in list");
       }
@@ -509,7 +524,7 @@ export default function BasicPitchMidiLab() {
 
     return {
       blocked: blockersList.length > 0,
-      list: blockersList
+      list: blockersList,
     };
   }, [inputFiles, outputDir]);
 
@@ -530,7 +545,8 @@ export default function BasicPitchMidiLab() {
               Basic Pitch MIDI Lab
             </h2>
             <p className="text-xs text-slate-400 mt-1">
-              Audio-to-MIDI Transcription Workspace • Convert vocals, melodies, single instruments, riffs, or separated stems into MIDI note data using Spotify Basic Pitch.
+              Audio-to-MIDI Transcription Workspace • Convert vocals, melodies, single instruments, riffs, or separated
+              stems into MIDI note data using Spotify Basic Pitch.
             </p>
           </div>
           <div>
@@ -547,7 +563,10 @@ export default function BasicPitchMidiLab() {
             Workspace Integrity Protocol
           </div>
           <p>
-            This section represents a separate workspace and does not count as a UVR stem separation provider or proof check. A successful transcript here validates MIDI conversions only and is excluded from UVR AI separation E2E checks. Release state: <strong className="text-green-400 font-mono">Hardened Functional Alpha</strong>. Premium Beta Candidate state remains blocked.
+            This section represents a separate workspace and does not count as a UVR stem separation provider or proof
+            check. A successful transcript here validates MIDI conversions only and is excluded from UVR AI separation
+            E2E checks. Release state: <strong className="text-green-400 font-mono">Hardened Functional Alpha</strong>.
+            Beta Candidate status is governed by separator proof evidence and final release review.
           </p>
         </div>
       </div>
@@ -555,7 +574,6 @@ export default function BasicPitchMidiLab() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* LEFT COMPOSITION COLUMN (1 lg columns stack) */}
         <div className="lg:col-span-8 space-y-6">
-          
           {/* SECTION 2: INPUT AUDIO QUEUE */}
           <div className="p-5 rounded-2xl bg-glass-card border border-glass-border shadow-2xl relative space-y-4">
             <div className="flex justify-between items-center">
@@ -605,11 +623,10 @@ export default function BasicPitchMidiLab() {
             >
               <FileUp className="w-10 h-10 text-slate-500 hover:text-blue-400 transition" />
               <p className="text-xs text-slate-300 font-sans">
-                Drag & drop files here, or <span className="text-blue-400 font-bold underline">browse local machine</span>
+                Drag & drop files here, or{" "}
+                <span className="text-blue-400 font-bold underline">browse local machine</span>
               </p>
-              <p className="text-[10px] text-slate-500 font-mono">
-                Supports WAV, MP3, FLAC, OGG, M4A
-              </p>
+              <p className="text-[10px] text-slate-500 font-mono">Supports WAV, MP3, FLAC, OGG, M4A</p>
             </div>
 
             {/* List queue file cards */}
@@ -641,12 +658,17 @@ export default function BasicPitchMidiLab() {
                       </div>
 
                       {/* Status indicator badge */}
-                      <span className={`px-2 py-0.5 rounded-md text-[9px] font-mono font-bold leading-normal uppercase shrink-0 ${
-                        f.status === "Ready" || f.status === "Queued" ? "bg-blue-950/40 text-blue-400 border border-blue-500/20" :
-                        f.status === "Transcribing" ? "bg-amber-950/40 text-amber-400 border border-amber-500/20 animate-pulse" :
-                        f.status === "Complete" ? "bg-green-950/40 text-green-400 border border-green-500/20" :
-                        "bg-red-950/40 text-red-400 border border-red-500/20"
-                      }`}>
+                      <span
+                        className={`px-2 py-0.5 rounded-md text-[9px] font-mono font-bold leading-normal uppercase shrink-0 ${
+                          f.status === "Ready" || f.status === "Queued"
+                            ? "bg-blue-950/40 text-blue-400 border border-blue-500/20"
+                            : f.status === "Transcribing"
+                              ? "bg-amber-950/40 text-amber-400 border border-amber-500/20 animate-pulse"
+                              : f.status === "Complete"
+                                ? "bg-green-950/40 text-green-400 border border-green-500/20"
+                                : "bg-red-950/40 text-red-400 border border-red-500/20"
+                        }`}
+                      >
                         {f.status}
                       </span>
 
@@ -803,7 +825,9 @@ export default function BasicPitchMidiLab() {
                       onChange={(e) => setSaveSonifiedWav(e.target.checked)}
                       className="rounded border-white/10 bg-black/40 text-blue-500 focus:ring-0 focus:ring-offset-0 w-4 h-4 cursor-pointer"
                     />
-                    <div className="text-slate-200 font-bold font-mono text-[11px]">Save sonified MIDI WAV (--sonify-midi)</div>
+                    <div className="text-slate-200 font-bold font-mono text-[11px]">
+                      Save sonified MIDI WAV (--sonify-midi)
+                    </div>
                   </label>
                   <p className="text-[10px] text-slate-400 pl-6 leading-relaxed">
                     Saves synthetic audit audio mimicking transcribed note-events to test accuracy.
@@ -818,7 +842,9 @@ export default function BasicPitchMidiLab() {
                       onChange={(e) => setSaveNoteEventsCsv(e.target.checked)}
                       className="rounded border-white/10 bg-black/40 text-blue-500 focus:ring-0 focus:ring-offset-0 w-4 h-4 cursor-pointer"
                     />
-                    <div className="text-slate-200 font-bold font-mono text-[11px]">Save note-events CSV (--save-note-events)</div>
+                    <div className="text-slate-200 font-bold font-mono text-[11px]">
+                      Save note-events CSV (--save-note-events)
+                    </div>
                   </label>
                   <p className="text-[10px] text-slate-400 pl-6 leading-relaxed">
                     Saves precise onset/offset milliseconds spreadsheet coordinates.
@@ -833,7 +859,9 @@ export default function BasicPitchMidiLab() {
                       onChange={(e) => setSaveModelOutputsNpz(e.target.checked)}
                       className="rounded border-white/10 bg-black/40 text-blue-500 focus:ring-0 focus:ring-offset-0 w-4 h-4 cursor-pointer"
                     />
-                    <div className="text-slate-200 font-bold font-mono text-[11px]">Save model NPZ activations (--save-model-outputs)</div>
+                    <div className="text-slate-200 font-bold font-mono text-[11px]">
+                      Save model NPZ activations (--save-model-outputs)
+                    </div>
                   </label>
                   <p className="text-[10px] text-slate-400 pl-6 leading-relaxed">
                     Saves raw deep activations arrays for inspection or advanced graphing.
@@ -867,7 +895,9 @@ export default function BasicPitchMidiLab() {
                           onChange={(e) => setOnsetThreshold(parseFloat(e.target.value))}
                           className="w-full accent-blue-500 bg-black/40 h-1 rounded-lg cursor-pointer"
                         />
-                        <span className="text-[9px] text-slate-500 block">Higher values require stronger onset peaks.</span>
+                        <span className="text-[9px] text-slate-500 block">
+                          Higher values require stronger onset peaks.
+                        </span>
                       </div>
 
                       {/* Frame Threshold slider */}
@@ -885,7 +915,9 @@ export default function BasicPitchMidiLab() {
                           onChange={(e) => setFrameThreshold(parseFloat(e.target.value))}
                           className="w-full accent-blue-500 bg-black/40 h-1 rounded-lg cursor-pointer"
                         />
-                        <span className="text-[9px] text-slate-500 block">Notes persist while activations exceed this.</span>
+                        <span className="text-[9px] text-slate-500 block">
+                          Notes persist while activations exceed this.
+                        </span>
                       </div>
 
                       {/* Minimum Note Length */}
@@ -979,7 +1011,6 @@ export default function BasicPitchMidiLab() {
 
         {/* RIGHT METADATA / STATUS DIAGNOSTICS COLUMN (4 lg columns) */}
         <div className="lg:col-span-4 space-y-6">
-          
           {/* STATE INDICATOR FOR SYSTEM INTEGRITY MODE */}
           <div className="p-5 rounded-2xl bg-glass-card border border-glass-border shadow-md space-y-3">
             <div className="font-mono text-[10px] font-bold text-slate-400 uppercase tracking-widest">
@@ -1002,7 +1033,8 @@ export default function BasicPitchMidiLab() {
                   BROWSER PREVIEW / NOT RUNNABLE
                 </div>
                 <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
-                  Actions show sandbox-only previews and do not create local MIDI files. Use native Electron to process local audio.
+                  Actions show sandbox-only previews and do not create local MIDI files. Use native Electron to process
+                  local audio.
                 </p>
               </div>
             )}
@@ -1059,15 +1091,35 @@ export default function BasicPitchMidiLab() {
                   {/* Item 2: basic-pitch library */}
                   <div className="flex justify-between items-center">
                     <span className="text-slate-400">basic_pitch package</span>
-                    <span className={isPreflightScanned ? (preflightData?.basicPitchInstalled ? "text-green-400" : "text-red-400") : "text-slate-500"}>
-                      {isPreflightScanned ? (preflightData?.basicPitchInstalled ? "Installed" : "Missing") : "Not checked"}
+                    <span
+                      className={
+                        isPreflightScanned
+                          ? preflightData?.basicPitchInstalled
+                            ? "text-green-400"
+                            : "text-red-400"
+                          : "text-slate-500"
+                      }
+                    >
+                      {isPreflightScanned
+                        ? preflightData?.basicPitchInstalled
+                          ? "Installed"
+                          : "Missing"
+                        : "Not checked"}
                     </span>
                   </div>
 
                   {/* Item 3: basic-pitch CLI */}
                   <div className="flex justify-between items-center">
                     <span className="text-slate-400">basic-pitch CLI Binary</span>
-                    <span className={isPreflightScanned ? (preflightData?.cliAvailable ? "text-green-400" : "text-red-400") : "text-slate-500"}>
+                    <span
+                      className={
+                        isPreflightScanned
+                          ? preflightData?.cliAvailable
+                            ? "text-green-400"
+                            : "text-red-400"
+                          : "text-slate-500"
+                      }
+                    >
                       {isPreflightScanned ? (preflightData?.cliAvailable ? "Found" : "Missing") : "Not checked"}
                     </span>
                   </div>
@@ -1075,8 +1127,24 @@ export default function BasicPitchMidiLab() {
                   {/* Item 4: Required dependencies */}
                   <div className="flex justify-between items-center">
                     <span className="text-slate-400">Python dependencies</span>
-                    <span className={isPreflightScanned ? ((preflightData?.librosaInstalled && preflightData?.numpyInstalled && preflightData?.midoInstalled) ? "text-green-400" : "text-red-400") : "text-slate-500"}>
-                      {isPreflightScanned ? ((preflightData?.librosaInstalled && preflightData?.numpyInstalled && preflightData?.midoInstalled) ? "Installed" : "Missing") : "Not checked"}
+                    <span
+                      className={
+                        isPreflightScanned
+                          ? preflightData?.librosaInstalled &&
+                            preflightData?.numpyInstalled &&
+                            preflightData?.midoInstalled
+                            ? "text-green-400"
+                            : "text-red-400"
+                          : "text-slate-500"
+                      }
+                    >
+                      {isPreflightScanned
+                        ? preflightData?.librosaInstalled &&
+                          preflightData?.numpyInstalled &&
+                          preflightData?.midoInstalled
+                          ? "Installed"
+                          : "Missing"
+                        : "Not checked"}
                     </span>
                   </div>
 
@@ -1119,16 +1187,20 @@ export default function BasicPitchMidiLab() {
 
               {/* Preflight results / blockers warning box */}
               {isPreflightScanned && preflightData && (
-                <div className={`p-3 rounded-xl border text-[10px] ${
-                  preflightData.ok
-                    ? "bg-emerald-950/20 border-emerald-500/20 text-emerald-400"
-                    : "bg-red-950/20 border-red-500/20 text-red-400"
-                }`}>
+                <div
+                  className={`p-3 rounded-xl border text-[10px] ${
+                    preflightData.ok
+                      ? "bg-emerald-950/20 border-emerald-500/20 text-emerald-400"
+                      : "bg-red-950/20 border-red-500/20 text-red-400"
+                  }`}
+                >
                   <div className="font-bold uppercase tracking-wider mb-1 flex items-center gap-1 font-mono">
                     {preflightData.ok ? "🎉 READY" : "⚠️ BLOCKED"}
                   </div>
                   {preflightData.ok ? (
-                    <p>Basic Pitch requirements checked on this machine. This does not count as UVR separation proof.</p>
+                    <p>
+                      Basic Pitch requirements checked on this machine. This does not count as UVR separation proof.
+                    </p>
                   ) : (
                     <ul className="list-disc pl-3 space-y-1 mt-1 text-[9px]">
                       {preflightData.blockers.map((b, idx) => (
@@ -1188,8 +1260,8 @@ export default function BasicPitchMidiLab() {
                   isProcessing
                     ? "bg-slate-800 text-slate-400 border border-white/5"
                     : blockChecking.blocked
-                    ? "bg-slate-900 text-slate-600 border border-white/5 cursor-not-allowed"
-                    : "bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-700 hover:from-blue-400 hover:to-indigo-600 text-white font-bold border border-blue-400/30 shadow-[0_0_20px_rgba(59,130,246,0.3)] animate-pulse"
+                      ? "bg-slate-900 text-slate-600 border border-white/5 cursor-not-allowed"
+                      : "bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-700 hover:from-blue-400 hover:to-indigo-600 text-white font-bold border border-blue-400/30 shadow-[0_0_20px_rgba(59,130,246,0.3)] animate-pulse"
                 }`}
               >
                 {isProcessing ? (
@@ -1234,7 +1306,10 @@ export default function BasicPitchMidiLab() {
               <div className="bg-black/60 rounded-lg p-2 font-mono text-[9px] text-blue-300 select-all border border-white/5">
                 python -m pip install basic-pitch
               </div>
-              <p>This command downloads and bundles neural network models on first execution. Subsequent transcriptions run offline.</p>
+              <p>
+                This command downloads and bundles neural network models on first execution. Subsequent transcriptions
+                run offline.
+              </p>
             </div>
           </div>
         </div>
@@ -1263,7 +1338,9 @@ export default function BasicPitchMidiLab() {
 
           {!isElectronEnvironment && (
             <div className="p-3 rounded-xl border border-amber-500/20 bg-amber-500/10 text-[10px] text-amber-200 font-mono">
-              Browser Preview / Not runnable: artifact names below are preview labels only. No local MIDI, WAV, CSV, or NPZ files were written.
+              Browser Preview / Not runnable: artifact names below are preview labels only. No local MIDI, WAV, CSV, or
+              NPZ files were written.
+              <span className="block text-slate-500 mt-1">Code: BASIC_PITCH_DRY_RUN_ONLY</span>
             </div>
           )}
 
@@ -1276,34 +1353,61 @@ export default function BasicPitchMidiLab() {
               <div className="space-y-1.5 font-mono text-[10px]">
                 {/* MIDI master */}
                 {finalResults.midiFiles.map((f, i) => (
-                  <div key={i} className="p-2.5 rounded-lg bg-black/45 border border-green-500/10 flex justify-between items-center text-[10px]">
+                  <div
+                    key={i}
+                    className="p-2.5 rounded-lg bg-black/45 border border-green-500/10 flex justify-between items-center text-[10px]"
+                  >
                     <div className="flex items-center gap-2 text-green-300">
                       <FileText className="w-3.5 h-3.5 shrink-0" />
                       <span className="font-bold truncate max-w-xs">{f}</span>
                     </div>
-                    <span className="text-slate-500">{finalResults.fileSizes[f] ? `${(finalResults.fileSizes[f] / 1024).toFixed(1)} KB` : "12.0 KB"}</span>
+                    <span className="text-slate-500">
+                      {finalResults.fileSizes[f]
+                        ? `${(finalResults.fileSizes[f] / 1024).toFixed(1)} KB`
+                        : finalResults.proofStatus === "DRY_RUN_ONLY"
+                          ? "Preview label only"
+                          : "Not verified"}
+                    </span>
                   </div>
                 ))}
 
                 {/* Sonified audio WAV if any */}
                 {finalResults.sonifiedFiles.map((f, i) => (
-                  <div key={i} className="p-2.5 rounded-lg bg-black/45 border border-blue-500/10 flex justify-between items-center text-[10px]">
+                  <div
+                    key={i}
+                    className="p-2.5 rounded-lg bg-black/45 border border-blue-500/10 flex justify-between items-center text-[10px]"
+                  >
                     <div className="flex items-center gap-2 text-blue-300">
                       <FileAudio className="w-3.5 h-3.5 shrink-0" />
                       <span className="font-bold truncate max-w-xs">{f}</span>
                     </div>
-                    <span className="text-slate-500">{finalResults.fileSizes[f] ? `${(finalResults.fileSizes[f] / (1024 * 1024)).toFixed(1)} MB` : "14.7 MB"}</span>
+                    <span className="text-slate-500">
+                      {finalResults.fileSizes[f]
+                        ? `${(finalResults.fileSizes[f] / (1024 * 1024)).toFixed(1)} MB`
+                        : finalResults.proofStatus === "DRY_RUN_ONLY"
+                          ? "Preview label only"
+                          : "Not verified"}
+                    </span>
                   </div>
                 ))}
 
                 {/* CSV note-events */}
                 {finalResults.csvFiles.map((f, i) => (
-                  <div key={i} className="p-2.5 rounded-lg bg-black/45 border border-white/5 flex justify-between items-center text-[10px]">
+                  <div
+                    key={i}
+                    className="p-2.5 rounded-lg bg-black/45 border border-white/5 flex justify-between items-center text-[10px]"
+                  >
                     <div className="flex items-center gap-2 text-slate-300">
                       <FileText className="w-3.5 h-3.5 shrink-0" />
                       <span className="font-bold truncate max-w-xs">{f}</span>
                     </div>
-                    <span className="text-slate-500">{finalResults.fileSizes[f] ? `${(finalResults.fileSizes[f] / 1024).toFixed(1)} KB` : "8.4 KB"}</span>
+                    <span className="text-slate-500">
+                      {finalResults.fileSizes[f]
+                        ? `${(finalResults.fileSizes[f] / 1024).toFixed(1)} KB`
+                        : finalResults.proofStatus === "DRY_RUN_ONLY"
+                          ? "Preview label only"
+                          : "Not verified"}
+                    </span>
                   </div>
                 ))}
               </div>

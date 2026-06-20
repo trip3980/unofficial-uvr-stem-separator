@@ -10,8 +10,9 @@ Use this skill to keep release status honest.
 ## Current Gate
 
 - Keep release state at Hardened Functional Alpha.
-- Keep Beta Candidate blocked until verified local AI E2E stem-separation proof passes.
-- Do not approve Beta, production readiness, or official UVR status without proof.
+- One verified local CPU AI E2E stem-separation proof lane has completed for `audio-separator` / `1_HP-UVR.pth`.
+- Do not approve Beta, production readiness, or official UVR status automatically from one proof lane.
+- Beta Candidate requires final release checklist review, packaged-app checks, and user decision.
 
 ## What Does Not Count As AI Proof
 
@@ -29,4 +30,4 @@ Use this skill to keep release status honest.
 
 Verified AI proof requires a real verified model weight file, local SHA-256 match, supported backend, real input audio, backend execution, exit code 0, and non-empty AI-generated stems on disk.
 
-Until that exists, report that OpenStem remains Hardened Functional Alpha and Beta Candidate remains blocked.
+After one proof lane exists, report that OpenStem remains Hardened Functional Alpha and that Beta Candidate is pending final release review. Do not claim production readiness, full catalog proof, GPU proof, or official UVR status.

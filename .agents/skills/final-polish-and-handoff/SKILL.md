@@ -10,7 +10,7 @@ Use this skill to gather the project into one final release-readiness pass befor
 ## Release Truth
 
 - Release state remains Hardened Functional Alpha unless proof requirements are actually met.
-- Beta Candidate remains blocked until verified local AI E2E stem-separation proof passes.
+- One verified local CPU AI E2E stem-separation proof lane has completed; Beta Candidate still requires final release checklist review.
 - Do not approve Beta.
 - Do not claim production readiness.
 - Do not fake proof.
@@ -32,7 +32,7 @@ Use this skill to gather the project into one final release-readiness pass befor
 
 1. Confirm app name is OpenStem AI Audio Workstation.
 2. Confirm release state is Hardened Functional Alpha.
-3. Confirm Beta Candidate remains blocked.
+3. Confirm Beta Candidate is not automatically approved and remains pending final release review.
 4. Confirm Windows installer builds.
 5. Confirm packaged runtime diagnostics pass if previously verified.
 6. Confirm Linux/macOS are not claimed verified unless actually built/launched.
@@ -53,7 +53,7 @@ Use this skill to gather the project into one final release-readiness pass befor
 21. Confirm `npm.cmd run validate-registry` passes.
 22. Confirm `npm.cmd run electron:build` passes when packaging is relevant.
 23. Confirm `npm run release:check` passes when doing a release workflow check.
-24. Confirm `npm run proof:check` remains blocked until verified model asset exists.
+24. Confirm `npm run proof:check` reports missing model, ready-but-not-run, or completed-proof pass from durable evidence only.
 25. List remaining blockers in priority order.
 26. Provide the safest next Codex task.
 27. End with one of: Working, Partially working, Blocked, Needs user decision.

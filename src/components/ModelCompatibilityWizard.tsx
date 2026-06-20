@@ -419,8 +419,8 @@ export const ModelCompatibilityWizard: React.FC = () => {
               <span className="text-[9px] font-mono bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2 py-0.5 rounded font-bold whitespace-nowrap">
                 Hardened Functional Alpha
               </span>
-              <span className="text-[9px] font-mono bg-red-500/10 text-red-300 border border-red-500/20 px-2 py-0.5 rounded font-bold whitespace-nowrap">
-                Beta Candidate Blocked
+              <span className="text-[9px] font-mono bg-blue-500/10 text-blue-300 border border-blue-500/20 px-2 py-0.5 rounded font-bold whitespace-nowrap">
+                Beta Review Pending
               </span>
             </div>
           </div>

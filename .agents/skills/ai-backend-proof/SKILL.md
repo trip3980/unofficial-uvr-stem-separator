@@ -32,4 +32,4 @@ Valid local AI proof requires:
 - Do not fabricate progress percentages.
 - Do not emit fake `JOB SUCCESSFUL.` messages.
 - Output files must exist and be larger than 0 bytes before reporting success.
-- Keep `proof:check` blocked until a verified model asset exists.
+- Keep `proof:check` blocked until a verified model asset exists and a durable real E2E proof report can be re-verified from disk.

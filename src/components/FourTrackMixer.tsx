@@ -16,6 +16,7 @@ import {
   Folder,
   XCircle,
 } from "lucide-react";
+import { DiagnosticCode } from "../services/diagnosticCodes";
 
 export interface LoadedStem {
   id: string;
@@ -46,10 +47,7 @@ const DEMO_STEMS: LoadedStem[] = [
     durationSeconds: 192,
     sourceModel: "Demo Model v4",
     sourceEngine: "Prism-RoFormer vocal extractor",
-    waveformPeaks: [
-      15, 30, 45, 10, 60, 80, 45, 90, 75, 40, 25, 70, 85, 30, 60, 40, 80, 95,
-      20, 50, 65, 30, 45, 20,
-    ],
+    waveformPeaks: [15, 30, 45, 10, 60, 80, 45, 90, 75, 40, 25, 70, 85, 30, 60, 40, 80, 95, 20, 50, 65, 30, 45, 20],
     peakDataSource: "placeholder",
     isDemo: true,
     canPlay: false,
@@ -66,10 +64,7 @@ const DEMO_STEMS: LoadedStem[] = [
     durationSeconds: 192,
     sourceModel: "Demo Model v4",
     sourceEngine: "Demucs-v4 Pro drum separator",
-    waveformPeaks: [
-      40, 80, 20, 90, 30, 85, 40, 75, 20, 85, 45, 90, 15, 80, 30, 85, 40, 80,
-      10, 85, 30, 70, 20, 90,
-    ],
+    waveformPeaks: [40, 80, 20, 90, 30, 85, 40, 75, 20, 85, 45, 90, 15, 80, 30, 85, 40, 80, 10, 85, 30, 70, 20, 90],
     peakDataSource: "placeholder",
     isDemo: true,
     canPlay: false,
@@ -86,10 +81,7 @@ const DEMO_STEMS: LoadedStem[] = [
     durationSeconds: 192,
     sourceModel: "Demo Model v4",
     sourceEngine: "MDX-23C Sub bass filter",
-    waveformPeaks: [
-      60, 40, 50, 70, 40, 60, 80, 50, 40, 60, 70, 50, 40, 50, 80, 40, 60, 70,
-      50, 40, 62, 45, 55, 30,
-    ],
+    waveformPeaks: [60, 40, 50, 70, 40, 60, 80, 50, 40, 60, 70, 50, 40, 50, 80, 40, 60, 70, 50, 40, 62, 45, 55, 30],
     peakDataSource: "placeholder",
     isDemo: true,
     canPlay: false,
@@ -106,10 +98,7 @@ const DEMO_STEMS: LoadedStem[] = [
     durationSeconds: 192,
     sourceModel: "Demo Model v4",
     sourceEngine: "VR spectral background partition",
-    waveformPeaks: [
-      30, 45, 60, 50, 75, 55, 60, 80, 70, 55, 40, 75, 65, 50, 70, 80, 60, 45,
-      50, 65, 40, 55, 35, 45,
-    ],
+    waveformPeaks: [30, 45, 60, 50, 75, 55, 60, 80, 70, 55, 40, 75, 65, 50, 70, 80, 60, 45, 50, 65, 40, 55, 35, 45],
     peakDataSource: "placeholder",
     isDemo: true,
     canPlay: false,
@@ -160,6 +149,73 @@ interface FourTrackMixerProps {
   jobId?: string;
 }
 
+export type MixerSessionState =
+  | "no_session"
+  | "demo_preview"
+  | "verified_session_loaded"
+  | "missing_files"
+  | "export_ready"
+  | "export_blocked";
+
+interface MixerSessionStateInput {
+  useDemo: boolean;
+  stemsCount: number;
+  activeVerifiedStemsCount: number;
+  anyMissingStems: boolean;
+}
+
+interface MixerExportStateInput {
+  contentState: MixerSessionState;
+  isExporterImplemented: boolean;
+  outputFolderSelected: boolean;
+  isOutputFolderWritable: boolean;
+  activeVerifiedStemsCount: number;
+  anyMissingStems: boolean;
+}
+
+const NO_VERIFIED_JOB_METADATA = "Not available — no verified separation job loaded";
+
+export function getMixerSessionState({
+  useDemo,
+  stemsCount,
+  activeVerifiedStemsCount,
+  anyMissingStems,
+}: MixerSessionStateInput): MixerSessionState {
+  if (stemsCount === 0) return "no_session";
+  if (useDemo) return "demo_preview";
+  if (anyMissingStems || activeVerifiedStemsCount === 0) return "missing_files";
+  return "verified_session_loaded";
+}
+
+export function getMixerExportState({
+  contentState,
+  isExporterImplemented,
+  outputFolderSelected,
+  isOutputFolderWritable,
+  activeVerifiedStemsCount,
+  anyMissingStems,
+}: MixerExportStateInput): MixerSessionState {
+  if (
+    contentState === "verified_session_loaded" &&
+    isExporterImplemented &&
+    outputFolderSelected &&
+    isOutputFolderWritable &&
+    activeVerifiedStemsCount > 0 &&
+    !anyMissingStems
+  ) {
+    return "export_ready";
+  }
+
+  return "export_blocked";
+}
+
+function formatBytes(bytes?: number): string {
+  if (!bytes || bytes <= 0) return "File size not verified";
+  if (bytes < 1024) return `${bytes} bytes`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
 export default function FourTrackMixer({
   inputFileName,
   separationGoal,
@@ -182,19 +238,22 @@ export default function FourTrackMixer({
   const [overwriteBehavior, setOverwriteBehavior] = useState<"ask" | "skip" | "replace">("ask");
 
   const [useDemo, setUseDemo] = useState(false);
-  const [verifiedFiles, setVerifiedFiles] = useState<Record<string, {
-    exists: boolean;
-    sizeBytes: number;
-    extension: string;
-    isAudio: boolean;
-    durationSeconds?: number;
-  }>>({});
+  const [verifiedFiles, setVerifiedFiles] = useState<
+    Record<
+      string,
+      {
+        exists: boolean;
+        sizeBytes: number;
+        extension: string;
+        isAudio: boolean;
+        durationSeconds?: number;
+      }
+    >
+  >({});
 
   const timerRef = useRef<number | null>(null);
 
-  const stemsToUse = loadedStems && loadedStems.length > 0
-    ? loadedStems
-    : (useDemo ? DEMO_STEMS : []);
+  const stemsToUse = loadedStems && loadedStems.length > 0 ? loadedStems : useDemo ? DEMO_STEMS : [];
 
   useEffect(() => {
     // Playback is NOT wired
@@ -256,7 +315,7 @@ export default function FourTrackMixer({
   };
 
   const formatTime = () => {
-    const durationSecs = stemsToUse.find(t => t.durationSeconds)?.durationSeconds;
+    const durationSecs = stemsToUse.find((t) => t.durationSeconds)?.durationSeconds;
     if (durationSecs === undefined || durationSecs <= 0) {
       return "Duration not checked";
     }
@@ -287,29 +346,103 @@ export default function FourTrackMixer({
     return track.fileExists === true;
   }).length;
 
-  const anyMissingStems = stemsToUse.length === 0 || stemsToUse.some(track => {
-    if (track.isDemo) return true;
-    if (!track.filePath) return true;
-    if (verifiedFiles[track.id]) {
-      return !verifiedFiles[track.id].exists;
-    }
-    return track.fileExists !== true;
+  const anyMissingStems =
+    stemsToUse.length === 0 ||
+    stemsToUse.some((track) => {
+      if (track.isDemo) return true;
+      if (!track.filePath) return true;
+      if (verifiedFiles[track.id]) {
+        return !verifiedFiles[track.id].exists;
+      }
+      return track.fileExists !== true;
+    });
+
+  const mixerContentState = getMixerSessionState({
+    useDemo,
+    stemsCount: stemsToUse.length,
+    activeVerifiedStemsCount,
+    anyMissingStems,
+  });
+  const mixerExportState = getMixerExportState({
+    contentState: mixerContentState,
+    isExporterImplemented,
+    outputFolderSelected,
+    isOutputFolderWritable,
+    activeVerifiedStemsCount,
+    anyMissingStems,
   });
 
-  const blockers: string[] = [];
-  blockers.push("Exporter backend not implemented.");
+  const hasVerifiedSession = mixerContentState === "verified_session_loaded";
+  const isDemoPreview = mixerContentState === "demo_preview";
+  const mixerModeLabel = hasVerifiedSession
+    ? "Verified Stem Session Loaded"
+    : isDemoPreview
+      ? "Demo Preview Only"
+      : mixerContentState === "missing_files"
+        ? "Missing Files / Export Blocked"
+        : "No verified stem session loaded";
+  const jobIdLabel = hasVerifiedSession
+    ? jobId || "Verified separation job loaded (job ID not reported)"
+    : isDemoPreview
+      ? "Demo preview only — no verified job loaded"
+      : "No verified job loaded";
+  const stemSourceLabel = hasVerifiedSession
+    ? "Verified local AI output"
+    : isDemoPreview
+      ? "Demo Preview Only — not proof, not exportable"
+      : "No verified stem session loaded";
+  const metadataUnavailableLabel =
+    mixerContentState === "missing_files"
+      ? "Not available — stem files missing or unverified"
+      : NO_VERIFIED_JOB_METADATA;
+  const modelSourceLabel = hasVerifiedSession
+    ? selectedModelName || "Verified model not reported"
+    : isDemoPreview
+      ? "Demo preview only — no verified separation model"
+      : metadataUnavailableLabel;
+  const categoryLabel = hasVerifiedSession
+    ? selectedCategory || "Verified category not reported"
+    : isDemoPreview
+      ? "Demo preview only — no verified separation job"
+      : metadataUnavailableLabel;
+  const computeSourceLabel = hasVerifiedSession
+    ? "Verified backend separation output"
+    : "No backend task active in mixer";
+  const inputFileLabel = hasVerifiedSession
+    ? inputFileName || "Verified input file not reported"
+    : isDemoPreview
+      ? "Demo preview only — no verified separation input file"
+      : metadataUnavailableLabel;
+  const loadedStemsCountLabel = hasVerifiedSession
+    ? `${activeVerifiedStemsCount} verified stem${activeVerifiedStemsCount === 1 ? "" : "s"}`
+    : isDemoPreview
+      ? `${renderedTracks.length} demo stem${renderedTracks.length === 1 ? "" : "s"} — not verified`
+      : "0 — no verified stems";
+  const stemSourceColor = hasVerifiedSession ? "text-emerald-500" : isDemoPreview ? "text-amber-500" : "text-rose-400";
+
+  const blockers: { label: string; diagnosticCode: DiagnosticCode }[] = [];
+  blockers.push({ label: "Exporter backend not implemented.", diagnosticCode: "MIXER_EXPORT_BACKEND_MISSING" });
   if (stemsToUse.length === 0) {
-    blockers.push("No stem session loaded.");
+    blockers.push({ label: "No stem session loaded.", diagnosticCode: "MIXER_NO_VERIFIED_SESSION" });
   } else if (activeVerifiedStemsCount === 0) {
-    blockers.push("No verified local stems loaded.");
+    blockers.push({ label: "No verified local stems loaded.", diagnosticCode: "MIXER_NO_VERIFIED_SESSION" });
+  }
+  if (mixerContentState !== "verified_session_loaded") {
+    blockers.push({ label: "Demo or unverified stems cannot be exported.", diagnosticCode: "MIXER_NO_VERIFIED_SESSION" });
   }
   if (!outputFolderSelected) {
-    blockers.push("Output folder not selected.");
+    blockers.push({ label: "Output folder not selected.", diagnosticCode: "PROOF_OUTPUT_MISSING" });
   } else if (!isOutputFolderWritable) {
-    blockers.push("Output folder write permission verification pending / not writable.");
+    blockers.push({
+      label: "Output folder write permission verification pending / not writable.",
+      diagnosticCode: "PROOF_OUTPUT_MISSING",
+    });
   }
   if (anyMissingStems) {
-    blockers.push("One or more missing stem files detected (cannot export demo or unverified stems).");
+    blockers.push({
+      label: "One or more missing stem files detected (cannot export demo or unverified stems).",
+      diagnosticCode: "MIXER_STEM_FILES_MISSING",
+    });
   }
 
   return (
@@ -323,7 +456,13 @@ export default function FourTrackMixer({
                 Stem Mixer Workspace
               </span>
               <span className="text-[10px] font-mono font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                Mixer Mode: {stemsToUse.length === 0 ? "No verified stem session loaded" : useDemo ? "Demo Preview Only" : "Verified Stem Session Loaded"}
+                Requires verified stem session
+              </span>
+              <span className="text-[10px] font-mono font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                Mixer Mode: {mixerModeLabel}
+              </span>
+              <span className="text-[10px] font-mono font-semibold text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                State: {mixerContentState} / {mixerExportState}
               </span>
             </div>
             <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wider flex items-center gap-1.5">
@@ -331,7 +470,8 @@ export default function FourTrackMixer({
               Post-Separation Stem Review & Mixdown
             </h3>
             <p className="text-[11px] text-slate-400 mt-1">
-              Reviews verified output stems from previous local separation runs. Demo stems are preview-only and cannot be exported.
+              Reviews verified output stems from previous local separation runs. Demo stems are preview-only and cannot
+              be exported.
             </p>
           </div>
 
@@ -358,9 +498,7 @@ export default function FourTrackMixer({
             <span className="text-[10px] font-mono font-bold text-indigo-400 uppercase tracking-wider">
               AI Proof & Separation Metadata
             </span>
-            <span className="text-[9px] font-mono text-slate-500">
-              Job ID: {jobId || "No active job context"}
-            </span>
+            <span className="text-[9px] font-mono text-slate-500">Job ID: {jobIdLabel}</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono">
@@ -368,51 +506,42 @@ export default function FourTrackMixer({
               <span className="text-slate-500 block text-[9px] uppercase font-bold tracking-wider mb-0.5">
                 Stem Source / Type
               </span>
-              <span className={`font-bold ${useDemo ? "text-amber-500" : stemsToUse.length > 0 ? "text-emerald-500" : "text-rose-400"}`}>
-                {stemsToUse.length === 0 ? "No verified stem session loaded" : useDemo ? "Preview-only demo stems" : "Verified local AI output"}
-              </span>
+              <span className={`font-bold ${stemSourceColor}`}>{stemSourceLabel}</span>
             </div>
             <div>
               <span className="text-slate-500 block text-[9px] uppercase font-bold tracking-wider mb-0.5">
                 Model Source
               </span>
-              <span className="font-bold text-blue-400 truncate max-w-[170px] block">
-                {selectedModelName || "Model not reported"}
-              </span>
+              <span className="font-bold text-blue-400 truncate max-w-[170px] block">{modelSourceLabel}</span>
             </div>
             <div>
               <span className="text-slate-500 block text-[9px] uppercase font-bold tracking-wider mb-0.5">
                 Separation Category
               </span>
-              <span className="font-bold text-purple-400">
-                {selectedCategory || "Not reported"}
-              </span>
+              <span className="font-bold text-purple-400">{categoryLabel}</span>
             </div>
             <div>
               <span className="text-slate-500 block text-[9px] uppercase font-bold tracking-wider mb-0.5">
                 Compute Source
               </span>
-              <span className="font-bold text-slate-400 text-[10px]">
-                No GPU task active in mixer
-              </span>
+              <span className="font-bold text-slate-400 text-[10px]">{computeSourceLabel}</span>
             </div>
           </div>
 
           <p className="text-[10px] text-slate-500 italic mt-1 leading-normal">
-            * Hardware GPU acceleration is strictly confined to backend job processing; browser playback and mixdown utilize zero GPU resources.
+            * Hardware GPU acceleration is strictly confined to backend job processing; browser playback and mixdown
+            utilize zero GPU resources.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono bg-slate-900/40 p-3 rounded-lg border border-slate-800">
           <div>
             <span className="text-slate-500">Separation Input File:</span>
-            <span className="text-slate-200 ml-1.5 break-all">{inputFileName || "Input file not reported"}</span>
+            <span className="text-slate-200 ml-1.5 break-all">{inputFileLabel}</span>
           </div>
           <div>
             <span className="text-slate-500">Loaded Stems Count:</span>
-            <span className="text-slate-200 ml-1.5">
-              {stemsToUse.length === 0 ? "0 (No stems)" : `${renderedTracks.length} tracks active`}
-            </span>
+            <span className="text-slate-200 ml-1.5">{loadedStemsCountLabel}</span>
           </div>
         </div>
       </div>
@@ -462,10 +591,7 @@ export default function FourTrackMixer({
           {/* Seekbar Slider */}
           <div className="flex-1 w-full relative">
             <div className="h-2 bg-white/5 rounded-full overflow-hidden relative border border-white/5">
-              <div
-                className="bg-slate-700 h-full rounded-full"
-                style={{ width: `0%` }}
-              ></div>
+              <div className="bg-slate-700 h-full rounded-full" style={{ width: `0%` }}></div>
             </div>
           </div>
         </div>
@@ -492,29 +618,51 @@ export default function FourTrackMixer({
             // Determine if track audio is fundamentally silent based on mutes and solo overlays
             const isSilent = isMuted || (isAnySoloActive && !isSoloed);
 
-            const isDemoOrMissing = track.isDemo || (verifiedFiles[track.id] ? !verifiedFiles[track.id].exists : !track.fileExists);
-            const isExportChecked = !isDemoOrMissing && (exportInclusion[track.id] !== undefined ? exportInclusion[track.id] : true);
+            const isDemoOrMissing =
+              track.isDemo || (verifiedFiles[track.id] ? !verifiedFiles[track.id].exists : !track.fileExists);
+            const isExportChecked =
+              !isDemoOrMissing && (exportInclusion[track.id] !== undefined ? exportInclusion[track.id] : true);
 
             // File status label/color
             let fileStatusLabel = "";
             let fileStatusColor = "";
             let resolvedFilePath = "";
+            let proofSourceLabel = "";
+            let fileSizeLabel = "";
+            let sourceEngineLabel = "";
+            let sourceModelLabel = "";
 
             if (track.isDemo) {
               fileStatusLabel = "(Demo) Sandbox Preview";
               fileStatusColor = "text-amber-500";
               resolvedFilePath = "File: (Demo Mode - No local file)";
+              proofSourceLabel = "Proof source: demo preview only / not AI proof";
+              fileSizeLabel = "demo placeholder only";
+              sourceEngineLabel = "Demo Preview Only — no backend source";
+              sourceModelLabel = "Demo Preview Only — not a verified model";
             } else {
               const checked = verifiedFiles[track.id];
               if (checked && checked.exists) {
                 fileStatusLabel = "Verified Local Audio";
                 fileStatusColor = "text-emerald-500";
                 resolvedFilePath = `File: ${track.filePath}`;
+                fileSizeLabel = formatBytes(checked.sizeBytes || track.fileSizeBytes);
               } else {
                 fileStatusLabel = "File missing / unverified";
                 fileStatusColor = "text-rose-400";
                 resolvedFilePath = `File: Not loaded / no verified local path`;
+                fileSizeLabel = "not verified";
               }
+              proofSourceLabel =
+                track.proofSource === "real_separation_output"
+                  ? "Proof source: verified backend output"
+                  : "Proof source: not verified for AI proof";
+              sourceEngineLabel = hasVerifiedSession
+                ? track.sourceEngine || "Verified backend source not reported"
+                : "No verified backend source";
+              sourceModelLabel = hasVerifiedSession
+                ? track.sourceModel || selectedModelName || "Verified model not reported"
+                : "Model not available — no verified stem session";
             }
 
             return (
@@ -530,7 +678,12 @@ export default function FourTrackMixer({
                   {/* 1. Track Metadata Info (Col 1-3) */}
                   <div className="xl:col-span-3 flex items-start gap-3">
                     {/* Export inclusion checkbox */}
-                    <div className="mt-1" title={isDemoOrMissing ? "Cannot export demo or missing/unverified stems" : "Include in Export mixdown"}>
+                    <div
+                      className="mt-1"
+                      title={
+                        isDemoOrMissing ? "Cannot export demo or missing/unverified stems" : "Include in Export mixdown"
+                      }
+                    >
                       <input
                         type="checkbox"
                         id={`export-${track.id}`}
@@ -543,23 +696,30 @@ export default function FourTrackMixer({
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <div className={`w-6 h-6 rounded bg-gradient-to-br ${getColorForStemType(track.stemType)} text-white flex items-center justify-center shrink-0`}>
+                        <div
+                          className={`w-6 h-6 rounded bg-gradient-to-br ${getColorForStemType(track.stemType)} text-white flex items-center justify-center shrink-0`}
+                        >
                           {React.createElement(getIconForStemType(track.stemType), { className: "w-3.5 h-3.5" })}
                         </div>
-                        <h4 className="text-xs font-bold text-white truncate font-mono">
-                          {track.name}
-                        </h4>
+                        <h4 className="text-xs font-bold text-white truncate font-mono">{track.name}</h4>
                       </div>
 
                       <div className="mt-1.5 space-y-0.5 text-[9px] font-mono text-slate-500 leading-tight">
                         <div>
-                          <span className="text-slate-600 font-bold">Base Engine:</span> {track.sourceEngine || "No source engine reported"}
+                          <span className="text-slate-600 font-bold">Base Engine:</span> {sourceEngineLabel}
                         </div>
                         <div>
-                          <span className="text-slate-600 font-bold">Original model mapping:</span> {track.sourceModel || selectedModelName || "Model not reported"}
+                          <span className="text-slate-600 font-bold">Original model mapping:</span> {sourceModelLabel}
                         </div>
                         <div>
-                          <span className="text-slate-600 font-bold">File status:</span> <span className={`${fileStatusColor} font-semibold`}>{fileStatusLabel}</span>
+                          <span className="text-slate-600 font-bold">File status:</span>{" "}
+                          <span className={`${fileStatusColor} font-semibold`}>{fileStatusLabel}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 font-bold">File size:</span> {fileSizeLabel}
+                        </div>
+                        <div>
+                          <span className="text-slate-600 font-bold">Proof:</span> {proofSourceLabel}
                         </div>
                         <div className="truncate text-slate-600" title={resolvedFilePath}>
                           {resolvedFilePath}
@@ -710,7 +870,9 @@ export default function FourTrackMixer({
               Phase Cancellation / Bleed Reduction
             </label>
             <p className="text-[11px] text-slate-500 leading-normal">
-              Attempts to cancel overlapping bleed frequencies between adjacent stems using adaptive isolation models (not a simple 180° static phase inversion). Results vary and may introduce structural frequency comb filters or phase artifacts.
+              Planned bleed-reduction tools may attempt to reduce overlapping frequencies between stems after
+              separation. This section is currently a legacy/reference control and is not wired to an active processing
+              backend.
             </p>
             <span className="text-slate-500 font-mono text-[10px] bg-slate-950/60 px-2 py-0.5 rounded border border-slate-800 block w-max mt-auto">
               Passive Isolation — Legacy reference / Not wired
@@ -720,10 +882,11 @@ export default function FourTrackMixer({
           <div className="p-3 bg-black/40 rounded border border-slate-900 space-y-1.5 flex flex-col justify-between">
             <div>
               <label className="text-slate-300 font-bold block text-[10px] uppercase font-mono tracking-wider">
-                High-Frequency Trim
+                High-Frequency Trim — Planned / Not active
               </label>
               <p className="text-[11px] text-slate-500 leading-normal">
-                Reduces very high-frequency artifacts above the selected cutoff using a low-pass filter. Removes content above the cutoff. May reduce brightness.
+                This planned tool would reduce content above a selected cutoff if wired. It is not currently applied to
+                loaded audio.
               </p>
             </div>
             <span className="text-purple-400/80 font-mono text-[10px] bg-purple-950/20 px-2 py-0.5 rounded border border-purple-900/30 block w-max">
@@ -737,7 +900,8 @@ export default function FourTrackMixer({
                 Playback / Export Normalization
               </label>
               <p className="text-[11px] text-slate-500 leading-normal">
-                Balances stem loudness for preview or export. This does not improve AI separation quality. Affects preview playback only.
+                Planned normalization would balance stem loudness for preview or export when playback/export backends
+                are wired. It does not improve AI separation quality and is not currently active.
               </p>
             </div>
             <span className="text-emerald-400/80 font-mono text-[10px] bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-900/30 block w-max">
@@ -762,7 +926,9 @@ export default function FourTrackMixer({
             </span>
             <ul className="list-disc list-inside font-mono text-[10.5px] text-rose-300/80 space-y-0.5 pl-1.5">
               {blockers.map((blocker, idx) => (
-                <li key={idx}>{blocker}</li>
+                <li key={idx}>
+                  {blocker.label} <span className="text-slate-500">Code: {blocker.diagnosticCode}</span>
+                </li>
               ))}
             </ul>
           </div>
@@ -771,9 +937,7 @@ export default function FourTrackMixer({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono opacity-50">
           {/* Format */}
           <div className="space-y-1.5">
-            <label className="text-slate-400 block text-[10px] uppercase font-bold">
-              Output Render Format
-            </label>
+            <label className="text-slate-400 block text-[10px] uppercase font-bold">Output Render Format</label>
             <select
               disabled
               value={exportFormat}
@@ -787,9 +951,7 @@ export default function FourTrackMixer({
 
           {/* Dest */}
           <div className="space-y-1.5">
-            <label className="text-slate-400 block text-[10px] uppercase font-bold">
-              Destination Folder Path
-            </label>
+            <label className="text-slate-400 block text-[10px] uppercase font-bold">Destination Folder Path</label>
             <div className="flex gap-1">
               <input
                 type="text"
@@ -809,9 +971,7 @@ export default function FourTrackMixer({
 
           {/* Overwrite Safety Selector */}
           <div className="space-y-1.5">
-            <label className="text-slate-400 block text-[10px] uppercase font-bold">
-              Conflict Overwrite Safety
-            </label>
+            <label className="text-slate-400 block text-[10px] uppercase font-bold">Conflict Overwrite Safety</label>
             <select
               disabled
               value={overwriteBehavior}
@@ -828,7 +988,15 @@ export default function FourTrackMixer({
         <div className="p-3 rounded bg-black/25 border border-slate-900 text-[11px] font-mono text-slate-400 space-y-1">
           <div>
             <span className="font-bold text-slate-300">Queued Stems for Mixdown:</span>{" "}
-            {stemsToUse.filter(t => !t.isDemo && (verifiedFiles[t.id] ? verifiedFiles[t.id].exists : t.fileExists) && exportInclusion[t.id] !== false).map(t => t.name).join(", ") || "(No verified real stems selected)"}
+            {stemsToUse
+              .filter(
+                (t) =>
+                  !t.isDemo &&
+                  (verifiedFiles[t.id] ? verifiedFiles[t.id].exists : t.fileExists) &&
+                  exportInclusion[t.id] !== false,
+              )
+              .map((t) => t.name)
+              .join(", ") || "(No verified real stems selected)"}
           </div>
           <div className="text-[10px] text-rose-450 flex items-center gap-1.5 font-bold pt-1">
             <XCircle className="w-3.5 h-3.5 text-rose-500" />
@@ -847,7 +1015,6 @@ export default function FourTrackMixer({
           </button>
         </div>
       </div>
-
     </div>
   );
 }
