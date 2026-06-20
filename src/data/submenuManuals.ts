@@ -15,13 +15,15 @@ export const submenuManuals: Record<string, ManualContent> = {
   classic_console: {
     sectionId: "classic_console",
     title: "Audio Separator Manual",
-    subtitle: "A stem separator tries to split a mixed song or audio file into separate parts, such as vocals, instrumental, drums, bass, or other sounds. This is the main workspace for selecting input audio, choosing a model/backend, selecting output location, and running separation.",
-    whatItDoes: "Configures and executes the core source-separation pipeline. You specify the input file, direct the output destination, select a neural network model, and trigger processing.",
+    subtitle:
+      "A stem separator tries to split a mixed song or audio file into separate parts, such as vocals, instrumental, drums, bass, or other sounds. This is the main workspace for selecting input audio, choosing a model/backend, selecting output location, and running separation.",
+    whatItDoes:
+      "Configures and executes the core source-separation pipeline. You specify the input file, direct the output destination, select a neural network model, and trigger processing.",
     whenToUse: [
       "Isolating master vocals for acapellas, remixes, or cleanup.",
       "Creating instrumental backing tracks.",
       "Splitting complex instrument layers into constituent stems (drums, bass, melodies).",
-      "Analyzing and testing various source-separation architectures."
+      "Analyzing and testing various source-separation architectures.",
     ],
     workflow: [
       "Add target input audio file to the workspace.",
@@ -30,321 +32,788 @@ export const submenuManuals: Record<string, ManualContent> = {
       "Select a weight blueprint from the installed model repository.",
       "Check diagnostics, and resolve any active blockers.",
       "Run separation and monitor active console outputs.",
-      "Review output stems in the Stem Mixer or native file explorer."
+      "Review output stems in the Stem Mixer or native file explorer.",
     ],
     settingsThatMatter: [
-      { name: "Default Process Method", desc: "Selects the underlying architecture: VR (Vocal Remover), MDX-Net (Multi-band Spectral), or Demucs (Hybrid Sound Demixing)." },
-      { name: "GPU Selector", desc: "Structurally supported but Not locally proven until a real run executes successfully on devices with NVIDIA CUDA or DirectML." },
-      { name: "FFmpeg DSP Fallback", desc: "Non-AI static DSP filtering. A lightweight fallback option when no AI backend is configured; not AI separation." }
+      {
+        name: "Default Process Method",
+        desc: "Selects the underlying architecture: VR (Vocal Remover), MDX-Net (Multi-band Spectral), or Demucs (Hybrid Sound Demixing).",
+      },
+      {
+        name: "GPU Selector",
+        desc: "Structurally supported but Not locally proven until a real run executes successfully on devices with NVIDIA CUDA or DirectML.",
+      },
+      {
+        name: "FFmpeg DSP Fallback",
+        desc: "Non-AI static DSP filtering. A lightweight fallback option when no AI backend is configured; not AI separation.",
+      },
     ],
     commonMistakes: [
       "Expecting flawless separations: AI models can isolate vocals well, but heavy reverb, phase alignment, or noise can leave audible artifacts.",
       "Assuming a chosen GPU is active when local E2E proof has not passed. Check diagnostics logs.",
-      "Treating FFmpeg static filtering as AI separation. FFmpeg filters cannot dynamically distinguish vocal formants from overlapping instrumentation."
+      "Treating FFmpeg static filtering as AI separation. FFmpeg filters cannot dynamically distinguish vocal formants from overlapping instrumentation.",
     ],
     faq: [
-      { q: "Why do some songs separate better than others?", a: "Separation works best on dry vocals and clear mixes. Songs with heavy reverb, dense synth walls, or heavily distorted guitars can bleed because frequencies heavily overlap." },
-      { q: "Why do I hear artifacts or watery sounds?", a: "Overlapping harmonics can cause phase cancelation and watery textures. Adjust chunk sizing or choose a more modern MDX or Demucs weights file." },
-      { q: "Why is the AI backend blocked?", a: "The local AI engine requires a verified environment including Python, torch, FFmpeg, audio-separator, valid inputs, and configured model files." },
-      { q: "Why does GPU not show as proven?", a: "GPU acceleration is structurally enabled but counts as 'Not locally proven' until a real local execution executes and exits successfully." },
-      { q: "Why is FFmpeg fallback not the same as AI separation?", a: "FFmpeg DSP Fallback relies on flat notch filters, phase invert arrays, or passive center-channel cancellation. It doesn't isolate audio using learned model weights." },
-      { q: "Which model should I start with?", a: "Start with an MDX-Net model if your primary goal is high-quality Vocals and Instrumentals. Use Demucs v4 if you need a standard 4-stem split (Vocals, Drums, Bass, Other)." }
+      {
+        q: "Why do some songs separate better than others?",
+        a: "Separation works best on dry vocals and clear mixes. Songs with heavy reverb, dense synth walls, or heavily distorted guitars can bleed because frequencies heavily overlap.",
+      },
+      {
+        q: "Why do I hear artifacts or watery sounds?",
+        a: "Overlapping harmonics can cause phase cancelation and watery textures. Adjust chunk sizing or choose a more modern MDX or Demucs weights file.",
+      },
+      {
+        q: "Why is the AI backend blocked?",
+        a: "The local AI engine requires a verified environment including Python, torch, FFmpeg, audio-separator, valid inputs, and configured model files.",
+      },
+      {
+        q: "Why does GPU not show as proven?",
+        a: "GPU acceleration is structurally enabled but counts as 'Not locally proven' until a real local execution executes and exits successfully.",
+      },
+      {
+        q: "Why is FFmpeg fallback not the same as AI separation?",
+        a: "FFmpeg DSP Fallback relies on flat notch filters, phase invert arrays, or passive center-channel cancellation. It doesn't isolate audio using learned model weights.",
+      },
+      {
+        q: "Which model should I start with?",
+        a: "Start with an MDX-Net model if your primary goal is high-quality Vocals and Instrumentals. Use Demucs v4 if you need a standard 4-stem split (Vocals, Drums, Bass, Other).",
+      },
     ],
     limitations: [
       "AI Model Backend requires local Python, PyTorch, audio-separator, FFmpeg, a real model file, input audio, and output folder.",
       "FFmpeg DSP Fallback represents static audio processing, NOT AI neural model separation.",
       "CUDA is structurally supported but Not locally proven until local CUDA E2E proof passes.",
       "DirectML device targets are Experimental / Delegated / Not locally proven.",
-      "Beta Candidate remains blocked until real local AI model separation proof runs and passes with exit code 0."
-    ]
+      "Beta Candidate is not automatically approved by a local proof run; final release checklist review is still required.",
+    ],
   },
   mixer: {
     sectionId: "mixer",
     title: "Stem Mixer Manual",
-    subtitle: "A professional playground to preview, solo, mute, and balance stems generated by the source-separation engine. Recombine tracks to test separation quality and check for overlapping artifacts.",
-    whatItDoes: "Loads processed multi-track stems, aligning they timeline-wise for simultaneous playback. Adjust gain faders, mute specific stems, or solo tracks to analyze localized frequency bleeds.",
+    subtitle:
+      "A professional playground to preview, solo, mute, and balance stems generated by the source-separation engine. Recombine tracks to test separation quality and check for overlapping artifacts.",
+    whatItDoes:
+      "Loads processed multi-track stems, aligning they timeline-wise for simultaneous playback. Adjust gain faders, mute specific stems, or solo tracks to analyze localized frequency bleeds.",
     whenToUse: [
       "Evaluating vocal-instrumental balance of newly generated files.",
       "Soloing and checking specific tracks (such as Drums or Bass) to listen for residual anomalies.",
       "Creating immediate, on-the-fly rough mixdowns with custom volumes.",
-      "Preparing stems before exporting them into professional DAWs."
+      "Preparing stems before exporting them into professional DAWs.",
     ],
     workflow: [
       "Configure your Separation Goal Focus (Vocals, Instrumental, Karaoke, or 4-Stem).",
       "Load the processed audio file paths into the mixer workspace.",
       "Use individual channel strips to solo, mute, or adjust relative volumes.",
       "Trigger synchronized playback to review the holistic mix.",
-      "Identify bleed issues to decide whether to separate again with adjusted parameters."
+      "Identify bleed issues to decide whether to separate again with adjusted parameters.",
     ],
     settingsThatMatter: [
-      { name: "Separation Goal Focus", desc: "Sets the layout and channel count (Vocal-only, 2-track karaoke, or 4-track hybrid mixes)." },
-      { name: "Preview-only / Not active faders", desc: "If the mixing console state is not wired to disk, any changes apply live to the playback preview, not the output stems." },
-      { name: "Channel Metering", desc: "Monitors peak decibels of separated stems to identify clipping issues introduced by local AI normalization." }
+      {
+        name: "Separation Goal Focus",
+        desc: "Sets the layout and channel count (Vocal-only, 2-track karaoke, or 4-track hybrid mixes).",
+      },
+      {
+        name: "Preview-only / Not active faders",
+        desc: "If the mixing console state is not wired to disk, any changes apply live to the playback preview, not the output stems.",
+      },
+      {
+        name: "Channel Metering",
+        desc: "Monitors peak decibels of separated stems to identify clipping issues introduced by local AI normalization.",
+      },
     ],
     commonMistakes: [
       "Assuming this replaces a professional DAW (Digital Audio Workstation). This is a preview-only mixing utility.",
-      "Attempting to correct severe separation artifacts: if vocal bleed is baked into the drums, balancing tracks can mask it, but can never erase the baked-in audio artifacts."
+      "Attempting to correct severe separation artifacts: if vocal bleed is baked into the drums, balancing tracks can mask it, but can never erase the baked-in audio artifacts.",
     ],
     faq: [
-      { q: "Why do stems sound strange alone but better in context?", a: "AI separation splits overlapping frequencies. When a stem is soloed, missing neighboring frequencies can sound phasey, but summing all channels reconstructs the original mix cleanly." },
-      { q: "Can this utility replace a full DAW?", a: "No, this is a specialized layout for reviewing separation stems. Use a DAW like Ableton, FL Studio, or Reaper for complex mixing-mastering pipelines." },
-      { q: "Can I fix mechanical separation artifacts here?", a: "No. High-frequency artifacts and phasey textures must be resolved by reprocessing the original audio with a model better suited to that style (e.g. tuning chunk sizing)." },
-      { q: "Why do some tracks sound phasey, watery, or thin?", a: "If the separator had to split a vocal overlapping a guitar, it slices wave patterns. This causes momentary volume dips, causing thin, watery sound stages." }
+      {
+        q: "Why do stems sound strange alone but better in context?",
+        a: "AI separation splits overlapping frequencies. When a stem is soloed, missing neighboring frequencies can sound phasey, but summing all channels reconstructs the original mix cleanly.",
+      },
+      {
+        q: "Can this utility replace a full DAW?",
+        a: "No, this is a specialized layout for reviewing separation stems. Use a DAW like Ableton, FL Studio, or Reaper for complex mixing-mastering pipelines.",
+      },
+      {
+        q: "Can I fix mechanical separation artifacts here?",
+        a: "No. High-frequency artifacts and phasey textures must be resolved by reprocessing the original audio with a model better suited to that style (e.g. tuning chunk sizing).",
+      },
+      {
+        q: "Why do some tracks sound phasey, watery, or thin?",
+        a: "If the separator had to split a vocal overlapping a guitar, it slices wave patterns. This causes momentary volume dips, causing thin, watery sound stages.",
+      },
     ],
     limitations: [
       "This mixer interface is specialized for Preview-only / Not final mixdown.",
       "Adjusting faders changes preview levels; it doesn't write new mixed waveforms unless full multi-track render support is integrated.",
-      "If specific channels display as Planned / Not active, they act as UI placeholders."
-    ]
+      "If specific channels display as Planned / Not active, they act as UI placeholders.",
+    ],
   },
   ensemble: {
     sectionId: "ensemble",
     title: "Ensemble Manager Manual",
-    subtitle: "Different models make different mistakes. Ensemble workflows can compare, combine, or refine outputs from multiple models.",
-    whatItDoes: "Defines flowcharts combining outputs. You select multiple models, choose blending mathematical strategies (e.g. vocal subtraction or average merging), and organize a processing pipeline.",
+    subtitle:
+      "Different models make different mistakes. This panel plans future ensemble workflows without running them.",
+    whatItDoes:
+      "Defines reference flowcharts for combining verified outputs later. Current model slots are planner placeholders; they are not selected model files and do not create stems.",
     whenToUse: [
-      "Processing highly complex or difficult songs with significant bleed.",
-      "Vocal and instrumental refinement from multiple models.",
-      "Comparing model performance and combining their strengths.",
-      "Advanced cleanup of stubborn artifacts.",
-      "Multi-stem improvement attempts."
+      "Planning how highly complex or difficult songs with significant bleed might be handled later.",
+      "Reviewing future vocal and instrumental refinement from multiple verified model outputs.",
+      "Comparing possible model roles before a native ensemble runner exists.",
+      "Documenting advanced cleanup ideas for stubborn artifacts.",
+      "Planning multi-stem improvement attempts without generating files.",
     ],
     workflow: [
-      "Select input audio or existing stems.",
-      "Choose at least two models or model outputs in your pipeline.",
-      "Confirm required model files are installed and ready.",
-      "Choose an ensemble strategy (e.g. blend or subtract).",
-      "Run or preview the pipeline layout.",
-      "Compare output stem quality on completion."
+      "Review input-file and metadata requirements.",
+      "Add or remove placeholder model slots.",
+      "Confirm that execution would require at least two verified model outputs or compatible models.",
+      "Review a reference ensemble strategy, such as blend or subtract.",
+      "Leave execution blocked until a native backend runner exists.",
+      "Do not treat planner output as generated stems or AI proof.",
     ],
     settingsThatMatter: [
-      { name: "Ensemble Strategy", desc: "Selects whether outputs undergo average blending, subtraction-based cleanup, or sequential isolation." },
-      { name: "Min Spec / Max Spec", desc: "A Legacy UVR5 Reference / Not wired parameter. In native environments, this narrows filter limits to preserve high-frequency transients." },
-      { name: "Save All Outputs", desc: "Ensures intermediate stems are kept alongside the final averaged result, for thorough quality audit." }
+      {
+        name: "Ensemble Strategy",
+        desc: "Reference-only plan for whether future verified outputs may undergo average blending, subtraction-based cleanup, or sequential isolation.",
+      },
+      {
+        name: "Min Spec / Max Spec",
+        desc: "A Legacy UVR5 Reference / Not wired parameter. In native environments, this narrows filter limits to preserve high-frequency transients.",
+      },
+      {
+        name: "Save All Outputs",
+        desc: "Future-runner idea only. No intermediate or final stems are created from the planner view.",
+      },
     ],
     commonMistakes: [
-      "Ensembling unrelated outputs: blending a vocal stem with a drum stem leads to noisy, unusable artifacts.",
-      "Ignoring processing times: running an ensemble multiplies GPU/CPU workloads. Ensembling 3 models will take roughly 3x longer than a single run."
+      "Counting placeholder model slots as verified selected model files.",
+      "Treating static VRAM estimates as live hardware checks.",
+      "Expecting the planner to create output files or proof-ready stems.",
     ],
     faq: [
-      { q: "Why does ensemble need at least two inputs?", a: "An ensemble blends predictions. Without at least two different model predictions, there is nothing to mathematically average or compare." },
-      { q: "Why do ensembles sound better but take much longer?", a: "They combine strengths. For example, if Model A isolates backing vocals while Model B isolates main vocals, the average isolates both but requires executing both models in sequence." },
-      { q: "What does Min Spec and Max Spec mean?", a: "These are legacy parameters for tuning peak frequencies. In custom environments, they dictate how frequency ranges are partitioned during fusion processing." },
-      { q: "Why should I save intermediate outputs?", a: "If the final blend sounds phasey, auditing the separate stem files helps you identify which model introduced the noise." }
+      {
+        q: "Why does ensemble need at least two inputs?",
+        a: "A real ensemble would compare or combine at least two verified model outputs or compatible models. The current planner does not select those files.",
+      },
+      {
+        q: "Why can ensembles take much longer?",
+        a: "If implemented later, a runner would execute or compare multiple model results. This alpha planner does not run that process.",
+      },
+      {
+        q: "What does Min Spec and Max Spec mean?",
+        a: "These are legacy reference parameters for future fusion tuning. They are not wired to active audio.",
+      },
+      {
+        q: "Why should I save intermediate outputs?",
+        a: "That is a future-runner concept. The planner does not create intermediate or final output stems.",
+      },
     ],
     limitations: [
-      "Ensemble processing can improve results, but it can also introduce phase artifacts.",
-      "It usually takes longer than single-model separation.",
-      "It may use more RAM/VRAM during execution.",
+      "The current panel is planner-only and not executed.",
+      "The native ensemble backend runner is not implemented.",
+      "Static RAM/VRAM estimates are not live hardware checks.",
       "It does not guarantee perfect isolation.",
-      "Output files do not exist until real processing actually runs and creates them."
-    ]
+      "Output files do not exist until real processing actually runs and creates them.",
+    ],
   },
   batch_encoder: {
     sectionId: "batch_encoder",
     title: "Batch Encoder Manual",
-    subtitle: "Batch Encoder converts and compresses audio files from one format to another using FFmpeg. It does not separate vocals, drums, bass, or instrumentals.",
-    whatItDoes: "Loads groups of files, validates their formats, and applies FFmpeg conversions (WAV, FLAC, MP3, etc.) alongside optional sample quality configurations.",
+    subtitle:
+      "Batch Encoder converts and compresses audio files from one format to another using FFmpeg. It does not separate vocals, drums, bass, or instrumentals.",
+    whatItDoes:
+      "Loads groups of files, validates their formats, and applies FFmpeg conversions (WAV, FLAC, MP3, etc.) alongside optional sample quality configurations.",
     whenToUse: [
       "Converting uncompressed WAV stem separations to high-quality MP3s for smaller file size.",
       "Converting files to standardized sample rates or formats.",
       "Optimizing storage through lossless compression (FLAC) or high-quality lossy compression (MP3).",
-      "Preparing audio streams for external players or devices."
+      "Preparing audio streams for external players or devices.",
     ],
     workflow: [
       "Select and load input audio paths into the batch list queue.",
       "Ensure an FFmpeg binary is available or configured on your system.",
       "Select a target Output Save Format (WAV, FLAC, MP3, AAC, OGG).",
       "Configure sample rate, bitrate, channels, and overwrite preferences.",
-      "Run the encoder batch process and track real-time queue states."
+      "Run the encoder batch process and track real-time queue states.",
     ],
     settingsThatMatter: [
-      { name: "Output Format", desc: "Selects output audio codec. WAV is larger but uncompressed. FLAC is lossless compression. MP3 is lossy and reduces quality. Codec support depends on local FFmpeg." },
-      { name: "Sample Rate", desc: "Allows resampling. Sample rate conversion may affect audio quality. Prefer preserving source defaults unless necessary." },
-      { name: "Overwrite Options", desc: "Determines behavior when output paths conflict. Choose between Ask, Never, or Replace." }
+      {
+        name: "Output Format",
+        desc: "Selects output audio codec. WAV is larger but uncompressed. FLAC is lossless compression. MP3 is lossy and reduces quality. Codec support depends on local FFmpeg.",
+      },
+      {
+        name: "Sample Rate",
+        desc: "Allows resampling. Sample rate conversion may affect audio quality. Prefer preserving source defaults unless necessary.",
+      },
+      {
+        name: "Overwrite Options",
+        desc: "Determines behavior when output paths conflict. Choose between Ask, Never, or Replace.",
+      },
     ],
     commonMistakes: [
       "Expecting the Batch Encoder to perform AI source separation. It only converts and transcodes file containers. Use Audio Separator for stem separation.",
-      "Assuming encoding improves quality. Resampling or converting lossy (MP3) files to WAV increases file size but cannot miraculously recover lost fidelity or separation results."
+      "Assuming encoding improves quality. Resampling or converting lossy (MP3) files to WAV increases file size but cannot miraculously recover lost fidelity or separation results.",
     ],
     faq: [
-      { q: "Is batch encoding the same as stem separation?", a: "No. Batch Encoder converts files; it does not separate stems. FFmpeg batch encoding is not AI stem separation." },
-      { q: "Is FFmpeg required?", a: "Yes. FFmpeg is required to perform processing and conversions. Codec support depends on your FFmpeg binary." },
-      { q: "What is the difference between formats?", a: "MP3 is lossy and may reduce quality. WAV is uncompressed, larger, but preserves exact audio data. FLAC offers lossless compression without any quality reduction." },
-      { q: "Does encoding improve AI separation results?", a: "No. Normalizing or encoding does not improve neural model separation results. They only balance loudness or pack audio containers for export." }
+      {
+        q: "Is batch encoding the same as stem separation?",
+        a: "No. Batch Encoder converts files; it does not separate stems. FFmpeg batch encoding is not AI stem separation.",
+      },
+      {
+        q: "Is FFmpeg required?",
+        a: "Yes. FFmpeg is required to perform processing and conversions. Codec support depends on your FFmpeg binary.",
+      },
+      {
+        q: "What is the difference between formats?",
+        a: "MP3 is lossy and may reduce quality. WAV is uncompressed, larger, but preserves exact audio data. FLAC offers lossless compression without any quality reduction.",
+      },
+      {
+        q: "Does encoding improve AI separation results?",
+        a: "No. Normalizing or encoding does not improve neural model separation results. They only balance loudness or pack audio containers for export.",
+      },
     ],
     limitations: [
       "FFmpeg batch encoding is utility processing, NOT neural AI stem separation.",
       "Active codec support depends strongly on FFmpeg binary availability and configuration.",
-      "Batch encoding does not improve separation quality or recover lost frequencies."
-    ]
+      "Batch encoding does not improve separation quality or recover lost frequencies.",
+    ],
+  },
+  mastering_lab: {
+    sectionId: "mastering_lab",
+    title: "Mastering Lab Manual",
+    subtitle:
+      "Mastering Lab is a local-first audio finalization workspace with reusable effects-chain presets inspired by mature audio-editor workflows. It is not stem separation, not separator model verification, and not Beta Candidate proof.",
+    whatItDoes:
+      "Plans a mastering pass for a selected audio file: choose input, choose output folder, select a mastering style and effects chain, adjust simple controls, process locally when a backend is wired, preview before/after only from real measured values, export, and verify the mastered output file.",
+    whenToUse: [
+      "Finalizing a mix, generated song, podcast bounce, or dialogue file after editing.",
+      "Planning gentle, balanced, loud, streaming-oriented, voice/dialogue, or AI music cleanup mastering settings.",
+      "Keeping final audio export separate from Batch Encoder format conversion.",
+      "Reviewing output verification before treating a mastered file as complete.",
+    ],
+    workflow: [
+      "Open Mastering Lab.",
+      "Select input audio through native Electron file access.",
+      "Choose an output folder for mastered files.",
+      "Select a mastering preset such as Balanced Master or AI Music Cleanup.",
+      "Select a reusable effects chain such as Gentle Master, Voice Cleanup, Streaming Ready, or Transcription Prep.",
+      "Adjust intensity, loudness target, peak ceiling, preserve-dynamics, and output format.",
+      "Run only after Web Audio or FFmpeg processing is implemented and verified.",
+      "Show before/after loudness or peak values only after real measurement.",
+      "Verify exported files exist, are nonzero, have the expected extension, and are in the selected folder.",
+    ],
+    settingsThatMatter: [
+      {
+        name: "Mastering mode",
+        desc: "Chooses the intended processing style. The current UI is a safe scaffold until the processing backend is wired.",
+      },
+      {
+        name: "Effects chain",
+        desc: "Defines the planned processing path: analyze, apply chain, export copy, verify output, and show measured report. Chains are non-destructive and remain planned until real processing is wired.",
+      },
+      {
+        name: "Output format",
+        desc: "WAV is the first planned lossless target. FLAC/MP3 require FFmpeg or another verified encoder path and codec support.",
+      },
+      {
+        name: "Overwrite policy",
+        desc: "Original audio is never overwritten by default. Export replacement requires explicit policy and a verified replacement file.",
+      },
+    ],
+    commonMistakes: [
+      "Treating mastering as AI stem-separation proof. It is audio finalization only.",
+      "Assuming before/after LUFS or true peak numbers can be shown before analysis. Values must be measured.",
+      "Treating a browser download as a verified desktop output file. Native write verification is required.",
+      "Expecting Batch Encoder to be the mastering tool. Batch Encoder converts formats; Mastering Lab finalizes audio.",
+      "Assuming an effects chain ran because it is selected. Selection is a plan until the backend executes and output verification passes.",
+    ],
+    faq: [
+      {
+        q: "Does mastering approve Beta Candidate?",
+        a: "No. Mastering is not stem separation proof and does not approve Beta Candidate.",
+      },
+      {
+        q: "Can Mastering Lab upload my audio?",
+        a: "No cloud upload is enabled by default. The intended workflow is local processing with user-selected input and output folders.",
+      },
+      {
+        q: "Why is Run Mastering disabled?",
+        a: "The UI is wired to honest readiness states. It stays disabled until native input/output access and a verified Web Audio or FFmpeg processing backend exist.",
+      },
+    ],
+    limitations: [
+      "Web Audio DSP integration is planned but not active in this first OpenStem-native scaffold.",
+      "Effects chains are planned policy presets until a real processing backend is wired.",
+      "Before/after loudness analysis is unavailable until real measurement is wired.",
+      "Exported mastered files are not complete until native output verification passes.",
+      "Mastering does not replace a human mastering engineer.",
+      "Mastering does not satisfy OpenStem stem-separation proof.",
+    ],
+  },
+  local_transcription: {
+    sectionId: "local_transcription",
+    title: "Local Transcription Manual",
+    subtitle:
+      "A local speech-to-text workspace for planning Whisper-family transcription jobs, transcript export, and local history. It is separate from the Audio Separator and does not prove stem separation.",
+    whatItDoes:
+      "Prepares a transcription workflow for audio or video files: choose input, choose output folder, select a Whisper-family model, check readiness, preview safe export filenames, and later run a native transcription backend once it is wired and verified.",
+    whenToUse: [
+      "Turning interviews, meetings, lectures, or video audio into transcript files.",
+      "Planning PDF, DOCX, TXT, JSON, SRT, VTT, CSV, or HTML exports without uploading source audio.",
+      "Reviewing Whisper model size, speed, memory, and language tradeoffs.",
+      "Checking local transcription blockers separately from source-separation model blockers.",
+    ],
+    workflow: [
+      "Open Local Transcription.",
+      "Choose a single file, multiple files, video file, or directory.",
+      "Choose an output folder for transcript files.",
+      "Select a Whisper-family model and confirm whether it is installed and hash verified.",
+      "Check FFmpeg, Python/backend, model, input, and output readiness.",
+      "Run only after a native runner exists; browser preview cannot write local transcript files.",
+      "Verify generated files exist on disk and have nonzero size before showing completion.",
+      "Add a local history entry only after a real native job completes.",
+    ],
+    settingsThatMatter: [
+      {
+        name: "Whisper model",
+        desc: "Selects a transcription model only. Whisper model readiness is separate from separator model readiness and cannot unblock Beta Candidate status.",
+      },
+      {
+        name: "Filename template",
+        desc: "Builds deterministic export filenames from safe tokens such as safe title, session number, date, duration, model, language, source basename, and transcript id.",
+      },
+      {
+        name: "Export format",
+        desc: "TXT/JSON should be the first native exports after a runner exists. PDF, DOCX, SRT, VTT, CSV, and HTML remain Planned / Not active until local writers and output verification are implemented.",
+      },
+    ],
+    commonMistakes: [
+      "Assuming transcription is stem separation proof. It is speech-to-text only and does not validate separator weights.",
+      "Assuming browser preview selected a real native file path. Native Electron file selection is required before local files can be read or written.",
+      "Treating predicted PDF names as real exports. PDF export is complete only after a nonzero local PDF exists at the expected path.",
+      "Trusting a Whisper model filename alone. A model is trusted only after source/license metadata and SHA-256 verification exist where required.",
+    ],
+    faq: [
+      {
+        q: "Does a successful transcript unblock Beta Candidate?",
+        a: "No. Transcription is not stem separation proof and does not approve Beta Candidate.",
+      },
+      {
+        q: "Can Local Transcription upload my audio?",
+        a: "No cloud upload is part of this workspace. The intended workflow is local-only, with history and outputs stored on the user's machine.",
+      },
+      {
+        q: "Why are timestamps and speaker labels unavailable?",
+        a: "They depend on backend output. Segment timestamps, word timestamps, and diarization must not be shown unless a verified backend actually returns them.",
+      },
+      {
+        q: "Why is the run button disabled?",
+        a: "The current implementation is an honest scaffold. Native transcription remains Planned / Not active until a verified runner, model check, and output verification exist.",
+      },
+    ],
+    limitations: [
+      "Local Transcription is speech-to-text only and is not UVR-style source separation.",
+      "Native transcription is Planned / Not active until Electron IPC and backend execution are wired.",
+      "PDF export is Planned / Not active until a local PDF generator verifies real output files.",
+      "Whisper weights are not bundled, committed, or trusted without documented source/license/hash metadata.",
+      "Transcript history starts empty and cannot contain fake completed jobs.",
+    ],
+  },
+  transcript_workflow: {
+    sectionId: "transcript_workflow",
+    title: "Transcript Workflow Builder Manual",
+    subtitle:
+      "A local-first prompt workflow workspace for reusable prompt templates, Deep Read planning, SubQ decomposition, evidence retrieval, and plain-text output assembly. It is not stem-separation proof.",
+    whatItDoes:
+      "Lets users choose saved prompt templates such as DAP Note, Assessment, Summary / Review, Business Meeting Summary, Interview Notes, Podcast Notes, Project Review, or Custom Blank Workflow. It also documents the planned Deep Read -> SubQ Planning -> Evidence Retrieval -> Section Answering -> Output Verification -> Plain Text Assembly path.",
+    whenToUse: [
+      "Reusing the same prompt sections across transcript sessions.",
+      "Editing a saved prompt template without rebuilding the whole workflow.",
+      "Planning long-transcript analysis with Deep Read or SubQ + Evidence Mode.",
+      "Keeping clinical, business, legal, education, research, coaching, interview, podcast, and project templates in one local-first workspace.",
+    ],
+    workflow: [
+      "Open Transcript Workflows.",
+      "Choose a prompt template from the Prompt Library.",
+      "Edit prompt sections inline if needed.",
+      "Use Quick Mode for short text, Deep Read Mode for long transcripts, or SubQ + Evidence Mode for complex workflows.",
+      "Run enabled sections in order only after a real local model runner is configured.",
+      "Preserve completed section outputs if one section fails.",
+      "Assemble final output as plain text with line breaks between responses.",
+    ],
+    settingsThatMatter: [
+      {
+        name: "Prompt Library",
+        desc: "Built-in templates remain read-only originals. Editing a built-in template should create a user copy before saving.",
+      },
+      {
+        name: "Workflow mode",
+        desc: "Quick Mode avoids claiming deep retrieval. Deep Read Mode builds a context map. SubQ + Evidence Mode adds sub-question planning and evidence retrieval.",
+      },
+      {
+        name: "Storage",
+        desc: "Native prompt library persistence is planned for the app user data folder. Browser preview storage must be labeled as preview/session/local browser storage.",
+      },
+    ],
+    commonMistakes: [
+      "Treating keyword evidence retrieval as semantic vector search. The first pass is a local keyword/evidence scaffold only.",
+      "Expecting hidden chain-of-thought. The workflow can show stage status and section plans, but not private reasoning.",
+      "Putting transcript text or PHI inside reusable prompt templates.",
+      "Treating prompt workflow output as source-separation proof.",
+    ],
+    faq: [
+      {
+        q: "Does Prompt Library approve Beta Candidate?",
+        a: "No. Prompt templates are workflow text presets only and do not approve Beta Candidate.",
+      },
+      {
+        q: "Does SubQ + Evidence use cloud RAG?",
+        a: "No cloud RAG, cloud embeddings, cloud vector database, or hidden upload is enabled by default.",
+      },
+      {
+        q: "Why keep final output simple?",
+        a: "The intended output is paste-ready plain text. Each section response is separated by line breaks, with no bullets or tables by default.",
+      },
+    ],
+    limitations: [
+      "Native prompt-library persistence is not wired yet.",
+      "Local model execution is not wired yet.",
+      "The evidence index is a deterministic local scaffold, not semantic vector search.",
+      "No transcript text is logged by default.",
+      "This workflow does not satisfy OpenStem stem-separation proof.",
+    ],
+  },
+  clinical_workflow: {
+    sectionId: "clinical_workflow",
+    title: "Clinical Workflow Builder Manual",
+    subtitle:
+      "A HIPAA-aware local-first draft workflow for turning a verified transcript into clinician-reviewed prompt sections. It is not automatic HIPAA compliance, not a medical device, and not stem-separation proof.",
+    whatItDoes:
+      "Scaffolds a Prompt Workflow Builder for transcript input, five draft clinical prompt sections, local model readiness, separate section outputs, and a unified EHR text box. The current implementation does not run an LLM or create clinical output files.",
+    whenToUse: [
+      "Planning client-focused draft note sections from a local transcript.",
+      "Reviewing local LLM readiness before any PHI is processed.",
+      "Keeping cloud model processing disabled unless a documented release policy, user action, and BAA-required path exists.",
+      "Separating draft clinical documentation support from OpenStem audio-separation proof.",
+    ],
+    workflow: [
+      "Open Clinical Workflow.",
+      "Paste or import a verified local transcript when native import exists.",
+      "Review the default five-section prompt template.",
+      "Confirm local model readiness before any draft generation is enabled.",
+      "Generate each section separately only after a verified local LLM runner exists.",
+      "Review every draft section as a clinician before using the unified EHR text box.",
+      "Export only after the user chooses an output folder and output-file verification passes.",
+    ],
+    settingsThatMatter: [
+      {
+        name: "Local LLM readiness",
+        desc: "Clinical drafting stays blocked until a local model runner such as Ollama, llama.cpp, GPT4All, or LM Studio is configured and verified.",
+      },
+      {
+        name: "Cloud model policy",
+        desc: "Cloud model disabled by default. BAA required for cloud PHI processing, plus explicit user action and documented safeguards.",
+      },
+      {
+        name: "History mode",
+        desc: "History is disabled by default. Metadata-only history can be added later without storing transcript text or generated clinical text.",
+      },
+    ],
+    commonMistakes: [
+      "Treating draft text as clinician-approved documentation. Draft only - clinician review required before EHR entry.",
+      "Assuming HIPAA-aware UI language proves organizational compliance. It does not.",
+      "Uploading PHI to a cloud model without a documented release policy and BAA-required processing path.",
+      "Inventing missing clinical details when the transcript lacks evidence.",
+    ],
+    faq: [
+      {
+        q: "Does this make OpenStem a medical device?",
+        a: "No. The screen is a draft documentation support scaffold and must not make diagnosis, treatment, or automated clinical decision claims.",
+      },
+      {
+        q: "Can it send PHI to a cloud model?",
+        a: "No cloud model is enabled by default. Any future cloud PHI processing would require explicit user action, documented safeguards, and a BAA-required processing path.",
+      },
+      {
+        q: "Can generated output be copied into an EHR automatically?",
+        a: "No. The unified EHR text box stays draft-only and requires clinician review before use.",
+      },
+      {
+        q: "Does this affect Beta Candidate?",
+        a: "No. Clinical workflow output is not stem separation proof and does not approve Beta Candidate.",
+      },
+    ],
+    limitations: [
+      "Local LLM execution is Not configured.",
+      "Transcript import is Planned / Not active.",
+      "No generated clinical text exists until a real local model run completes.",
+      "No cloud PHI processing is enabled by default.",
+      "Export and history require local output verification before completion can be shown.",
+    ],
   },
   downloads: {
     sectionId: "downloads",
     title: "Model Manager Manual",
-    subtitle: "Model weights are trained deep learning datasets. The AI backend uses these weights to determine how to separate vocals, instruments, and other tracks. Manage and download your catalog here.",
-    whatItDoes: "Integrates configured repositories for VR, MDX-Net, and Demucs models. Tracks downloaded weights, allows manual paths import, and verifies archive integrity using SHA-256 hashes.",
+    subtitle:
+      "Model weights are trained deep learning datasets. The AI backend uses these weights to determine how to separate vocals, instruments, and other tracks. Manage and download your catalog here.",
+    whatItDoes:
+      "Integrates configured repositories for VR, MDX-Net, and Demucs models. Tracks downloaded weights, allows manual paths import, and verifies archive integrity using SHA-256 hashes.",
     whenToUse: [
       "Acquiring new neural models to test and compare separation quality.",
       "Verifying that downloaded weights files are not corrupt or incomplete.",
       "Manually importing models that cannot be downloaded automatically.",
-      "Freeing up storage by identifying and deleting unneeded model weights."
+      "Freeing up storage by identifying and deleting unneeded model weights.",
     ],
     workflow: [
       "Review the model registry catalog and check current installation states.",
       "For automatic downloads, select a template with a Configured Source verified link.",
       "For custom weights, click manually register and import from local storage.",
       "Verify file integrity using active SHA-256 hash checks where available.",
-      "Blueprints are immediately registered and exposed in the Audio Separator menus."
+      "Blueprints are immediately registered and exposed in the Audio Separator menus.",
     ],
     settingsThatMatter: [
-      { name: "Configured Source", desc: "Indicates a registered registry URL is mapped on the system, but does not guarantee the URL is live or has been verified." },
-      { name: "Hash Checksum", desc: "Guarantees file integrity. If a hash is unavailable, the model file can still be used, but risks corruption." },
-      { name: "Disk Space Check", desc: "A Static Cache check estimate. It doesn't perform live drive queries unless supported by python diagnostics." }
+      {
+        name: "Configured Source",
+        desc: "Indicates a registered registry URL is mapped on the system, but does not guarantee the URL is live or has been verified.",
+      },
+      {
+        name: "Hash Checksum",
+        desc: "Guarantees file integrity. If a hash is unavailable, the model file can still be used, but risks corruption.",
+      },
+      {
+        name: "Disk Space Check",
+        desc: "A Static Cache check estimate. It doesn't perform live drive queries unless supported by python diagnostics.",
+      },
     ],
     commonMistakes: [
       "Assuming 'Configured Source' means verified on the internet. It only confirms a blueprint URL is registered locally.",
-      "Ignoring download corruption: if folders have empty or truncated weights files, separations will crash. Always trigger hash verification if available."
+      "Ignoring download corruption: if folders have empty or truncated weights files, separations will crash. Always trigger hash verification if available.",
     ],
     faq: [
-      { q: "Why do I need model weights?", a: "Weights are the brains of deep learning models. Without a weights file, the separation algorithm doesn't know how to reconstruct or classify stem frequencies." },
-      { q: "Why does a model say Source Missing?", a: "Some models are custom or proprietary. They don't have configured public repository URLs and must be imported manually." },
-      { q: "Why does a model say Manual Import Required?", a: "Indicates there is no automated download link mapped. You must acquire the file separately and import it." },
-      { q: "Why does a model say Hash Unavailable?", a: "This means the database has not registered a checksum for this model variant. The app can track the file, but it is not proof-eligible until expected SHA-256 metadata is supplied and matched." },
-      { q: "Why does the model exist but not count as verified?", a: "An audio engine won't mark a model as fully verified until it passes a clean check, such as a matching SHA-256 hash or successful test execution." }
+      {
+        q: "Why do I need model weights?",
+        a: "Weights are the brains of deep learning models. Without a weights file, the separation algorithm doesn't know how to reconstruct or classify stem frequencies.",
+      },
+      {
+        q: "Why does a model say Source Missing?",
+        a: "Some models are custom or proprietary. They don't have configured public repository URLs and must be imported manually.",
+      },
+      {
+        q: "Why does a model say Manual Import Required?",
+        a: "Indicates there is no automated download link mapped. You must acquire the file separately and import it.",
+      },
+      {
+        q: "Why does a model say Hash Unavailable?",
+        a: "This means the database has not registered a checksum for this model variant. The app can track the file, but it is not proof-eligible until expected SHA-256 metadata is supplied and matched.",
+      },
+      {
+        q: "Why does the model exist but not count as verified?",
+        a: "An audio engine won't mark a model as fully verified until it passes a clean check, such as a matching SHA-256 hash or successful test execution.",
+      },
     ],
     limitations: [
       "Model blueprinted sources represent local settings, not active web checks.",
       "Disk estimates represent expected file requirements, not local empty space checks.",
-      "Integrity signatures are only checked against registered database hashes."
-    ]
+      "Integrity signatures are only checked against registered database hashes.",
+    ],
   },
   global_settings: {
     sectionId: "global_settings",
     title: "Global Settings Manual",
-    subtitle: "Establishes default global presets and configuration scripts for newly created jobs. Restores safe operational configurations without overriding current session changes.",
-    whatItDoes: "Defines startup configurations, including default format, default process architectures, CPU threads allocation, device backend preferences, and legacy UVR5 pass-through placeholders.",
+    subtitle:
+      "Establishes default global presets and configuration scripts for newly created jobs. Restores safe operational configurations without overriding current session changes.",
+    whatItDoes:
+      "Defines startup configurations, including default format, default process architectures, CPU threads allocation, device backend preferences, and legacy UVR5 pass-through placeholders.",
     whenToUse: [
       "Setting default output directory paths and format presets (e.g. always export WAV).",
       "Configuring engine paths (e.g. customized Python executable override).",
       "Restoring stable, safe configurations if custom setups trigger crashes.",
-      "Mapping advanced parameters for Demucs, MDX-Net, or VR algorithms."
+      "Mapping advanced parameters for Demucs, MDX-Net, or VR algorithms.",
     ],
     workflow: [
       "Open the target settings accordion group.",
       "Review the option: look for active variables vs Legacy UVR5 Reference.",
       "Adjust defaults (e.g., set default backend device to CPU/CUDA).",
       "Commit changes by saving preferences to native local state.",
-      "Use 'Restore Safe Defaults' to quickly reset back to a clean configuration."
+      "Use 'Restore Safe Defaults' to quickly reset back to a clean configuration.",
     ],
     settingsThatMatter: [
       { name: "Default Process Method", desc: "Defines what engine runs first when starting up a clean session." },
-      { name: "Legacy UVR5 Reference / Not wired", desc: "A parameter displayed for visual parity. These do not execute and have no effect on separation runs." },
-      { name: "Restore Safe Defaults", desc: "Resets configuration keys to CPU targets, disable silent fallback, and clears experimental settings." }
+      {
+        name: "Legacy UVR5 Reference / Not wired",
+        desc: "A parameter displayed for visual parity. These do not execute and have no effect on separation runs.",
+      },
+      {
+        name: "Restore Safe Defaults",
+        desc: "Resets configuration keys to CPU targets, disable silent fallback, and clears experimental settings.",
+      },
     ],
     commonMistakes: [
       "Expecting changes to instantly override an active, running job. Global defaults apply to newly initialized sessions, not mid-run operations.",
-      "Activating un-wired legacy settings and expecting different separation behaviors. Read the labels carefully."
+      "Activating un-wired legacy settings and expecting different separation behaviors. Read the labels carefully.",
     ],
     faq: [
-      { q: "Why did changing a global setting not change my current job?", a: "Global settings act as templates for newly created separation jobs. If you are mid-session, manually change settings in the primary separator view." },
-      { q: "What does Legacy UVR5 Reference / Not wired mean?", a: "These are settings from classic UVR5 shown to help advanced users transition. They are not connected to the active CLI engine and do nothing." },
-      { q: "Why is DirectML experimental?", a: "DirectML delegates machine learning to Windows DirectX devices. Support in PyTorch is still experimental and prone to memory crashes compared to NVIDIA CUDA." },
-      { q: "Why do safe defaults prefer CPU?", a: "CPU is universally compatible. It is slow but guarantees a run won't fail due to VRAM issues, incompatible drivers, or missing CUDA toolkits." },
-      { q: "Where are preferences stored?", a: "All settings are stored locally in the web app container's secure local state persistence." }
+      {
+        q: "Why did changing a global setting not change my current job?",
+        a: "Global settings act as templates for newly created separation jobs. If you are mid-session, manually change settings in the primary separator view.",
+      },
+      {
+        q: "What does Legacy UVR5 Reference / Not wired mean?",
+        a: "These are settings from classic UVR5 shown to help advanced users transition. They are not connected to the active CLI engine and do nothing.",
+      },
+      {
+        q: "Why is DirectML experimental?",
+        a: "DirectML delegates machine learning to Windows DirectX devices. Support in PyTorch is still experimental and prone to memory crashes compared to NVIDIA CUDA.",
+      },
+      {
+        q: "Why do safe defaults prefer CPU?",
+        a: "CPU is universally compatible. It is slow but guarantees a run won't fail due to VRAM issues, incompatible drivers, or missing CUDA toolkits.",
+      },
+      {
+        q: "Where are preferences stored?",
+        a: "All settings are stored locally in the web app container's secure local state persistence.",
+      },
     ],
     limitations: [
       "Settings labeled Legacy UVR5 Reference / Not wired do not process active operations.",
       "Variables labeled Planned / Not active are documented for future integrations.",
       "Safe defaults restore CPU targets and disable experimental hardware accelerations.",
-      "Preferences persist in local browser storage."
-    ]
+      "Preferences persist in local browser storage.",
+    ],
   },
   hardware_db: {
     sectionId: "hardware_db",
     title: "Hardware Compatibility Database Manual",
-    subtitle: "A detailed matrix mapping source-separation deep learning architectures to hardware accelerators. It registers theoretical capability but doesn't prove local environment readiness.",
-    whatItDoes: "Details packages, supported architectures, extensions, and accelerator remarks for VR, MDX-Net, Demucs, and Ensemble options. Guides setup of GPU environments.",
+    subtitle:
+      "A detailed matrix mapping source-separation deep learning architectures to hardware accelerators. It registers theoretical capability but doesn't prove local environment readiness.",
+    whatItDoes:
+      "Details packages, supported architectures, extensions, and accelerator remarks for VR, MDX-Net, Demucs, and Ensemble options. Guides setup of GPU environments.",
     whenToUse: [
       "Diagnosing why a specific model architecture crashes on your physical hardware.",
       "Planning upgrades to local CUDA or DirectML drivers.",
       "Checking which Python packages must be active for a given model.",
-      "Verifying if a target architecture is structurally supported on your system type."
+      "Verifying if a target architecture is structurally supported on your system type.",
     ],
     workflow: [
       "Select an architecture category from the matrix (e.g., Demucs or MDX-Net).",
       "Inspect supported system-level accelerators (CUDA, MPS, DirectML, CPU).",
       "Review the Required Packages column to ensure dependencies are installed.",
       "Read the accelerator footnotes to find optimization instructions (e.g., chunk sizing).",
-      "Run the diagnostic suite in Setup Guide to verify actual runtime state."
+      "Run the diagnostic suite in Setup Guide to verify actual runtime state.",
     ],
     settingsThatMatter: [
-      { name: "Required Packages", desc: "The Python dependencies (e.g. `onnxruntime-gpu`, `demucs`) that must exist in the host python environment." },
-      { name: "CPU Fallback Mode", desc: "The standard default state. If a required packages or accelerator checks fail, execution falls back here to prevent crashes." },
-      { name: "CUDA, MPS, DirectML Statuses", desc: "Displays whether an accelerator is structurally enabled in code versus locally proven on this system." }
+      {
+        name: "Required Packages",
+        desc: "The Python dependencies (e.g. `onnxruntime-gpu`, `demucs`) that must exist in the host python environment.",
+      },
+      {
+        name: "CPU Fallback Mode",
+        desc: "The standard default state. If a required packages or accelerator checks fail, execution falls back here to prevent crashes.",
+      },
+      {
+        name: "CUDA, MPS, DirectML Statuses",
+        desc: "Displays whether an accelerator is structurally enabled in code versus locally proven on this system.",
+      },
     ],
     commonMistakes: [
       "Confusing 'Structurally Supported' with 'Locally Proven'. An architecture may support CUDA, but your local computer won't run it until local CUDA drivers are active.",
-      "Running massive model configurations on low-VRAM GPUs. Choose smaller chunk sizes to prevent out-of-memory errors."
+      "Running massive model configurations on low-VRAM GPUs. Choose smaller chunk sizes to prevent out-of-memory errors.",
     ],
     faq: [
-      { q: "Why does CUDA show as not locally proven?", a: "OpenStem AI Workstation code can run CUDA, but we don't assume your computer has the drivers installed. It is proven once you execute a real local AI separation job on GPU." },
-      { q: "Why is DirectML experimental?", a: "DirectML PyTorch library dependencies are active, but Microsoft DirectML has edge-case limitations with memory allocation that can freeze." },
-      { q: "Why does ONNX say delegated?", a: "ONNX model translation is handled by the underlying audio-separator package, not directly executed by the React app's local code layers." },
-      { q: "Why does CPU work when GPU doesn't?", a: "CPU is standard. It doesn't need external graphics drivers, hardware toolkits, or VRAM checking. It is highly reliable but slow." }
+      {
+        q: "Why does CUDA show as not locally proven?",
+        a: "OpenStem AI Workstation code can run CUDA, but we don't assume your computer has the drivers installed. It is proven once you execute a real local AI separation job on GPU.",
+      },
+      {
+        q: "Why is DirectML experimental?",
+        a: "DirectML PyTorch library dependencies are active, but Microsoft DirectML has edge-case limitations with memory allocation that can freeze.",
+      },
+      {
+        q: "Why does ONNX say delegated?",
+        a: "ONNX model translation is handled by the underlying audio-separator package, not directly executed by the React app's local code layers.",
+      },
+      {
+        q: "Why does CPU work when GPU doesn't?",
+        a: "CPU is standard. It doesn't need external graphics drivers, hardware toolkits, or VRAM checking. It is highly reliable but slow.",
+      },
     ],
     limitations: [
       "This database is informational and does not guarantee local execution success.",
       "GPU targets remain structurally enabled but Not locally proven until dynamic E2E proof succeeds.",
-      "ONNX provider handling is delegated to the audio-separator library backend of your host environment."
-    ]
+      "ONNX provider handling is delegated to the audio-separator library backend of your host environment.",
+    ],
   },
   about_project: {
     sectionId: "about_project",
     title: "About OpenStem Manual",
-    subtitle: "Details the architectural goals, release scopes, and disclaimer requirements for the OpenStem AI Audio Workstation. Understand what Hardened Functional Alpha means.",
-    whatItDoes: "Defines the alpha-grade compliance framework. Documents testing status, explains why Beta is blocked, and provides strict guidelines regarding FFmpeg and local AI capabilities.",
+    subtitle:
+      "Details the architectural goals, release scopes, and disclaimer requirements for the OpenStem AI Audio Workstation. Understand what Hardened Functional Alpha means.",
+    whatItDoes:
+      "Defines the alpha-grade compliance framework. Documents testing status, explains why Beta is blocked, and provides strict guidelines regarding FFmpeg and local AI capabilities.",
     whenToUse: [
       "Understanding the testing and validation steps required to promote this interface.",
       "Auditing active compliance standards regarding local performance.",
-      "Checking version history and architectural goals of this independent workstation."
+      "Checking version history and architectural goals of this independent workstation.",
     ],
     workflow: [
       "Open the About view screen.",
       "Read the compliance policy regarding local execution claims.",
       "Verify the current release state label (Hardened Functional Alpha).",
-      "Review the Beta Candidate blocking criteria."
+      "Review the Beta Candidate blocking criteria.",
     ],
     settingsThatMatter: [
-      { name: "Hardened Functional Alpha State", desc: "The current state. Indicates broad UI and diagnostic coverage while verified local AI E2E proof remains blocked." },
-      { name: "Beta Candidate Criteria", desc: "Requires real local AI model separation proof with a clean exit code 0 and non-empty AI-generated stems." },
-      { name: "FFmpeg Fallback Ruling", desc: "Decrees that FFmpeg fallbacks are auxiliary utilities and do not count towards promoting the system to Beta." }
+      {
+        name: "Hardened Functional Alpha State",
+        desc: "The current state. Indicates broad UI and diagnostic coverage with one verified local CPU E2E proof lane completed.",
+      },
+      {
+        name: "Beta Candidate Criteria",
+        desc: "Requires real local AI model separation proof with a clean exit code 0 and non-empty AI-generated stems.",
+      },
+      {
+        name: "FFmpeg Fallback Ruling",
+        desc: "Decrees that FFmpeg fallbacks are auxiliary utilities and do not count towards promoting the system to Beta.",
+      },
     ],
     commonMistakes: [
       "Assuming the app is the official release from ultimatevocalremover. This is an independent workstation designed for clean and persistent diagnostic flows.",
-      "Confusing FFmpeg fallback processing with real AI separation. AI proof must be performed using neural models."
+      "Confusing FFmpeg fallback processing with real AI separation. AI proof must be performed using neural models.",
     ],
     faq: [
-      { q: "What does Hardened Functional Alpha mean?", a: "Every form, card, toggle, diagnostic tool, and fallback of the app is visually and structurally complete. However, local machine deep learning execution requires dynamic proof before promotion." },
-      { q: "Why is Beta Candidate blocked?", a: "To ensure absolute reliability, Beta Candidate status is locked until an end-to-end local run successfully separates audio using a real model." },
-      { q: "What counts as local AI E2E proof?", a: "Executing a real model acapella or instrumental separation that exits successfully without fallback warnings, resulting in valid output audio stems." },
-      { q: "Why does GPU proof require extra steps?", a: "GPU hardware contains different architectures (NVIDIA CUDA, Mac MPS, DirectML). We must verify driver and hardware runtime performance separately from CPU-based AI proof." }
+      {
+        q: "What does Hardened Functional Alpha mean?",
+        a: "Every form, card, toggle, diagnostic tool, and fallback of the app is visually and structurally complete. However, local machine deep learning execution requires dynamic proof before promotion.",
+      },
+      {
+        q: "Why is Beta Candidate still pending?",
+        a: "One local CPU separator proof lane has passed. Beta Candidate still needs final release checklist review, packaged-app review, and user approval.",
+      },
+      {
+        q: "What counts as local AI E2E proof?",
+        a: "Executing a real model acapella or instrumental separation that exits successfully without fallback warnings, resulting in valid output audio stems.",
+      },
+      {
+        q: "Why does GPU proof require extra steps?",
+        a: "GPU hardware contains different architectures (NVIDIA CUDA, Mac MPS, DirectML). We must verify driver and hardware runtime performance separately from CPU-based AI proof.",
+      },
     ],
     limitations: [
       "This application is an independent audio workstation and is not affiliated with the official UVR developers.",
-      "Release state is locked to Hardened Functional Alpha; Beta Candidate remains strictly blocked.",
-      "FFmpeg utility processing does not count as AI proof."
-    ]
+      "Release state remains Hardened Functional Alpha; Beta Candidate is pending final review.",
+      "FFmpeg utility processing does not count as AI proof.",
+    ],
   },
   generative_ai_music_lab: {
     sectionId: "generative_ai_music_lab",
     title: "Generative Music Workspace Manual",
-    subtitle: "A dual-engine visual sandbox designed to experiment with musical prompts, outline lyrics, and preview demo tracks. Connect user-authorized Suno connector bridges or local YuE deep learning pipelines.",
-    whatItDoes: "Hosts layouts for drafting song structures, organizing sandbox audio tracks, and preparing reference files. This is a workflow sandbox. Raw third-party account session cookies or direct paywall bypass are strictly forbidden.",
+    subtitle:
+      "A dual-engine visual sandbox designed to experiment with musical prompts, outline lyrics, and preview demo tracks. Connect user-authorized Suno connector bridges or local YuE deep learning pipelines.",
+    whatItDoes:
+      "Hosts layouts for drafting song structures, organizing sandbox audio tracks, and preparing reference files. This is a workflow sandbox. Raw third-party account session cookies or direct paywall bypass are strictly forbidden.",
     whenToUse: [
       "Drafting song descriptions, structural cues, and lyrics using the text-only Lyric Coprocessor.",
       "Exploring parameter configurations, hardware demands, and execution weights metadata for YuE 7B or Suno integrations.",
-      "Loading pre-seeded sandbox demo audio items to preview downstream stem separation workflows."
+      "Loading pre-seeded sandbox demo audio items to preview downstream stem separation workflows.",
     ],
     workflow: [
       "Select your engine parameter view: Suno Workstation or YuE Engine.",
@@ -352,41 +821,61 @@ export const submenuManuals: Record<string, ManualContent> = {
       "Optionally use the Gemini-backed Lyric Coprocessor to assist in structuring song lyrics.",
       "Understand and resolve highlighted hardware or configuration blockers in the Preflight area.",
       "Review sandboxed track cards in the session library.",
-      "Send a demo track into the Audio Separator (UVR) to preview the separation workflows."
+      "Send a demo track into the Audio Separator (UVR) to preview the separation workflows.",
     ],
     settingsThatMatter: [
-      { name: "Suno Server URL", desc: "Sets the endpoint of an external, user-managed local suno-api bridge. Users are solely responsible for ensuring authorization." },
-      { name: "YuE Execution Device", desc: "Specifies local PyTorch execution device targets (e.g. CUDA fallback/MPS). Generative runs do not occur unless configured." },
-      { name: "Terms warning acknowledgement", desc: "Confirms understanding of experimental limits, rights responsibility, and verification rules." }
+      {
+        name: "Suno Server URL",
+        desc: "Sets the endpoint of an external, user-managed local suno-api bridge. Users are solely responsible for ensuring authorization.",
+      },
+      {
+        name: "YuE Execution Device",
+        desc: "Specifies local PyTorch execution device targets (e.g. CUDA fallback/MPS). Generative runs do not occur unless configured.",
+      },
+      {
+        name: "Terms warning acknowledgement",
+        desc: "Confirms understanding of experimental limits, rights responsibility, and verification rules.",
+      },
     ],
     commonMistakes: [
       "Assuming generative tracks count for UVR AI separation proof: Generative music tracks are strictly excluded from dynamic E2E separation verification rules.",
       "Pasting raw browser cookies or session tokens. These methods are unsupported and dangerous.",
-      "Expecting local YuE runs to execute on CPU or low-VRAM graphic cards. YuE requires powerful GPUs, extensive libraries, and large weight matrices (~7B parameters)."
+      "Expecting local YuE runs to execute on CPU or low-VRAM graphic cards. YuE requires powerful GPUs, extensive libraries, and large weight matrices (~7B parameters).",
     ],
     faq: [
-      { q: "Do these sandbox generations count as UVR AI separation proof?", a: "Absolutely not. Generative music loops do not count as proof. Beta Candidate remains strictly blocked." },
-      { q: "How do I connect a real Suno account?", a: "Suno integration requires a user-managed external bridge (such as local suno-api). This application does not contain direct API handshakes using raw account credentials or session cookies." },
-      { q: "What does YuE Local Engine require?", a: "Executing YuE requires Python, PyTorch, CUDA, a compatible high-VRAM GPU (e.g., L4, H100), FFmpeg, and several gigabytes of local weights directory structures." }
+      {
+        q: "Do these sandbox generations count as UVR AI separation proof?",
+        a: "No. Generative music loops do not count as separator proof and do not affect Beta Candidate status.",
+      },
+      {
+        q: "How do I connect a real Suno account?",
+        a: "Suno integration requires a user-managed external bridge (such as local suno-api). This application does not contain direct API handshakes using raw account credentials or session cookies.",
+      },
+      {
+        q: "What does YuE Local Engine require?",
+        a: "Executing YuE requires Python, PyTorch, CUDA, a compatible high-VRAM GPU (e.g., L4, H100), FFmpeg, and several gigabytes of local weights directory structures.",
+      },
     ],
     limitations: [
       "Suno integration is a draft parameters mock and does not bypass third-party service bounds.",
       "YuE local engine requires high-VRAM workstations and complete weights directories. It is marked as Not configured or Not locally proven.",
       "Generative music loops sent to ultraviolet separators are strictly excluded from E2E AI separation proof rules.",
-      "Users are solely responsible for all generated audio rights and local server authorizations."
-    ]
+      "Users are solely responsible for all generated audio rights and local server authorizations.",
+    ],
   },
   basic_pitch: {
     sectionId: "basic_pitch",
     title: "Basic Pitch MIDI Lab Manual",
-    subtitle: "Audio-to-MIDI Transcription Workspace: Convert audio files into MIDI note data using Spotify Basic Pitch. Best results usually come from clean vocals, melodies, single instruments, riffs, or separated stems.",
-    whatItDoes: "Basic Pitch converts audio into MIDI note data, providing a companion workflow for turning vocals, melodies, instruments, riffs, or separated stems into MIDI.",
+    subtitle:
+      "Audio-to-MIDI Transcription Workspace: Convert audio files into MIDI note data using Spotify Basic Pitch. Best results usually come from clean vocals, melodies, single instruments, riffs, or separated stems.",
+    whatItDoes:
+      "Basic Pitch converts audio into MIDI note data, providing a companion workflow for turning vocals, melodies, instruments, riffs, or separated stems into MIDI.",
     whenToUse: [
       "Turning vocal melodies into editable MIDI notes.",
       "Converting guitar, piano, bass, or synth ideas into editable MIDI files.",
       "Extracting melody lines from separated stems (e.g., vocal stem to MIDI).",
       "Creating MIDI guides for DAWs.",
-      "Transcribing short musical ideas quickly."
+      "Transcribing short musical ideas quickly.",
     ],
     workflow: [
       "Add an audio file to the Basic Pitch MIDI queue.",
@@ -394,31 +883,52 @@ export const submenuManuals: Record<string, ManualContent> = {
       "Choose MIDI options (e.g. Save MIDI file, Save note-events CSV, Save sonified MIDI WAV).",
       "Run Basic Pitch transcription.",
       "Review the MIDI master, note-events CSV, or sonified preview.",
-      "Import the MIDI into your preferred Digital Audio Workstation (DAW)."
+      "Import the MIDI into your preferred Digital Audio Workstation (DAW).",
     ],
     settingsThatMatter: [
       { name: "Save MIDI file", desc: "Saves the transcribed note patterns as a standard 1-track MIDI file (.mid)." },
-      { name: "Save sonified MIDI WAV", desc: "Passes --sonify-midi to the CLI, rendering a synthesized WAV audio file to audit pitched notes." },
-      { name: "Save note-events CSV", desc: "Passes --save-note-events to the CLI, compiling a spreadsheet with precise millisecond event offsets and MIDI values." },
-      { name: "Save raw model outputs NPZ", desc: "Passes --save-model-outputs to the CLI, outputting raw neural activations in numpy format." }
+      {
+        name: "Save sonified MIDI WAV",
+        desc: "Passes --sonify-midi to the CLI, rendering a synthesized WAV audio file to audit pitched notes.",
+      },
+      {
+        name: "Save note-events CSV",
+        desc: "Passes --save-note-events to the CLI, compiling a spreadsheet with precise millisecond event offsets and MIDI values.",
+      },
+      {
+        name: "Save raw model outputs NPZ",
+        desc: "Passes --save-model-outputs to the CLI, outputting raw neural activations in numpy format.",
+      },
     ],
     commonMistakes: [
       "Using a full dense mixed song instead of a clean, isolated stem or single melody.",
       "Expecting perfect chords or complex polyphony transcription from noisy or highly processed audio.",
       "Expecting microtonal pitch bends or timing alignment to be perfect without manual cleanup.",
-      "Confusing audio-to-MIDI transcription with vocal/vocal-instrumental stem source-separation."
+      "Confusing audio-to-MIDI transcription with vocal/vocal-instrumental stem source-separation.",
     ],
     faq: [
-      { q: "Is Basic Pitch the same as UVR stem separation?", a: "No. Basic Pitch is an audio-to-MIDI transcription tool. It does not separate or isolate audio tracks; it transcribes audio frequencies into MIDI note files." },
-      { q: "Does a successful Basic Pitch transcription count towards UVR AI E2E proof?", a: "No. Basic Pitch MIDI Lab is kept strictly separate. It does not validate UVR source-separation, nor does it count as UVR E2E proof. The Beta Candidate status remains blocked." },
-      { q: "How do I clean up the transcribed MIDI?", a: "Open the generated .mid file in any standard DAW (Ableton, FL Studio, Logic, Reaper) and use a piano roll to quantize notes, erase overlapping phantom notes, or adjust velocities." },
-      { q: "Which file formats can be used in the queue?", a: "Most common formats like WAV, MP3, FLAC, and OGG are supported by the underlying librosa/FFmpeg parser inside Spotify Basic Pitch." }
+      {
+        q: "Is Basic Pitch the same as UVR stem separation?",
+        a: "No. Basic Pitch is an audio-to-MIDI transcription tool. It does not separate or isolate audio tracks; it transcribes audio frequencies into MIDI note files.",
+      },
+      {
+        q: "Does a successful Basic Pitch transcription count towards UVR AI E2E proof?",
+        a: "No. Basic Pitch MIDI Lab is kept strictly separate. It does not validate UVR source-separation, nor does it count as UVR E2E proof. Beta Candidate status is governed by the separator proof evidence and final release review.",
+      },
+      {
+        q: "How do I clean up the transcribed MIDI?",
+        a: "Open the generated .mid file in any standard DAW (Ableton, FL Studio, Logic, Reaper) and use a piano roll to quantize notes, erase overlapping phantom notes, or adjust velocities.",
+      },
+      {
+        q: "Which file formats can be used in the queue?",
+        a: "Most common formats like WAV, MP3, FLAC, and OGG are supported by the underlying librosa/FFmpeg parser inside Spotify Basic Pitch.",
+      },
     ],
     limitations: [
       "This is audio-to-MIDI conversion only; it is NOT stem separation.",
       "This is a companion utility and is not designed to produce perfect sheet music or guitar tablature.",
       "Does not replace manual cleanup or human transcription for dense master mixes.",
-      "Safe desktop mode is required for real subprocess runs. Web sandbox shows preview-only MIDI states and does not write local output files."
-    ]
-  }
+      "Safe desktop mode is required for real subprocess runs. Web sandbox shows preview-only MIDI states and does not write local output files.",
+    ],
+  },
 };

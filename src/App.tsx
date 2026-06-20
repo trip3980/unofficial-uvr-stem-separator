@@ -46,6 +46,11 @@ import ClassicConsole from "./components/ClassicConsole";
 import BatchEncoder from "./components/BatchEncoder";
 import GlobalSettings from "./components/GlobalSettings";
 import LegalAbout from "./components/LegalAbout";
+import LocalTranscriptionWorkspace from "./components/LocalTranscriptionWorkspace";
+import ClinicalWorkflowBuilder from "./components/ClinicalWorkflowBuilder";
+import TranscriptWorkflowBuilder from "./components/TranscriptWorkflowBuilder";
+import MasteringLab from "./components/MasteringLab";
+import AppErrorBoundary from "./components/AppErrorBoundary";
 import SubmenuManual from "./components/SubmenuManual";
 import SunoMusicLab from "./components/SunoMusicLab";
 import BasicPitchMidiLab from "./components/BasicPitchMidiLab";
@@ -69,6 +74,10 @@ export default function App() {
     | "ensemble"
     | "downloads"
     | "batch_encoder"
+    | "mastering_lab"
+    | "local_transcription"
+    | "transcript_workflow"
+    | "clinical_workflow"
     | "global_settings"
     | "hardware_db"
     | "suno_api"
@@ -159,64 +168,96 @@ export default function App() {
         <nav className={`space-y-1.5 flex-1 ${isMobileNavOpen ? 'block' : 'hidden md:block'}`}>
           {(
             [
-              { id: "classic_console", label: "Audio Separator", icon: Play },
-              { id: "mixer", label: "Stem Mixer", icon: Music },
-              { id: "suno_api", label: "Generative AI Music Lab", icon: Disc },
-              { id: "basic_pitch", label: "Basic Pitch MIDI Lab", icon: Binary },
-              { id: "ensemble", label: "Ensemble Manager", icon: Workflow },
-              { id: "batch_encoder", label: "Batch Encoder", icon: FileAudio },
-              { id: "downloads", label: "Model Manager", icon: DownloadCloud },
               {
-                id: "global_settings",
-                label: "Global Settings",
-                icon: Settings,
+                title: "Primary workflow",
+                items: [
+                  { id: "classic_console", label: "Audio Separator", note: "Select, verify, run", icon: Play },
+                ],
               },
-              { id: "hardware_db", label: "Hardware Database", icon: Cpu },
-              { id: "about_project", label: "About OpenStem", icon: Info },
+              {
+                title: "Post-processing",
+                items: [
+                  { id: "mixer", label: "Stem Mixer", note: "Requires verified stems", icon: Music },
+                  { id: "batch_encoder", label: "Batch Encoder", note: "Non-AI FFmpeg conversion", icon: FileAudio },
+                  { id: "mastering_lab", label: "Mastering Lab", note: "Finalize audio / Not proof", icon: SlidersHorizontal },
+                  { id: "local_transcription", label: "Local Transcription", note: "Speech-to-text / Not proof", icon: FileText },
+                  { id: "transcript_workflow", label: "Transcript Workflows", note: "Prompt library / Not proof", icon: GitFork },
+                  { id: "clinical_workflow", label: "Clinical Workflow", note: "Draft notes / Local-first", icon: FileCheck },
+                ],
+              },
+              {
+                title: "Setup and proof",
+                items: [
+                  { id: "downloads", label: "Model Manager", note: "Add or verify models", icon: DownloadCloud },
+                  { id: "global_settings", label: "Global Settings", note: "Defaults for new jobs", icon: Settings },
+                  { id: "hardware_db", label: "Hardware Database", note: "Diagnostics reference", icon: Cpu },
+                ],
+              },
+              {
+                title: "Advanced / reference",
+                items: [
+                  { id: "ensemble", label: "Ensemble Manager", note: "Planning View / Not active", icon: Workflow },
+                  { id: "basic_pitch", label: "Basic Pitch MIDI Lab", note: "Audio-to-MIDI only", icon: Binary },
+                  { id: "suno_api", label: "Generative AI Music Lab", note: "Experimental / connector-dependent", icon: Disc },
+                  { id: "about_project", label: "About OpenStem", note: "Project status", icon: Info },
+                ],
+              },
             ] as const
-          ).map(({ id, label, icon: IconIcon }) => {
-            const isActive = activeTab === id;
-            return (
-              <button
-                key={id}
-                onClick={() => {
-                  setActiveTab(id);
-                  if (window.innerWidth < 768) {
-                    setIsMobileNavOpen(false);
-                  }
-                }}
-                className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-300 flex items-center gap-3 text-sm font-medium relative group focus:outline-none ${
-                  isActive
-                    ? "text-green-300"
-                    : "text-green-600/50 hover:text-green-400"
-                }`}
-              >
-                {isActive && (
-                  <motion.div
-                    layoutId="activeTabSidebarBackdrop"
-                    className="absolute inset-0 bg-green-500/[0.08] border border-green-500/20 rounded-xl shadow-[inset_0_1px_1px_rgba(0,255,0,0.1),0_4px_12px_rgba(0,0,0,0.3)] backdrop-blur-md"
-                    transition={{ type: "spring", stiffness: 350, damping: 28 }}
-                  />
-                )}
-
-                {/* Accent neon line indicator */}
-                {isActive && (
-                  <div className="absolute left-0 top-3 bottom-3 w-1 bg-gradient-to-b from-green-400 to-emerald-500 rounded-r-md z-10 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
-                )}
-
-                <div className="relative z-10 flex items-center gap-3 w-full font-mono uppercase tracking-wider text-[11px] font-bold">
-                  <IconIcon
-                    className={`w-4 h-4 transition-all duration-300 ${isActive ? "text-green-400 scale-110 opacity-100" : "opacity-50 group-hover:opacity-80 drop-shadow-[0_0_5px_rgba(0,255,0,0.5)]"}`}
-                  />
-                  <span
-                    className={`transition-all duration-300 ${isActive ? "tracking-widest" : "tracking-wide"}`}
+          ).map((group) => (
+            <div key={group.title} className="space-y-1.5 pt-2 first:pt-0">
+              <div className="px-4 text-[9px] font-mono uppercase tracking-widest text-green-500/35 font-bold">
+                {group.title}
+              </div>
+              {group.items.map(({ id, label, note, icon: IconIcon }) => {
+                const isActive = activeTab === id;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => {
+                      setActiveTab(id);
+                      if (window.innerWidth < 768) {
+                        setIsMobileNavOpen(false);
+                      }
+                    }}
+                    className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-300 flex items-center gap-3 text-sm font-medium relative group focus:outline-none ${
+                      isActive
+                        ? "text-green-300"
+                        : "text-green-600/50 hover:text-green-400"
+                    }`}
                   >
-                    {label}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
+                    {isActive && (
+                      <motion.div
+                        layoutId="activeTabSidebarBackdrop"
+                        className="absolute inset-0 bg-green-500/[0.08] border border-green-500/20 rounded-xl shadow-[inset_0_1px_1px_rgba(0,255,0,0.1),0_4px_12px_rgba(0,0,0,0.3)] backdrop-blur-md"
+                        transition={{ type: "spring", stiffness: 350, damping: 28 }}
+                      />
+                    )}
+
+                    {/* Accent neon line indicator */}
+                    {isActive && (
+                      <div className="absolute left-0 top-3 bottom-3 w-1 bg-gradient-to-b from-green-400 to-emerald-500 rounded-r-md z-10 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+                    )}
+
+                    <div className="relative z-10 flex items-center gap-3 w-full min-w-0">
+                      <IconIcon
+                        className={`w-4 h-4 shrink-0 transition-all duration-300 ${isActive ? "text-green-400 scale-110 opacity-100" : "opacity-50 group-hover:opacity-80 drop-shadow-[0_0_5px_rgba(0,255,0,0.5)]"}`}
+                      />
+                      <span className="min-w-0">
+                        <span
+                          className={`block font-mono uppercase tracking-wider text-[11px] font-bold transition-all duration-300 ${isActive ? "tracking-widest" : "tracking-wide"}`}
+                        >
+                          {label}
+                        </span>
+                        <span className="block text-[9px] font-mono normal-case tracking-normal text-green-500/40 truncate">
+                          {note}
+                        </span>
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
       </div>
 
@@ -236,12 +277,13 @@ export default function App() {
                 </span>
               </h1>
               <p className="text-[11px] text-green-500/50 font-mono tracking-widest uppercase mt-1.5">
-                Input audio to verified local run to checked stems. Proof remains blocked until a verified model passes local AI E2E.
+                Input audio to verified local run to checked stems. One CPU proof lane passed; Beta awaits final review.
               </p>
             </div>
           </div>
         </header>
 
+        <AppErrorBoundary boundaryKey={activeTab} onReturnHome={() => setActiveTab("classic_console")}>
         {/* TAB 0: ABOUT THE PROJECT */}
         {activeTab === "about_project" && (
           <div className="space-y-6 animate-fade-in pb-16">
@@ -497,6 +539,38 @@ export default function App() {
           </div>
         )}
 
+        {/* TAB: MASTERING LAB */}
+        {activeTab === "mastering_lab" && (
+          <div className="space-y-6">
+            <SubmenuManual sectionId="mastering_lab" />
+            <MasteringLab />
+          </div>
+        )}
+
+        {/* TAB: LOCAL TRANSCRIPTION */}
+        {activeTab === "local_transcription" && (
+          <div className="space-y-6">
+            <SubmenuManual sectionId="local_transcription" />
+            <LocalTranscriptionWorkspace />
+          </div>
+        )}
+
+        {/* TAB: TRANSCRIPT WORKFLOW */}
+        {activeTab === "transcript_workflow" && (
+          <div className="space-y-6">
+            <SubmenuManual sectionId="transcript_workflow" />
+            <TranscriptWorkflowBuilder />
+          </div>
+        )}
+
+        {/* TAB: CLINICAL WORKFLOW */}
+        {activeTab === "clinical_workflow" && (
+          <div className="space-y-6">
+            <SubmenuManual sectionId="clinical_workflow" />
+            <ClinicalWorkflowBuilder />
+          </div>
+        )}
+
         {/* TAB 6: GLOBAL SETTINGS */}
         {activeTab === "global_settings" && (
           <div className="space-y-6">
@@ -557,6 +631,7 @@ export default function App() {
             />
           </div>
         )}
+        </AppErrorBoundary>
       </div>
     </div>
   );

@@ -14,7 +14,7 @@ Use this skill whenever model source truth, local model verification, or proof e
 - Hash mismatch blocks proof.
 - Manual import without an expected SHA-256 is not verified.
 - Ensemble presets are not proof-eligible model weight files.
-- `proof:check` must remain blocked until at least one verified model weight file exists.
+- `proof:check` must remain blocked until at least one verified model weight file exists and a durable E2E proof report can be re-verified.
 
 ## Proof Eligibility
 
@@ -32,8 +32,8 @@ A model is proof-eligible only when all of these are true:
 - Registry entries: 28 total.
 - Direct source statuses: 24 `broken_link`, 1 `unavailable`, 1 `experimental`.
 - Verified ensemble presets: 2.
-- Verified weight files: 0.
+- Verified registry weight files: 0.
 - Configured download URLs unavailable: 24 total, with 22 HTTP 401 and 2 HTTP 404.
-- CPU AI proof was not run because no proof-eligible verified model asset exists.
+- A local CPU proof lane has completed through an ignored local manifest and external model cache file; this does not make the source-controlled registry verified or approve Beta Candidate.
 
-Interpret HTTP 401 as inaccessible or authorization required. Interpret HTTP 404 as source not found. Preserve this honesty until a real verified model asset exists.
+Interpret HTTP 401 as inaccessible or authorization required. Interpret HTTP 404 as source not found. Preserve this honesty for catalog entries even when a separate local proof asset exists.

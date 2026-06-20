@@ -67,18 +67,42 @@ function checkForbiddenResourceFiles(resourcesPath: string): void {
     "proof_output",
     "proof_outputs",
     "OpenStemProofOutput",
+    "mastered_outputs",
+    "mastered-output",
+    "mastering_outputs",
+    "mastering-outputs",
+    "recordings",
+    "local_recordings",
+    "openstem-recordings",
+    "transcripts",
+    "local_transcripts",
+    "transcription_outputs",
+    "transcription-outputs",
+    "transcript_exports",
+    "transcript-exports",
+    "prompt_outputs",
+    "prompt-outputs",
+    "document_exports",
+    "document-exports",
+    "archive_exports",
+    "archive-exports",
   ]);
   const offenders = walkFiles(resourcesPath).filter((filePath) => {
     const parsed = path.parse(filePath);
     const parts = filePath.split(/[\\/]+/);
     if (forbiddenExtensions.has(parsed.ext.toLowerCase())) return true;
+    if (/_mastered_/i.test(parsed.base) && [".wav", ".flac", ".mp3"].includes(parsed.ext.toLowerCase())) return true;
+    if (/\.(vtt\.imported|transcript)\.json$/i.test(parsed.base)) return true;
+    if (/\.prompt-output\.txt$/i.test(parsed.base)) return true;
     return parts.some((part) => forbiddenSegments.has(part));
   });
 
   if (offenders.length > 0) {
     fail(`forbidden runtime/model artifacts were packaged:\n${offenders.map((item) => `  - ${item}`).join("\n")}`);
   }
-  ok("no forbidden Python envs, model weights, model caches, or proof outputs found in resources");
+  ok(
+    "no forbidden Python envs, model weights, model caches, proof outputs, mastered audio outputs, recordings, transcripts, prompt outputs, or document exports found in resources",
+  );
 }
 
 function checkBuilderConfig(packageJson: any): void {

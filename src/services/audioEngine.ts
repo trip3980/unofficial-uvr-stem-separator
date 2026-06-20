@@ -30,6 +30,7 @@ import {
   ProcessingRequest,
   OutputFormat,
 } from "../types";
+import { customModelEntryToRegistryEntry } from "./modelLibrary";
 
 // --- 1. PROCESS METHODS REGISTRY (Rule 3 & 7) ---
 export const PROCESS_METHODS: ProcessMethod[] = [
@@ -101,7 +102,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "148 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/VR_Models/5_HP-Karaoke-UVR.pth",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "39bd54cf94812aefcc8386121a977bf310b1a3d9e847c23f99a3bc997d988b43ec"
   },
   {
@@ -118,7 +119,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "290 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/VR_Models/8_HP2-UVR.pth",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "5a8c2f1ea38bce73ac9a3bc997d988c3ecf8e91043e8a55e2bd3104e1ac30324c9"
   },
   {
@@ -134,7 +135,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "145 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/VR_Models/1_HP-UVR.pth",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "0a8b3e5ea7a3cbdeea8c997d988b43ecf8e910243e8a75e2bd3104e1ac23bf3da9"
   },
   {
@@ -150,7 +151,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "145 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/VR_Models/2_HP-UVR.pth",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "2c9d4e8fa7b2aefdd8bc997d988b43ecf8e910243e8a75e2bd3104e1ac309192aa"
   },
   {
@@ -166,7 +167,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "155 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/VR_Models/UVR-De-Echo-Normal.pth",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "de1cc10f8ae43abcdc8c997d988b43ecf8e910243e8a75e2bd3104e1ac3092ea67"
   },
   {
@@ -182,7 +183,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "150 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/VR_Models/UVR-DeNoise.pth",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "9c9d4edfdfbfb899aec2997d988b43ecf8e910243e8a75e2bd3104e1ac309fe871"
   },
   // MDX-Net Models
@@ -200,7 +201,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "310 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/MDX_Net_Models/Kim_Vocal_2.onnx",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "ae301a2eb34d193d9ceb997d988b43ecf8e910243e8a75e2bd3104e1ac3e99341"
   },
   {
@@ -217,7 +218,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "280 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/MDX_Net_Models/UVR_MDX_NET_KARA.onnx",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "ee301a2eb34d193d9ceb997d988b43ecf8e910243e8a75e2bd3104e1ac3e99342"
   },
   {
@@ -233,7 +234,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "284 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/MDX_Net_Models/UVR_MDXNET_Main.onnx",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "fe301a2eb34d193d9ceb997d988b43ecf8e910243e8a75e2bd3104e1ac3e99343"
   },
   {
@@ -249,7 +250,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "320 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/MDX_Net_Models/UVR-MDX-NET-Inst_HQ_1.onnx",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "aa301a2eb34d193d9ceb997d988b43ecf8e910243e8a75e2bd3104e1ac3e99344"
   },
   {
@@ -265,7 +266,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "290 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/MDX_Net_Models/Reverb_HQ_By_FoxJoy.onnx",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "ba301a2eb34d193d9ceb997d988b43ecf8e910243e8a75e2bd3104e1ac3e99345"
   },
   {
@@ -281,7 +282,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "330 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/MDX_Net_Models/Kuielab_a_vocals.onnx",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "ca301a2eb34d193d9ceb997d988b43ecf8e910243e8a75e2bd3104e1ac3e99346"
   },
   // Demucs Models
@@ -299,7 +300,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "680 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/Demucs_Models/htdemucs_v4.pt",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "da301a2eb34d193d9ceb997d988b43ecf8e910243e8a75e2bd3104e1ac3e99347"
   },
   {
@@ -316,7 +317,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "820 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/Demucs_Models/mdx_extra_q.pt",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "ea301a2eb34d193d9ceb997d988b43ecf8e910243e8a75e2bd3104e1ac3e99348"
   },
   {
@@ -332,7 +333,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "750 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/Demucs_Models/htdemucs_6s.pt",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "fa301a2eb34d193d9ceb997d988b43ecf8e910243e8a75e2bd3104e1ac3e99349"
   },
   {
@@ -348,7 +349,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "860 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/Demucs_Models/hdemucs_mmi.pt",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "01301a2eb34d193d9ceb997d988b43ecf8e910243e8a75e2bd3104e1ac3e9934a"
   },
   // RoFormer Models
@@ -366,7 +367,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "450 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/RoFormer_Models/mel_band_roformer_karaoke_sg.onnx",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "02301a2eb34d193d9ceb997d988b43ecf8e910243e8a75e2bd3104e1ac3e9934b"
   },
   {
@@ -383,7 +384,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "512 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/RoFormer_Models/bs_roformer_vocal_by_vocal_remover.onnx",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "03301a2eb34d193d9ceb997d988b43ecf8e910243e8a75e2bd3104e1ac3e9934c"
   },
   {
@@ -399,7 +400,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "490 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/RoFormer_Models/bs_roformer_ep_317_sdr_12.9755.ckpt",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "04301a2eb34d193d9ceb997d988b43ecf8e910243e8a75e2bd3104e1ac3e9934d"
   },
   {
@@ -415,7 +416,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "505 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/RoFormer_Models/viperx_roformer.ckpt",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "05301a2eb34d193d9ceb997d988b43ecf8e910243e8a75e2bd3104e1ac3e9934e"
   },
   {
@@ -431,7 +432,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     fileSize: "460 MB",
     downloadUrl: "https://huggingface.co/MusicSeparation/Ultimate_Vocal_Remover/resolve/main/RoFormer_Models/mel_band_roformer_ep_3005_sdr_11.4360.ckpt",
     license: "MIT",
-    verifiedStatus: "broken_link",
+    verifiedStatus: "auth_required",
     checksum: "06301a2eb34d193d9ceb997d988b43ecf8e910243e8a75e2bd3104e1ac3e9934f"
   },
   {
@@ -526,7 +527,7 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
     requiredBackend: "python-pytorch",
     supportedExtensions: [".pt"],
     license: "MIT",
-    verifiedStatus: "broken_link"
+    verifiedStatus: "auth_required"
   },
   // Ensemble Presets
   {
@@ -562,7 +563,12 @@ export const MODEL_REGISTRY: ModelRegistryEntry[] = [
 ];
 
 export function addModelToRegistry(model: ModelRegistryEntry) {
-  MODEL_REGISTRY.push(model);
+  const existingIndex = MODEL_REGISTRY.findIndex((entry) => entry.id === model.id);
+  if (existingIndex >= 0) {
+    MODEL_REGISTRY[existingIndex] = { ...MODEL_REGISTRY[existingIndex], ...model };
+  } else {
+    MODEL_REGISTRY.push(model);
+  }
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("modelRegistryChanged"));
   }
@@ -577,6 +583,19 @@ export async function initializeModelRegistry() {
         localFilesList = await uvr.listLocalModelsCustom();
       } catch (err) {
         console.error("listLocalModelsCustom error:", err);
+      }
+    }
+
+    if (typeof uvr.listCustomModelLibrary === "function") {
+      try {
+        const customLibrary = await uvr.listCustomModelLibrary();
+        if (customLibrary?.success && Array.isArray(customLibrary.entries)) {
+          for (const customEntry of customLibrary.entries) {
+            addModelToRegistry(customModelEntryToRegistryEntry(customEntry));
+          }
+        }
+      } catch (err) {
+        console.error("listCustomModelLibrary error:", err);
       }
     }
 
@@ -624,7 +643,8 @@ export async function initializeModelRegistry() {
           description: `Discovered local weight file: ${localFile.name}. Sideloaded custom weight. Hash not verified unless a checksum is provided.`,
           fileSize: localFile.fileSize,
           sourceType: "manual_import",
-          verifiedStatus: "needs_verification"
+          verifiedStatus: "custom_hash_unavailable",
+          catalogLane: "custom"
         };
         MODEL_REGISTRY.push(customModel);
       }
@@ -1181,7 +1201,7 @@ export function validateState(state: {
   } else {
     // Check Source Integrity Check (Rule 6)
     const selectedModel = MODEL_REGISTRY.find(m => m.id === state.selectedModelId);
-    if (selectedModel && selectedModel.verifiedStatus !== "verified") {
+    if (selectedModel && selectedModel.verifiedStatus !== "verified" && selectedModel.verifiedStatus !== "verified_local") {
       errors.push({
         field: "selectedModelId",
         message: `Refused to load or run model ${selectedModel.id}: source integrity cannot be verified (Status: ${selectedModel.verifiedStatus}). Direct processing is disabled for safety.`,

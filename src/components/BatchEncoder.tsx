@@ -20,7 +20,7 @@ import {
   Cpu,
   Bookmark,
   Activity,
-  Maximize2
+  Maximize2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { HelpToggle, HelpText } from "./HelpSystem";
@@ -37,29 +37,10 @@ interface QueuedFile {
 
 export default function BatchEncoder() {
   // Input queue state
-  const [inputFiles, setInputFiles] = useState<QueuedFile[]>([
-    {
-      name: "Vocals_Split_Original.wav",
-      size: "34.5 MB",
-      format: "WAV",
-      duration: "03:15",
-      sampleRate: "44100 Hz",
-      channels: "Stereo",
-      status: "Queued",
-    },
-    {
-      name: "Drums_Stem_High_Gain.wav",
-      size: "42.1 MB",
-      format: "WAV",
-      duration: "03:15",
-      sampleRate: "44100 Hz",
-      channels: "Stereo",
-      status: "Queued",
-    },
-  ]);
+  const [inputFiles, setInputFiles] = useState<QueuedFile[]>([]);
 
   // Output configurations
-  const [outputDir, setOutputDir] = useState<string>("C:\\Users\\Consumer\\Encoded_Audio\\");
+  const [outputDir, setOutputDir] = useState<string>("");
   const [outputFormat, setOutputFormat] = useState<string>("MP3");
   const [bitrate, setBitrate] = useState<string>("320k");
   const [sampleRateSetting, setSampleRateSetting] = useState<string>("Preserve");
@@ -79,6 +60,9 @@ export default function BatchEncoder() {
   const [isFfmpegAvailable, setIsFfmpegAvailable] = useState<boolean>(false);
   const [ffmpegStatus, setFfmpegStatus] = useState<string>("Checking system binary state...");
   const [ffmpegPath, setFfmpegPath] = useState<string>("Resolving host configuration...");
+  const [customFFmpegPath, setCustomFFmpegPath] = useState<string>(() =>
+    typeof window !== "undefined" ? localStorage.getItem("customFFmpegPath") || "" : "",
+  );
   const [ffmpegStateLoaded, setFfmpegStateLoaded] = useState<boolean>(false);
 
   // CPU Thread options
@@ -96,16 +80,14 @@ export default function BatchEncoder() {
   const [completedCount, setCompletedCount] = useState(0);
   const [failedCount, setFailedCount] = useState(0);
   const [currentFileIdx, setCurrentFileIdx] = useState(0);
-  
+
   // Real-time metadata tracking parameters
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [etaTime, setEtaTime] = useState<number>(0);
   const [speedMultiplier, setSpeedMultiplier] = useState<string>("0.0x");
   const [fileProgresses, setFileProgresses] = useState<Record<number, number>>({ 0: 0, 1: 0 });
 
-  const [encodeLog, setEncodeLog] = useState<string[]>([
-    "[system] Batch encoder log stream initialized.",
-  ]);
+  const [encodeLog, setEncodeLog] = useState<string[]>(["[system] Batch encoder log stream initialized."]);
 
   // Toast notifications
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -117,17 +99,18 @@ export default function BatchEncoder() {
   useEffect(() => {
     const uvr = (window as any).uvr;
     if (uvr?.checkFFmpegReady) {
-      uvr.checkFFmpegReady()
+      uvr
+        .checkFFmpegReady(customFFmpegPath || undefined)
         .then((data: any) => {
           setFfmpegStateLoaded(true);
           if (data.ready) {
             setIsFfmpegAvailable(true);
-            setFfmpegStatus("ACTIVE / SYSTEM PATH");
-            setFfmpegPath("Verified by Electron native bridge");
+            setFfmpegStatus(data.source === "selected_path" ? "ACTIVE / SELECTED EXECUTABLE" : "ACTIVE / SYSTEM PATH");
+            setFfmpegPath(data.command || data.path || data.version || "Verified by Electron native bridge");
           } else {
             setIsFfmpegAvailable(false);
             setFfmpegStatus("FFMPEG MISSING");
-            setFfmpegPath("Not detected on host PATH by Electron native bridge.");
+            setFfmpegPath(data.userMessage || data.error || "Not detected by Electron native bridge.");
           }
         })
         .catch((err: any) => {
@@ -149,22 +132,53 @@ export default function BatchEncoder() {
         setFfmpegStateLoaded(true);
         if (data.available) {
           setIsFfmpegAvailable(true);
-          setFfmpegStatus("ACTIVE / BUNDLED");
-          setFfmpegPath(data.version || "System default FFmpeg suite");
+          setFfmpegStatus("BROWSER PREVIEW / NOT VERIFIED");
+          setFfmpegPath(data.version || "Browser route reported FFmpeg, but native conversion is not proven.");
         } else {
           setIsFfmpegAvailable(false);
-          setFfmpegStatus("SIMULATED STUB DRIVER (offline sandbox preview)");
-          setFfmpegPath("Safe sandbox mode default. Local executable is bypassed.");
+          setFfmpegStatus("DRY RUN ONLY / NO NATIVE FFMPEG");
+          setFfmpegPath("Browser preview cannot verify or run local FFmpeg conversion.");
         }
       })
       .catch((err) => {
         console.warn("FFmpeg check failed, loading sandbox wrapper:", err);
         setFfmpegStateLoaded(true);
         setIsFfmpegAvailable(false);
-        setFfmpegStatus("SIMULATED STUB DRIVER (offline sandbox preview)");
-        setFfmpegPath("Safe sandbox mode default. Local execution is unwired.");
+        setFfmpegStatus("DRY RUN ONLY / NO NATIVE FFMPEG");
+        setFfmpegPath("Browser preview cannot verify or run local FFmpeg conversion.");
       });
-  }, []);
+  }, [customFFmpegPath]);
+
+  const handleSelectFFmpegPath = async () => {
+    const uvr = (window as any).uvr;
+    if (!uvr?.selectFFmpegPath) {
+      setEncodeLog((prev) => [
+        ...prev,
+        "[ffmpeg] Browser Preview / Not runnable: native FFmpeg file selection requires Electron. Code: BATCH_ENCODER_DRY_RUN_ONLY",
+      ]);
+      triggerToast("Native FFmpeg selection requires the Electron desktop app.");
+      return;
+    }
+
+    try {
+      const result = await uvr.selectFFmpegPath();
+      if (result?.filePath) {
+        localStorage.setItem("customFFmpegPath", result.filePath);
+        setCustomFFmpegPath(result.filePath);
+        setIsFfmpegAvailable(!!result.ready);
+        setFfmpegStatus(result.ready ? "ACTIVE / SELECTED EXECUTABLE" : "SELECTED FFMPEG INVALID");
+        setFfmpegPath(result.command || result.filePath);
+        setEncodeLog((prev) => [
+          ...prev,
+          result.ready
+            ? `[ffmpeg] Selected executable verified: ${result.command || result.filePath}. This resolves only the FFmpeg runtime blocker.`
+            : `[ffmpeg] Selected executable rejected: ${result.userMessage || result.error}. Code: ${result.diagnosticCode || "RUNTIME_FFMPEG_INVALID_PATH"}`,
+        ]);
+      }
+    } catch (err: any) {
+      setEncodeLog((prev) => [...prev, `[ffmpeg] Selector failed: ${err.message}`]);
+    }
+  };
 
   // Clean play process on unmount
   useEffect(() => {
@@ -205,10 +219,7 @@ export default function BatchEncoder() {
       };
     });
     setInputFiles((prev) => [...prev, ...newFiles]);
-    setEncodeLog((prev) => [
-      ...prev,
-      `[queue] Inserted ${newFiles.length} new elements to the transcode cluster.`,
-    ]);
+    setEncodeLog((prev) => [...prev, `[queue] Inserted ${newFiles.length} new elements to the transcode cluster.`]);
     triggerToast(`Added ${newFiles.length} audio file(s) to transcode queue.`);
   };
 
@@ -216,11 +227,11 @@ export default function BatchEncoder() {
   const getCompressionInfo = (originalSizeStr: string, format: string, bitrateStr: string) => {
     const numericSize = parseFloat(originalSizeStr.replace(/[^\d.]/g, "")) || 10.0;
     const unit = originalSizeStr.replace(/[\d.\s]/g, "") || "MB";
-    
+
     let shrinkPercentage = 0;
     if (format === "WAV") {
       if (wavBitDepth === "16") shrinkPercentage = 0;
-      else if (wavBitDepth === "24") shrinkPercentage = 50; 
+      else if (wavBitDepth === "24") shrinkPercentage = 50;
       else if (wavBitDepth === "32") shrinkPercentage = 100;
     } else if (format === "FLAC") {
       shrinkPercentage = -45;
@@ -235,128 +246,34 @@ export default function BatchEncoder() {
       shrinkPercentage = -87;
     }
 
-    const outputSizeNum = shrinkPercentage >= 0 
-      ? numericSize * (1 + shrinkPercentage / 100) 
-      : numericSize * (1 + shrinkPercentage / 100);
+    const outputSizeNum =
+      shrinkPercentage >= 0 ? numericSize * (1 + shrinkPercentage / 100) : numericSize * (1 + shrinkPercentage / 100);
 
     return {
       outputSize: `${outputSizeNum.toFixed(1)} ${unit}`,
-      shrinkPercentage: shrinkPercentage
+      shrinkPercentage: shrinkPercentage,
     };
   };
 
   const startBatchEncode = () => {
-    if (inputFiles.length === 0) return;
-    setIsEncoding(true);
-    setEncodeProgress(0);
-    setCompletedCount(0);
-    setFailedCount(0);
-    setCurrentFileIdx(0);
-    setElapsedTime(0);
-    setEtaTime(inputFiles.length * 4); // Estimating 4s per file
-    setSpeedMultiplier("0.0x");
-
-    setEncodeLog([
-      `[batch_encoder] Spawning batch conversion process pipeline...`,
-      `[batch_encoder] Thread count limit constraint set: ${threadAllocation} CPU Cores`,
-      `[ffmpeg] Target Export profile container: ${outputFormat}`,
-      `[ffmpeg] Preserving ID3 Annotations tag frame: ${preserveId3 ? "ENABLED" : "DISABLED"}`,
-      `[ffmpeg] Auto-open post-conversion folder routing: ${autoOpenFolder ? "ENABLED" : "DISABLED"}`,
-    ]);
-
-    // Reset statuses
-    setInputFiles((prev) =>
-      prev.map((f) => ({ ...f, status: "Queued" }))
-    );
-
-    const initialMap: Record<number, number> = {};
-    inputFiles.forEach((_, ii) => {
-      initialMap[ii] = 0;
-    });
-    setFileProgresses(initialMap);
-
-    let activeIdx = 0;
-    let ticks = 0;
-    const totalDurationSeconds = inputFiles.length * 4;
-
-    if (intervalRef.current !== null) {
-      window.clearInterval(intervalRef.current);
+    const runBlockers = buildBlockers();
+    if (runBlockers.length > 0) {
+      setEncodeLog([
+        "[batch_encoder] Real conversion blocked. No output files were written.",
+        ...runBlockers.map((block) => `[blocker] ${block.diagnosticCode}: ${block.label}`),
+        "[proof] Audio-format conversion is not AI stem-separation proof and cannot approve Beta.",
+      ]);
+      triggerToast("Batch conversion blocked. Resolve diagnostics before running.");
+      return;
     }
 
-    intervalRef.current = window.setInterval(() => {
-      ticks++;
-      const currentSeconds = ticks * 0.4;
-      setElapsedTime(parseFloat(currentSeconds.toFixed(1)));
-      
-      const speedSeed = (75 + Math.random() * 25).toFixed(1);
-      setSpeedMultiplier(`${speedSeed}x`);
-
-      const remainingTime = Math.max(0, parseFloat((totalDurationSeconds - currentSeconds).toFixed(1)));
-      setEtaTime(remainingTime);
-
-      const targetSingleProgress = (ticks * 25) % 100 || 100;
-
-      // Update progress of overall cluster
-      const totalTicksNeeded = inputFiles.length * 4;
-      const percent = Math.min(100, (ticks / totalTicksNeeded) * 100);
-      setEncodeProgress(percent);
-
-      setFileProgresses((prev) => ({
-        ...prev,
-        [activeIdx]: Math.min(100, targetSingleProgress)
-      }));
-
-      setInputFiles((files) => {
-        return files.map((file, idx) => {
-          if (idx < activeIdx) {
-            return { ...file, status: "Complete" };
-          } else if (idx === activeIdx) {
-            return { ...file, status: "Encoding" };
-          } else {
-            return { ...file, status: "Queued" };
-          }
-        });
-      });
-
-      if (ticks % 4 === 0) {
-        const currentFile = inputFiles[activeIdx];
-        const resSettings = getCompressionInfo(currentFile.size, outputFormat, bitrate);
-        
-        setEncodeLog((current) => [
-          ...current,
-          `[ffmpeg-thread-${activeIdx % threadAllocation}] Transcoded: ${currentFile.name} ──> [Est Size: ${resSettings.outputSize}] (Reduction: ${resSettings.shrinkPercentage >= 0 ? "+" : ""}${resSettings.shrinkPercentage}%)`,
-          `[ffmpeg-thread-${activeIdx % threadAllocation}] Exit Code: 0 (Success)`,
-        ]);
-        
-        setCompletedCount(activeIdx + 1);
-        activeIdx++;
-        setCurrentFileIdx(Math.min(inputFiles.length - 1, activeIdx));
-      }
-
-      if (ticks >= totalTicksNeeded) {
-        if (intervalRef.current !== null) {
-          window.clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-        setIsEncoding(false);
-        setCompletedCount(inputFiles.length);
-        setEtaTime(0);
-        setSpeedMultiplier("0.0x");
-        
-        setInputFiles((files) =>
-          files.map((file) => ({ ...file, status: "Complete" }))
-        );
-
-        setEncodeLog((current) => [
-          ...current,
-          `[batch_encoder] Conversion run successful! Outputs placed in "${outputDir}"`,
-          writeLogFiles ? `[logs] Audit log successfully written to "${outputDir}pipeline_run.log"` : "",
-          `[batch_encoder] Done. Total conversion time: ${currentSeconds.toFixed(1)}s`,
-        ].filter(Boolean));
-
-        triggerToast(`Finished batch transcoding of ${inputFiles.length} file(s)!`);
-      }
-    }, 400);
+    setEncodeLog([
+      "[batch_encoder] Native conversion API is not implemented in this build. No output files were written.",
+      "[batch_encoder] No subprocess executed; output not verified. Code: BATCH_ENCODER_DRY_RUN_ONLY",
+      "[blocker] BATCH_ENCODER_DRY_RUN_ONLY: Real conversion requires native FFmpeg subprocess wiring and output-file verification.",
+    ]);
+    triggerToast("Batch conversion remains blocked until native conversion output verification is implemented.");
+    return;
   };
 
   const cancelBatchEncode = () => {
@@ -366,9 +283,7 @@ export default function BatchEncoder() {
     }
     setIsEncoding(false);
     setSpeedMultiplier("0.0x");
-    setInputFiles((prev) =>
-      prev.map((f) => (f.status === "Encoding" ? { ...f, status: "Failed" } : f))
-    );
+    setInputFiles((prev) => prev.map((f) => (f.status === "Encoding" ? { ...f, status: "Failed" } : f)));
     setEncodeLog((prev) => [
       ...prev,
       `[batch_encoder] Batch execution canceled by user. Transcoding pipeline terminated.`,
@@ -392,7 +307,8 @@ export default function BatchEncoder() {
     let formatArgs = "";
     if (outputFormat === "MP3") formatArgs = `-codec:a libmp3lame -b:a ${bitrate}`;
     else if (outputFormat === "FLAC") formatArgs = `-codec:a flac -compression_level ${flacCompression}`;
-    else if (outputFormat === "WAV") formatArgs = `-codec:a pcm_s${wavBitDepth === "16" ? "16le" : wavBitDepth === "24" ? "24le" : "32le"}`;
+    else if (outputFormat === "WAV")
+      formatArgs = `-codec:a pcm_s${wavBitDepth === "16" ? "16le" : wavBitDepth === "24" ? "24le" : "32le"}`;
     else if (outputFormat === "OGG") formatArgs = `-codec:a libvorbis -qscale:a 6`;
     else if (outputFormat === "OPUS") formatArgs = `-codec:a libopus -b:a 160k`;
     else if (outputFormat === "AAC") formatArgs = `-codec:a aac -b:a 256k`;
@@ -405,15 +321,42 @@ export default function BatchEncoder() {
     return `ffmpeg ${overwriteArg} ${threadsArg} ${inputArgs} ${resampleArgs} ${chanArgs} ${formatArgs} "${outputDir}${keepOriginalFilename ? "filename" : "encoded_output"}.${outputFormat.toLowerCase()}"`;
   };
 
-  const blockers = [];
-  if (inputFiles.length === 0) blockers.push("No files currently selected in transcode queue.");
-  if (!outputDir) blockers.push("Output directory folder target path is missing.");
+  const blockers: { label: string; diagnosticCode: string }[] = [];
+  const buildBlockers = () => {
+    const nextBlockers: { label: string; diagnosticCode: string }[] = [];
+    const hasNativeConversionApi = typeof window !== "undefined" && !!(window as any).uvr?.convertAudioFile;
+    if (inputFiles.length === 0) {
+      nextBlockers.push({
+        label: "No files currently selected in transcode queue.",
+        diagnosticCode: "BATCH_QUEUE_EMPTY",
+      });
+    }
+    if (!outputDir) {
+      nextBlockers.push({
+        label: "Output directory folder target path is missing.",
+        diagnosticCode: "BATCH_OUTPUT_FOLDER_MISSING",
+      });
+    }
+    if (!isFfmpegAvailable) {
+      nextBlockers.push({
+        label: "FFmpeg is not verified for real local conversion.",
+        diagnosticCode: "BATCH_ENCODER_FFMPEG_MISSING",
+      });
+    }
+    if (!hasNativeConversionApi) {
+      nextBlockers.push({
+        label: "Native FFmpeg conversion execution is not wired in this build; preview only.",
+        diagnosticCode: "BATCH_ENCODER_DRY_RUN_ONLY",
+      });
+    }
+    return nextBlockers;
+  };
+  blockers.push(...buildBlockers());
 
   const isBlocked = blockers.length > 0;
 
   return (
     <div className="space-y-6 text-slate-200 font-sans">
-      
       {/* HEADER BAR AND MANUAL HELP TOGGLE */}
       <div className="p-5 rounded-2xl bg-[#090b14]/95 border border-white/5 shadow-2xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5 pb-4">
@@ -424,13 +367,14 @@ export default function BatchEncoder() {
                 <span className="text-[10px] uppercase font-mono font-bold text-slate-300 bg-slate-900 border border-white/10 px-2.5 py-0.5 rounded">
                   Codec Transcoder Utility
                 </span>
+                <span className="text-[10px] font-mono font-semibold text-cyan-300 bg-cyan-500/10 px-2.5 py-0.5 rounded border border-cyan-500/20">
+                  Non-AI FFmpeg conversion
+                </span>
                 <span className="text-[10px] font-mono font-semibold text-rose-400 bg-rose-500/10 px-2.5 py-0.5 rounded border border-rose-500/20">
                   Batch encoding is not AI stem separation.
                 </span>
               </div>
-              <h2 className="text-xl font-bold text-white font-display">
-                Batch Encoder
-              </h2>
+              <h2 className="text-xl font-bold text-white font-display">Batch Encoder</h2>
             </div>
           </div>
           <HelpToggle sectionId="batch_encoder" label="Show Manual Guide" />
@@ -448,13 +392,15 @@ export default function BatchEncoder() {
                   Batch encoding is not AI stem separation.
                 </span>
               </div>
-              
+
               <div className="space-y-2">
                 <h4 className="text-sm font-bold text-slate-100 flex items-center gap-1.5 font-display border-b border-white/5 pb-1 select-text">
                   Batch Encoder: Codec DSP Architecture & Conversion Limits
                 </h4>
                 <p className="text-slate-300 leading-relaxed text-[11px] select-text">
-                  Welcome to the <strong>High-speed CPU Batch Transcoding console</strong>. This utility acts as a high-efficiency offline digital signal processor (DSP). It converts, resamples, and compresses audio deliverables (e.g. final isolated wave stems) into standard distributed formats.
+                  Welcome to the <strong>High-speed CPU Batch Transcoding console</strong>. This utility acts as a
+                  high-efficiency offline digital signal processor (DSP). It converts, resamples, and compresses audio
+                  deliverables (e.g. final isolated wave stems) into standard distributed formats.
                 </p>
               </div>
 
@@ -467,10 +413,12 @@ export default function BatchEncoder() {
                     <strong className="text-slate-200">WAV format:</strong> Completely uncompressed (pure PCM stream).
                   </li>
                   <li>
-                    <strong className="text-slate-200">FLAC format:</strong> Utilizes advanced prediction logic to shrink files losslessly (~50% size preservation).
+                    <strong className="text-slate-200">FLAC format:</strong> Utilizes advanced prediction logic to
+                    shrink files losslessly (~50% size preservation).
                   </li>
                   <li>
-                    <strong className="text-slate-200">MP3 (LAME) & OGG (libvorbis):</strong> Discard unnoted high-frequency frequencies to yield around ~80-90% storage space savings.
+                    <strong className="text-slate-200">MP3 (LAME) & OGG (libvorbis):</strong> Discard unnoted
+                    high-frequency frequencies to yield around ~80-90% storage space savings.
                   </li>
                 </ul>
               </div>
@@ -479,14 +427,15 @@ export default function BatchEncoder() {
                 <div className="text-[10px] uppercase font-bold tracking-wider text-green-400 border-b border-white/5 pb-1 flex items-center gap-2">
                   <span>🖥️ Windows Standard Specs & Manifest</span>
                 </div>
-                
+
                 <div className="space-y-3 text-[11px] pl-1">
                   <div className="space-y-1">
                     <span className="font-bold text-slate-200 flex items-center gap-1.5">
                       <span>📦 Standalone Package NSIS Target</span>
                     </span>
                     <p className="text-slate-400 leading-relaxed select-text">
-                      Compiled and modular for native installation via NSIS Installers (under 60MB base engine). External weights file targets are stored securely outside the bundle.
+                      Compiled and modular for native installation via NSIS Installers (under 60MB base engine).
+                      External weights file targets are stored securely outside the bundle.
                     </p>
                   </div>
 
@@ -495,7 +444,8 @@ export default function BatchEncoder() {
                       <span>🔌 Sideloadable ONNX Adapters</span>
                     </span>
                     <p className="text-slate-400 leading-relaxed select-text">
-                      Register path models immediately by depositing weights files to your standalone directory without needing manual layout re-compilation or interface updates.
+                      Register path models immediately by depositing weights files to your standalone directory without
+                      needing manual layout re-compilation or interface updates.
                     </p>
                   </div>
 
@@ -504,7 +454,8 @@ export default function BatchEncoder() {
                       <span>🛡️ Thread-Isolated Environment</span>
                     </span>
                     <p className="text-slate-400 leading-relaxed select-text">
-                      Auto-discovers static binary dependencies and environment runtimes, preventing environment variable pollution and keeping your operating system setup clean.
+                      Auto-discovers static binary dependencies and environment runtimes, preventing environment
+                      variable pollution and keeping your operating system setup clean.
                     </p>
                   </div>
                 </div>
@@ -522,7 +473,9 @@ export default function BatchEncoder() {
             Section 1: FFmpeg Host Binary & Thread allocation
           </span>
           {ffmpegStateLoaded && (
-            <span className={`text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded-full ${isFfmpegAvailable ? "bg-green-500/20 text-green-300" : "bg-amber-500/20 text-green-300"}`}>
+            <span
+              className={`text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded-full ${isFfmpegAvailable ? "bg-green-500/20 text-green-300" : "bg-amber-500/20 text-green-300"}`}
+            >
               {isFfmpegAvailable ? "Active Path Detect" : "Simulated Path Active"}
             </span>
           )}
@@ -533,23 +486,58 @@ export default function BatchEncoder() {
           <div className="lg:col-span-7 space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-3.5 rounded-lg bg-black/45 border border-white/5 space-y-1">
-                <span className="text-slate-500 block text-[9px] uppercase font-extrabold pb-0.5">FFmpeg Binary Status</span>
+                <span className="text-slate-500 block text-[9px] uppercase font-extrabold pb-0.5">
+                  FFmpeg Binary Status
+                </span>
                 <span className="font-bold text-green-400 flex items-center gap-1.5">
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isFfmpegAvailable ? "bg-green-400 animate-pulse" : "bg-amber-400"}`}></span>
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${isFfmpegAvailable ? "bg-green-400 animate-pulse" : "bg-amber-400"}`}
+                  ></span>
                   {ffmpegStatus}
                 </span>
               </div>
 
               <div className="p-3.5 rounded-lg bg-black/45 border border-white/5 space-y-1">
-                <span className="text-slate-500 block text-[9px] uppercase font-extrabold pb-0.5">Detected Version / Source</span>
+                <span className="text-slate-500 block text-[9px] uppercase font-extrabold pb-0.5">
+                  Detected Version / Source
+                </span>
                 <span className="font-bold text-slate-300 truncate block text-[11px]" title={ffmpegPath}>
                   {ffmpegPath}
                 </span>
               </div>
             </div>
 
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleSelectFFmpegPath}
+                disabled={isEncoding}
+                className="px-3 py-1.5 rounded bg-slate-900 border border-white/10 text-slate-300 hover:text-white hover:border-emerald-500/30 transition text-[10px] font-bold"
+              >
+                Select FFmpeg Executable
+              </button>
+              {customFFmpegPath && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.removeItem("customFFmpegPath");
+                    setCustomFFmpegPath("");
+                    setEncodeLog((prev) => [
+                      ...prev,
+                      "[ffmpeg] Cleared selected FFmpeg path; next check will use PATH discovery.",
+                    ]);
+                  }}
+                  disabled={isEncoding}
+                  className="px-3 py-1.5 rounded bg-rose-950/20 border border-rose-800/30 text-rose-300 hover:bg-rose-900/30 transition text-[10px] font-bold"
+                >
+                  Clear Selected Path
+                </button>
+              )}
+            </div>
+
             <p className="text-[10px] text-slate-400 leading-normal">
-              ℹ️ Integrations route automatically post-encode. If running UVR inside our Electron Shell local workstation setup, the system bindings map directly to system-bundled executables.
+              FFmpeg may be user-installed on PATH or selected as a local executable. OpenStem does not bundle FFmpeg in
+              this build. Codec support is FFmpeg-build-dependent, and conversion readiness is not AI proof.
             </p>
           </div>
 
@@ -557,9 +545,11 @@ export default function BatchEncoder() {
           <div className="lg:col-span-5 p-3.5 rounded-lg bg-black/45 border border-white/5 space-y-2.5 flex flex-col justify-center">
             <div className="flex justify-between items-center">
               <span className="text-slate-500 text-[10px] uppercase font-extrabold">CPU Transcode Thread Limits</span>
-              <span className="text-green-300 text-xs font-bold font-mono">[{threadAllocation} Core Thread Allocations]</span>
+              <span className="text-green-300 text-xs font-bold font-mono">
+                [{threadAllocation} Core Thread Allocations]
+              </span>
             </div>
-            
+
             <input
               type="range"
               min="1"
@@ -569,7 +559,7 @@ export default function BatchEncoder() {
               disabled={isEncoding}
               className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-green-400 focus:outline-none"
             />
-            
+
             <div className="flex justify-between text-[9px] text-slate-500 font-mono">
               <span>Min Core (1)</span>
               <span>Heavy Load Workstation Limit (8)</span>
@@ -639,9 +629,12 @@ export default function BatchEncoder() {
             if (!isEncoding) fileInputRef.current?.click();
           }}
         >
-          <Upload className={`w-8 h-8 ${isDragging ? "text-green-400 scale-110" : "text-slate-600"} transition-all duration-300`} />
+          <Upload
+            className={`w-8 h-8 ${isDragging ? "text-green-400 scale-110" : "text-slate-600"} transition-all duration-300`}
+          />
           <div className="text-center font-mono text-xs">
-            <span className="font-semibold text-slate-300">Drag & drop files here</span>, or click to open binary file explorer
+            <span className="font-semibold text-slate-300">Drag & drop files here</span>, or click to open binary file
+            explorer
           </div>
           <span className="text-[10px] text-slate-500 font-mono">
             Wave Audio deliverables (.wav), lossless compression (.flac), or standard distribution container.
@@ -671,21 +664,24 @@ export default function BatchEncoder() {
                 {inputFiles.map((f, i) => {
                   const compRate = getCompressionInfo(f.size, outputFormat, bitrate);
                   const activeFileProg = fileProgresses[i] || 0;
-                  
+
                   return (
                     <tr key={i} className="hover:bg-white/[0.01]">
                       <td className="p-3 font-semibold text-slate-200 flex items-center gap-2 truncate max-w-[280px]">
                         <FileAudio className="w-4 h-4 text-green-400 shrink-0" />
-                        <span className="truncate" title={f.name}>{f.name}</span>
+                        <span className="truncate" title={f.name}>
+                          {f.name}
+                        </span>
                       </td>
                       <td className="p-3 text-[11px] text-slate-400 font-mono">
                         {f.format} ({f.sampleRate}, {f.channels})
                       </td>
                       <td className="p-3 text-[11px] text-slate-400">{f.size}</td>
                       <td className="p-3 text-[11px] text-green-300 font-bold">
-                        {compRate.outputSize} 
+                        {compRate.outputSize}
                         <span className="text-[9px] text-slate-500 font-normal ml-1">
-                          ({compRate.shrinkPercentage >= 0 ? "+" : ""}{compRate.shrinkPercentage}%)
+                          ({compRate.shrinkPercentage >= 0 ? "+" : ""}
+                          {compRate.shrinkPercentage}%)
                         </span>
                       </td>
                       <td className="p-3 w-[150px]">
@@ -693,11 +689,22 @@ export default function BatchEncoder() {
                           <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden border border-white/5">
                             <div
                               className="bg-green-400 h-full rounded-full transition-all duration-300"
-                              style={{ width: f.status === "Complete" ? "100%" : f.status === "Encoding" ? `${activeFileProg}%` : "0%" }}
+                              style={{
+                                width:
+                                  f.status === "Complete"
+                                    ? "100%"
+                                    : f.status === "Encoding"
+                                      ? `${activeFileProg}%`
+                                      : "0%",
+                              }}
                             ></div>
                           </div>
                           <span className="text-[9px] text-slate-500 block text-right">
-                            {f.status === "Complete" ? "100%" : f.status === "Encoding" ? `${activeFileProg}%` : "Pending"}
+                            {f.status === "Complete"
+                              ? "100%"
+                              : f.status === "Encoding"
+                                ? `${activeFileProg}%`
+                                : "Pending"}
                           </span>
                         </div>
                       </td>
@@ -786,7 +793,7 @@ export default function BatchEncoder() {
             <span className="text-[9px] uppercase font-extrabold text-slate-500 block pb-1 border-b border-white/5">
               Workstation post-transcode metadata behaviors
             </span>
-            
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-300 font-mono">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -817,7 +824,7 @@ export default function BatchEncoder() {
                 />
                 <span>Auto-open export path</span>
               </label>
-              
+
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -859,9 +866,7 @@ export default function BatchEncoder() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
           <div className="space-y-1.5">
-            <label className="text-[10px] uppercase text-slate-500 font-extrabold block">
-              Output format container
-            </label>
+            <label className="text-[10px] uppercase text-slate-500 font-extrabold block">Output format container</label>
             <select
               value={outputFormat}
               onChange={(e) => setOutputFormat(e.target.value)}
@@ -954,7 +959,8 @@ export default function BatchEncoder() {
                 </select>
               </div>
               <div className="text-[11px] text-slate-400 flex items-center">
-                FLAC is fully lossless compression. Original audio samples are preserved bit-for-bit while saving ~50% bytes.
+                FLAC is fully lossless compression. Original audio samples are preserved bit-for-bit while saving ~50%
+                bytes.
               </div>
             </div>
           )}
@@ -980,7 +986,8 @@ export default function BatchEncoder() {
               <div className="text-[11px] text-slate-400 space-y-1">
                 <p className="text-amber-400 font-bold">⚠️ MP3 is a lossy perceptual encoder.</p>
                 <p>
-                  It isolates and discards acoustic details not generally detected by human hearing mechanisms, creating small files. Constant Bitrate (CBR) preserves equal bytes across time fields.
+                  It isolates and discards acoustic details not generally detected by human hearing mechanisms, creating
+                  small files. Constant Bitrate (CBR) preserves equal bytes across time fields.
                 </p>
               </div>
             </div>
@@ -992,10 +999,13 @@ export default function BatchEncoder() {
               <div className="text-[11px] text-slate-300 leading-normal space-y-1">
                 <span className="font-bold text-amber-400 block uppercase">Codec Compilation restrictions note</span>
                 <p>
-                  Modern OPUS (libopus container), OGG (libvorbis DSP structure), and AAC (LAME/libfaac wrapper) are lossy multi-channel encoders that require specialized external licensing compilations on host workspaces.
+                  Modern OPUS (libopus container), OGG (libvorbis DSP structure), and AAC (LAME/libfaac wrapper) are
+                  lossy multi-channel encoders that require specialized external licensing compilations on host
+                  workspaces.
                 </p>
                 <p className="text-slate-500 text-[10px]">
-                  Local sandbox engines simulate these paths using safe stub conversion architectures if direct execution binaries are missing licensing capabilities.
+                  Local sandbox engines simulate these paths using safe stub conversion architectures if direct
+                  execution binaries are missing licensing capabilities.
                 </p>
               </div>
             </div>
@@ -1022,7 +1032,9 @@ export default function BatchEncoder() {
             </span>
             <ul className="list-decimal list-inside text-[11px] text-rose-400/90 pl-1 space-y-1">
               {blockers.map((block, i) => (
-                <li key={i}>{block}</li>
+                <li key={i}>
+                  {block.label} <span className="text-slate-500">Code: {block.diagnosticCode}</span>
+                </li>
               ))}
             </ul>
           </div>
@@ -1035,7 +1047,8 @@ export default function BatchEncoder() {
 
         <div className="flex flex-col sm:flex-row gap-4 justify-between items-stretch sm:items-center">
           <p className="text-[10px] text-slate-500 max-w-xl leading-normal">
-            FFmpeg conversions represent traditional CPU-bound format translations. Batch conversions do not isolate stems or use neural machine learning.
+            FFmpeg conversions represent traditional CPU-bound format translations. Batch conversions do not isolate
+            stems or use neural machine learning.
           </p>
 
           <button
@@ -1109,7 +1122,9 @@ export default function BatchEncoder() {
             ></div>
           </div>
           <div className="flex justify-between text-[9px] text-slate-500 uppercase font-bold">
-            <span>Completed files: {completedCount} / {inputFiles.length}</span>
+            <span>
+              Completed files: {completedCount} / {inputFiles.length}
+            </span>
             <span>{isEncoding ? "Processing on hardware workstation..." : "Ready"}</span>
           </div>
         </div>
@@ -1127,10 +1142,7 @@ export default function BatchEncoder() {
             <button
               onClick={() => {
                 setShowFfmpegCommand(!showFfmpegCommand);
-                setEncodeLog((prev) => [
-                  ...prev,
-                  `[diagnostics] Static FFmpeg command shown below.`,
-                ]);
+                setEncodeLog((prev) => [...prev, `[diagnostics] Static FFmpeg command shown below.`]);
               }}
               className="px-2.5 py-1 text-[10px] border border-white/10 font-bold rounded hover:bg-slate-900 text-slate-300 cursor-pointer flex items-center gap-1"
             >
@@ -1153,7 +1165,9 @@ export default function BatchEncoder() {
 
         {showFfmpegCommand && (
           <div className="p-3 bg-indigo-950/20 border border-indigo-500/20 rounded-lg text-[11px] text-indigo-300 break-all select-all font-mono">
-            <span className="font-bold text-[9px] text-indigo-400 uppercase tracking-widest block mb-1">Pristine Static FFmpeg CLI command:</span>
+            <span className="font-bold text-[9px] text-indigo-400 uppercase tracking-widest block mb-1">
+              Preview FFmpeg CLI command (not executed):
+            </span>
             <code>{getSimulatedFfmpegCommand()}</code>
           </div>
         )}
@@ -1164,7 +1178,8 @@ export default function BatchEncoder() {
             <div
               key={idx}
               className={`${
-                log.includes("successful") || log.includes("completed") || log.includes("Exit Code: 0")
+                (log.includes("successful") || log.includes("completed") || log.includes("Exit Code: 0")) &&
+                !log.includes("No subprocess executed")
                   ? "text-green-400 font-bold"
                   : log.includes("warning") || log.includes("Missing")
                     ? "text-amber-500 font-bold"

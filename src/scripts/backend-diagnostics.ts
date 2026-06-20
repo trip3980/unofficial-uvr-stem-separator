@@ -1,4 +1,6 @@
 import { createRequire } from "module";
+import * as fs from "fs";
+import * as path from "path";
 
 const require = createRequire(import.meta.url);
 const aiSeparation = require("../../electron-shell/ai-separation.cjs");
@@ -31,12 +33,87 @@ function parseArgs(argv: string[]): ParsedArgs {
   return parsed;
 }
 
+function resolveDiagnosticPythonPath(
+  rootDir: string,
+  cliPython?: string,
+): { path: string | undefined; source: string } {
+  if (cliPython) {
+    return { path: path.resolve(cliPython), source: "cli --python" };
+  }
+
+  const backendEnv = process.env.OPENSTEM_BACKEND_PYTHON?.trim();
+  if (backendEnv) {
+    return { path: path.resolve(backendEnv), source: "OPENSTEM_BACKEND_PYTHON" };
+  }
+
+  const proofEnv = process.env.OPENSTEM_PROOF_PYTHON?.trim();
+  if (proofEnv) {
+    return { path: path.resolve(proofEnv), source: "OPENSTEM_PROOF_PYTHON" };
+  }
+
+  const projectLocalCandidates = [
+    path.join(rootDir, ".venv-openstem", "Scripts", "python.exe"),
+    path.join(rootDir, ".venv-openstem", "bin", "python"),
+  ];
+  const localPython = projectLocalCandidates.find((candidate) => fs.existsSync(candidate));
+  if (localPython) {
+    return { path: localPython, source: "project .venv-openstem" };
+  }
+
+  return { path: undefined, source: "PATH discovery" };
+}
+
+function resolveDiagnosticFFmpegPath(cliFFmpeg?: string): { path: string | undefined; source: string } {
+  if (cliFFmpeg) {
+    return { path: path.resolve(cliFFmpeg), source: "cli --ffmpeg" };
+  }
+
+  const backendEnv = process.env.OPENSTEM_BACKEND_FFMPEG?.trim();
+  if (backendEnv) {
+    return { path: path.resolve(backendEnv), source: "OPENSTEM_BACKEND_FFMPEG" };
+  }
+
+  const proofEnv = process.env.OPENSTEM_PROOF_FFMPEG?.trim();
+  if (proofEnv) {
+    return { path: path.resolve(proofEnv), source: "OPENSTEM_PROOF_FFMPEG" };
+  }
+
+  return { path: undefined, source: "PATH discovery" };
+}
+
+function firstNonEmptyLine(text: string): string {
+  return (
+    String(text || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(Boolean) || ""
+  );
+}
+
+function compactBackendDetails(details: any): any {
+  if (!details?.audioSeparatorCli?.helpText) {
+    return details;
+  }
+
+  const { helpText, ...audioSeparatorCli } = details.audioSeparatorCli;
+  return {
+    ...details,
+    audioSeparatorCli: {
+      ...audioSeparatorCli,
+      helpTextPreview: firstNonEmptyLine(helpText),
+      helpTextLineCount: String(helpText).split(/\r?\n/).length,
+    },
+  };
+}
+
 function main(): void {
   const args = parseArgs(process.argv.slice(2));
+  const pythonResolution = resolveDiagnosticPythonPath(process.cwd(), args.python);
+  const ffmpegResolution = resolveDiagnosticFFmpegPath(args.ffmpeg);
   const ffmpeg = aiSeparation.checkFFmpegReady({
-    ffmpegCommand: args.ffmpeg || undefined,
+    ffmpegCommand: ffmpegResolution.path,
   });
-  const backendDetails = aiSeparation.checkBackendDetails(args.python, {
+  const backendDetails = aiSeparation.checkBackendDetails(pythonResolution.path, {
     ffmpeg,
   });
   const backendBlockers = backendDetails.blockers || [];
@@ -45,11 +122,15 @@ function main(): void {
   const result = {
     ok: !!backendDetails.canRunAISeparation && !!ffmpeg.ready,
     proofStatus: "diagnostics_only_not_ai_proof",
-    betaStatus: "blocked_until_verified_model_cpu_ai_e2e_proof_passes",
+    betaStatus: "local_cpu_proof_lane_completed_beta_pending_final_release_review",
     pythonRequested: args.python || null,
+    pythonResolved: pythonResolution.path || null,
+    pythonSource: pythonResolution.source,
     ffmpegRequested: args.ffmpeg || null,
+    ffmpegResolved: ffmpegResolution.path || null,
+    ffmpegSource: ffmpegResolution.source,
     ffmpeg,
-    backendDetails,
+    backendDetails: compactBackendDetails(backendDetails),
     blockers: [
       ...backendBlockers,
       ...(!ffmpeg.ready && !hasFfmpegBlocker

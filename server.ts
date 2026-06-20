@@ -4,6 +4,54 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { execFile } from "child_process";
 
+const APPROVED_PROXY_HEADER_NAMES = new Set(["accept", "content-type"]);
+const BLOCKED_PROXY_HEADER_NAMES = new Set([
+  "authorization",
+  "cookie",
+  "proxy-authorization",
+  "x-api-key",
+  "x-auth-token",
+  "x-csrf-token",
+  "x-session-token",
+]);
+
+function isApprovedLocalProxyHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") return true;
+  if (host.startsWith("192.168.")) return true;
+  if (host.startsWith("10.")) return true;
+
+  const private172 = host.match(/^172\.(\d{1,2})\./);
+  if (private172) {
+    const block = Number(private172[1]);
+    return block >= 16 && block <= 31;
+  }
+
+  return false;
+}
+
+function sanitizeProxyHeaders(headers: unknown): Record<string, string> {
+  const sanitized: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (!headers || typeof headers !== "object" || Array.isArray(headers)) {
+    return sanitized;
+  }
+
+  for (const [name, value] of Object.entries(headers as Record<string, unknown>)) {
+    const lowerName = name.toLowerCase();
+    if (BLOCKED_PROXY_HEADER_NAMES.has(lowerName) || !APPROVED_PROXY_HEADER_NAMES.has(lowerName)) {
+      continue;
+    }
+    if (typeof value === "string") {
+      sanitized[name] = value;
+    }
+  }
+
+  return sanitized;
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -13,7 +61,7 @@ async function startServer() {
   // Initialize server-side Gemini client
   const apiKey = process.env.GEMINI_API_KEY;
   let ai: GoogleGenAI | null = null;
-  
+
   if (apiKey) {
     try {
       ai = new GoogleGenAI({
@@ -104,16 +152,18 @@ Your response MUST be wrapped in a clean JSON structure:
       if (!["http:", "https:"].includes(parsedTarget.protocol)) {
         return res.status(400).json({ error: "Proxy target must use http or https." });
       }
+      if (!isApprovedLocalProxyHost(parsedTarget.hostname)) {
+        return res.status(400).json({
+          error: "Proxy target must be localhost or a private local-network host.",
+        });
+      }
 
       const requestMethod = String(method || "POST").toUpperCase();
       if (!["GET", "POST"].includes(requestMethod)) {
         return res.status(400).json({ error: "Proxy method must be GET or POST." });
       }
 
-      const fetchHeaders: Record<string, string> = {
-        "Content-Type": "application/json",
-        ...(headers || {}),
-      };
+      const fetchHeaders = sanitizeProxyHeaders(headers);
 
       const fetchOptions: any = {
         method: requestMethod,
@@ -126,10 +176,8 @@ Your response MUST be wrapped in a clean JSON structure:
 
       const backendResponse = await fetch(parsedTarget.toString(), fetchOptions);
       const isJson = backendResponse.headers.get("content-type")?.includes("application/json");
-      
-      const responseData = isJson 
-        ? await backendResponse.json() 
-        : await backendResponse.text();
+
+      const responseData = isJson ? await backendResponse.json() : await backendResponse.text();
 
       res.status(backendResponse.status).send(responseData);
     } catch (proxyError: any) {

@@ -41,7 +41,7 @@ import {
   APP_PACKAGE_NAME,
   RELEASE_STATE,
   BETA_STATUS,
-  INDEPENDENT_PROJECT_NOTICE
+  INDEPENDENT_PROJECT_NOTICE,
 } from "../config/branding";
 
 // Import our decoupled types & engines (Rule 20)
@@ -53,14 +53,9 @@ import {
   validateState,
   getAdapterForModel,
 } from "../services/audioEngine";
+import { getDiagnosticCodeForLegacyBlocker } from "../services/diagnosticCodes";
 import { getModelProofEligibility } from "../services/modelProofEligibility";
-import {
-  AppState,
-  OutputFormat,
-  ProcessingStatus,
-  ModelRegistryEntry,
-  ProcessingRequest,
-} from "../types";
+import { AppState, OutputFormat, ProcessingStatus, ModelRegistryEntry, ProcessingRequest } from "../types";
 
 /**
  * UVR CLASSIC CONSOLE IMPLEMENTATION
@@ -91,7 +86,7 @@ export interface BackendDeviceCapability {
 }
 
 export const BACKEND_COMPATIBILITY_MAP: Record<string, BackendDeviceCapability> = {
-  "VR": {
+  VR: {
     backendType: "audio-separator (VR/MDX/RoFormer)",
     supportedExtensions: [".onnx", ".pth"],
     cpuSupport: true,
@@ -100,7 +95,7 @@ export const BACKEND_COMPATIBILITY_MAP: Record<string, BackendDeviceCapability> 
     dmlSupport: true,
     requiredPythonPackages: ["audio-separator", "onnxruntime-gpu", "torch"],
     requiredCommandFlags: ["--device cuda", "--device mps", "--device dml"],
-    gpuExecutionState: "supported"
+    gpuExecutionState: "supported",
   },
   "MDX-Net": {
     backendType: "audio-separator (MDX)",
@@ -111,9 +106,9 @@ export const BACKEND_COMPATIBILITY_MAP: Record<string, BackendDeviceCapability> 
     dmlSupport: true,
     requiredPythonPackages: ["audio-separator", "onnxruntime-gpu", "torch"],
     requiredCommandFlags: ["--device cuda", "--device mps", "--device dml"],
-    gpuExecutionState: "supported"
+    gpuExecutionState: "supported",
   },
-  "Demucs": {
+  Demucs: {
     backendType: "audio-separator (Demucs)",
     supportedExtensions: [".yaml", ".pt"],
     cpuSupport: true,
@@ -122,9 +117,9 @@ export const BACKEND_COMPATIBILITY_MAP: Record<string, BackendDeviceCapability> 
     dmlSupport: false,
     requiredPythonPackages: ["audio-separator", "torch"],
     requiredCommandFlags: ["--device cuda"],
-    gpuExecutionState: "partial"
+    gpuExecutionState: "partial",
   },
-  "RoFormer": {
+  RoFormer: {
     backendType: "audio-separator (RoFormer)",
     supportedExtensions: [".onnx", ".pth"],
     cpuSupport: true,
@@ -133,9 +128,9 @@ export const BACKEND_COMPATIBILITY_MAP: Record<string, BackendDeviceCapability> 
     dmlSupport: true,
     requiredPythonPackages: ["audio-separator", "onnxruntime-gpu", "torch"],
     requiredCommandFlags: ["--device cuda", "--device mps", "--device dml"],
-    gpuExecutionState: "supported"
+    gpuExecutionState: "supported",
   },
-  "MDXC": {
+  MDXC: {
     backendType: "audio-separator (MDXC)",
     supportedExtensions: [".onnx"],
     cpuSupport: true,
@@ -144,9 +139,9 @@ export const BACKEND_COMPATIBILITY_MAP: Record<string, BackendDeviceCapability> 
     dmlSupport: true,
     requiredPythonPackages: ["audio-separator", "onnxruntime-gpu", "torch"],
     requiredCommandFlags: ["--device cuda", "--device mps", "--device dml"],
-    gpuExecutionState: "supported"
+    gpuExecutionState: "supported",
   },
-  "Custom": {
+  Custom: {
     backendType: "custom-adapter",
     supportedExtensions: ["*"],
     cpuSupport: true,
@@ -155,8 +150,8 @@ export const BACKEND_COMPATIBILITY_MAP: Record<string, BackendDeviceCapability> 
     dmlSupport: false,
     requiredPythonPackages: ["torch"],
     requiredCommandFlags: [],
-    gpuExecutionState: "missing"
-  }
+    gpuExecutionState: "missing",
+  },
 };
 
 interface ClassicConsoleProps {
@@ -237,15 +232,19 @@ export default function ClassicConsole({
   const [simProgress, setSimProgress] = useState(0);
   const { showHelp: showTooltips, toggleSection: toggleHelpSection } = useHelp("classic_console");
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [ffmpegStatus, setFfmpegStatus] = useState<
-    "not_checked" | "ready" | "missing"
-  >("not_checked");
+  const [ffmpegStatus, setFfmpegStatus] = useState<"not_checked" | "ready" | "missing">("not_checked");
   const [modelFileStatus, setModelFileStatus] = useState<
-    "not_checked" | "missing" | "exists_hash_not_checked" | "hash_verified" | "hash_unavailable" | "hash_mismatch" | "manual_import_required" | "source_missing" | "download_needed"
+    | "not_checked"
+    | "missing"
+    | "exists_hash_not_checked"
+    | "hash_verified"
+    | "hash_unavailable"
+    | "hash_mismatch"
+    | "manual_import_required"
+    | "source_missing"
+    | "download_needed"
   >("not_checked");
-  const [backendStatus, setBackendStatus] = useState<
-    "not_checked" | "ready" | "missing_env"
-  >("not_checked");
+  const [backendStatus, setBackendStatus] = useState<"not_checked" | "ready" | "missing_env">("not_checked");
   const [userSelectedMode, setUserSelectedMode] = useState<"ai" | "ffmpeg">("ai");
   const [showSetupGuide, setShowSetupGuide] = useState(false);
   const [showSystemNotes, setShowSystemNotes] = useState(false);
@@ -256,16 +255,33 @@ export default function ClassicConsole({
   >("not_selected");
   const [outputFolderError, setOutputFolderError] = useState<string>("");
   const [customPythonPath, setCustomPythonPathState] = useState<string>(() => {
-    return localStorage.getItem("customPythonPath") || "";
+    return typeof window !== "undefined" ? localStorage.getItem("customPythonPath") || "" : "";
+  });
+  const [customFFmpegPath, setCustomFFmpegPathState] = useState<string>(() => {
+    return typeof window !== "undefined" ? localStorage.getItem("customFFmpegPath") || "" : "";
   });
 
   const updateCustomPythonPath = (pathStr: string) => {
     setCustomPythonPathState(pathStr);
-    localStorage.setItem("customPythonPath", pathStr);
+    if (pathStr) {
+      localStorage.setItem("customPythonPath", pathStr);
+    } else {
+      localStorage.removeItem("customPythonPath");
+    }
     // Restart diagnostics with the new custom python path immediately
-    runBackendDiagnostics(pathStr);
+    runBackendDiagnostics(pathStr, customFFmpegPath);
   };
-  
+
+  const updateCustomFFmpegPath = (pathStr: string) => {
+    setCustomFFmpegPathState(pathStr);
+    if (pathStr) {
+      localStorage.setItem("customFFmpegPath", pathStr);
+    } else {
+      localStorage.removeItem("customFFmpegPath");
+    }
+    runBackendDiagnostics(customPythonPath, pathStr);
+  };
+
   const [backendSpecs, setBackendSpecs] = useState<{
     pythonFound: boolean;
     pythonPath: string;
@@ -304,12 +320,8 @@ export default function ClassicConsole({
   const [appState, setAppState] = useState<AppState>(() => {
     const savedState = localStorage.getItem("uvr6_saved_app_state");
     const defaultState = {
-      selectedInputs:
-        selectedInputs && selectedInputs.length > 0
-          ? selectedInputs
-          : ["tracking_demo_44k.wav"],
-      selectedOutputFolder:
-        selectedOutput || "C:\\Users\\Consumer\\Music_Stems\\",
+      selectedInputs: selectedInputs && selectedInputs.length > 0 ? selectedInputs : [],
+      selectedOutputFolder: selectedOutput || "",
       processMethodId: "bs_roformer", // default method
       selectedModelId: "mel_band_roformer_karaoke", // default model
       selectedEnsembleId: "multi_ai_ensemble_preset",
@@ -398,12 +410,15 @@ export default function ClassicConsole({
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [showStopHaltAlert, setShowStopHaltAlert] = useState(false);
 
-  const runBackendDiagnostics = async (pythonPath: string = customPythonPath) => {
+  const runBackendDiagnostics = async (
+    pythonPath: string = customPythonPath,
+    ffmpegPath: string = customFFmpegPath,
+  ) => {
     const uvr = (window as any).uvr;
     if (uvr) {
       if (typeof uvr.checkBackendDetails === "function") {
         try {
-          const specs = await uvr.checkBackendDetails(pythonPath || undefined);
+          const specs = await uvr.checkBackendDetails(pythonPath || undefined, ffmpegPath || undefined);
           setBackendSpecs(specs);
           if (specs.canRunAISeparation) {
             setBackendStatus("ready");
@@ -416,7 +431,7 @@ export default function ClassicConsole({
       }
       if (typeof uvr.checkFFmpegReady === "function") {
         try {
-          const ffRes = await uvr.checkFFmpegReady();
+          const ffRes = await uvr.checkFFmpegReady(ffmpegPath || undefined);
           if (ffRes && ffRes.ready) {
             setFfmpegStatus("ready");
           } else {
@@ -451,6 +466,26 @@ export default function ClassicConsole({
     }
   };
 
+  const handleBrowseFFmpegPath = async () => {
+    const uvr = (window as any).uvr;
+    if (uvr && typeof uvr.selectFFmpegPath === "function") {
+      try {
+        const res = await uvr.selectFFmpegPath();
+        const filePath = typeof res === "string" ? res : res?.filePath;
+        if (filePath) {
+          updateCustomFFmpegPath(filePath);
+        }
+      } catch (err) {
+        console.error("Failed to browse for FFmpeg executable path:", err);
+      }
+    } else {
+      const pathInput = prompt("Enter full path to native FFmpeg executable:", customFFmpegPath);
+      if (pathInput !== null) {
+        updateCustomFFmpegPath(pathInput.trim());
+      }
+    }
+  };
+
   useEffect(() => {
     const isElectron = !!(window as any).uvr;
     if (isElectron) {
@@ -458,7 +493,7 @@ export default function ClassicConsole({
       setAppState((prev) => {
         let updatedInputs = prev.selectedInputs;
         if (updatedInputs.includes("tracking_demo_44k.wav")) {
-          updatedInputs = updatedInputs.filter(f => f !== "tracking_demo_44k.wav");
+          updatedInputs = updatedInputs.filter((f) => f !== "tracking_demo_44k.wav");
         }
         let updatedOutput = prev.selectedOutputFolder;
         if (updatedOutput === "C:\\Users\\Consumer\\Music_Stems\\") {
@@ -486,14 +521,14 @@ export default function ClassicConsole({
           }));
           return;
         }
-        
+
         if (update.type === "process") {
           const { progress, status, log, outputFiles, error } = update;
-          
+
           if (progress !== undefined) {
             setSimProgress(progress);
           }
-          
+
           if (log) {
             setSimulationLog((current) => [...current, log]);
             setAppState((prev) => ({
@@ -501,7 +536,7 @@ export default function ClassicConsole({
               consoleLogs: [log, ...prev.consoleLogs],
             }));
           }
-          
+
           if (status === "completed") {
             const verifiedStems = normalizeVerifiedOutputFiles(Array.isArray(outputFiles) ? outputFiles : []);
             if (verifiedStems.length === 0) {
@@ -534,7 +569,7 @@ export default function ClassicConsole({
                 ...prev.consoleLogs,
               ],
             }));
-            
+
             setSimulationLog((current) => [
               ...current,
               `[filesystem] Verified AI output files:`,
@@ -561,10 +596,7 @@ export default function ClassicConsole({
             setAppState((prev) => ({
               ...prev,
               processingStatus: "cancelled",
-              consoleLogs: [
-                `[cancelled] Separation process terminated by user.`,
-                ...prev.consoleLogs,
-              ],
+              consoleLogs: [`[cancelled] Separation process terminated by user.`, ...prev.consoleLogs],
             }));
           }
         }
@@ -577,19 +609,14 @@ export default function ClassicConsole({
   }, []);
 
   // Custom repo settings (Rule 17/18)
-  const [customRepoUrl, setCustomRepoUrl] = useState(
-    "https://huggingface.co/models/uvr-community-extensions",
-  );
+  const [customRepoUrl, setCustomRepoUrl] = useState("https://huggingface.co/models/uvr-community-extensions");
   const [sha256Strict, setSha256Strict] = useState(true);
   const [conserveVram, setConserveVram] = useState(true);
   const [doubleQuotePaths, setDoubleQuotePaths] = useState(true);
 
   // Native quick-download UI state. Success is only set after native SHA-256 verification.
-  const [modelRegistryState, setModelRegistryState] =
-    useState<ModelRegistryEntry[]>(MODEL_REGISTRY);
-  const [downloadingModelId, setDownloadingModelId] = useState<string | null>(
-    null,
-  );
+  const [modelRegistryState, setModelRegistryState] = useState<ModelRegistryEntry[]>(MODEL_REGISTRY);
+  const [downloadingModelId, setDownloadingModelId] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
 
   useEffect(() => {
@@ -618,21 +645,16 @@ export default function ClassicConsole({
 
   // Synchronize category-to-model changes based on configuration blueprints (Rule 3 & 5)
   useEffect(() => {
-    const selectedMethod = PROCESS_METHODS.find(
-      (m) => m.id === appState.processMethodId,
-    );
+    const selectedMethod = PROCESS_METHODS.find((m) => m.id === appState.processMethodId);
     if (selectedMethod) {
       const relatedModel = modelRegistryState.find(
         (m) =>
-          m.id === selectedMethod.defaultModelId ||
-          m.architecture.toLowerCase() === selectedMethod.id.toLowerCase(),
+          m.id === selectedMethod.defaultModelId || m.architecture.toLowerCase() === selectedMethod.id.toLowerCase(),
       );
 
       const relatedModels = modelRegistryState.filter((m) => {
-        if (selectedMethod.id === "ensemble")
-          return m.architecture === "Ensemble";
-        if (selectedMethod.id === "bs_roformer")
-          return m.architecture === "RoFormer";
+        if (selectedMethod.id === "ensemble") return m.architecture === "Ensemble";
+        if (selectedMethod.id === "bs_roformer") return m.architecture === "RoFormer";
         if (selectedMethod.id === "vr") return m.architecture === "VR";
         if (selectedMethod.id === "mdx") return m.architecture === "MDX-Net";
         if (selectedMethod.id === "demucs") return m.architecture === "Demucs";
@@ -640,12 +662,8 @@ export default function ClassicConsole({
         return false;
       });
 
-      const chosenModelId = relatedModel
-        ? relatedModel.id
-        : relatedModels[0]?.id || "";
-      const chosenModelName = relatedModel
-        ? relatedModel.name
-        : relatedModels[0]?.name || "";
+      const chosenModelId = relatedModel ? relatedModel.id : relatedModels[0]?.id || "";
+      const chosenModelName = relatedModel ? relatedModel.name : relatedModels[0]?.name || "";
 
       setAppState((prev) => ({
         ...prev,
@@ -653,12 +671,8 @@ export default function ClassicConsole({
         // Sync default settings matching dynamic schemas (Rule 18)
         dropdownSettings: {
           ...prev.dropdownSettings,
-          chunks:
-            SETTINGS_SCHEMAS[selectedMethod.id]?.[0]?.defaultValue?.toString() ||
-            "Auto",
-          noiseReduction:
-            SETTINGS_SCHEMAS[selectedMethod.id]?.[1]?.defaultValue?.toString() ||
-            "Standard",
+          chunks: SETTINGS_SCHEMAS[selectedMethod.id]?.[0]?.defaultValue?.toString() || "Auto",
+          noiseReduction: SETTINGS_SCHEMAS[selectedMethod.id]?.[1]?.defaultValue?.toString() || "Standard",
         },
       }));
       setSelectedModelName(chosenModelName);
@@ -667,10 +681,7 @@ export default function ClassicConsole({
 
   // Get active model object
   const activeModel = useMemo(() => {
-    return (
-      modelRegistryState.find((m) => m.id === appState.selectedModelId) ||
-      modelRegistryState[0]
-    );
+    return modelRegistryState.find((m) => m.id === appState.selectedModelId) || modelRegistryState[0];
   }, [appState.selectedModelId, modelRegistryState]);
 
   const modelProofEligibility = useMemo(() => {
@@ -732,6 +743,7 @@ export default function ClassicConsole({
       severity: "required" | "warning";
       source: string;
       fixLabel?: string;
+      diagnosticCode?: string;
     }[] = [];
     const isElectron = !!(window as any).uvr;
 
@@ -741,7 +753,7 @@ export default function ClassicConsole({
         label: "Browser sandbox mode cannot execute native separation",
         severity: "required",
         source: "backend",
-        fixLabel: "Use Electron desktop build"
+        fixLabel: "Use Electron desktop build",
       });
     }
 
@@ -752,30 +764,30 @@ export default function ClassicConsole({
         label: "No input files selected",
         severity: "required",
         source: "input",
-        fixLabel: "Browse for input files"
+        fixLabel: "Browse for input files",
       });
     } else {
-      const hasPreviewInputsOnly = selectedInputFiles.some(f => f.source !== "electron_path");
+      const hasPreviewInputsOnly = selectedInputFiles.some((f) => f.source !== "electron_path");
       if (hasPreviewInputsOnly) {
         list.push({
           id: "inputs_not_verified",
           label: "One or more selected inputs are not verified local files",
           severity: "required",
           source: "input",
-          fixLabel: "Re-add files using native browser button in Electron"
+          fixLabel: "Re-add files using native browser button in Electron",
         });
       }
     }
 
     if (appState.checkboxSettings.sameAsInputFolder) {
-      const hasNonNative = selectedInputFiles.some(f => f.source !== "electron_path");
+      const hasNonNative = selectedInputFiles.some((f) => f.source !== "electron_path");
       if (hasNonNative || !hasInputs) {
         list.push({
           id: "same_as_input_requires_native",
           label: "Same as Input Folder requires verified native input paths",
           severity: "required",
           source: "output",
-          fixLabel: "Select a custom output folder or use native inputs"
+          fixLabel: "Select a custom output folder or use native inputs",
         });
       }
     } else {
@@ -785,7 +797,7 @@ export default function ClassicConsole({
           label: "Output folder not selected",
           severity: "required",
           source: "output",
-          fixLabel: "Choose output folder"
+          fixLabel: "Choose output folder",
         });
       } else if (outputFolderVerifyStatus === "missing") {
         list.push({
@@ -793,7 +805,7 @@ export default function ClassicConsole({
           label: "Output folder missing",
           severity: "required",
           source: "output",
-          fixLabel: "Select an existing folder on disk"
+          fixLabel: "Select an existing folder on disk",
         });
       } else if (outputFolderVerifyStatus === "not_writable") {
         list.push({
@@ -801,7 +813,7 @@ export default function ClassicConsole({
           label: "Output folder not writable",
           severity: "required",
           source: "output",
-          fixLabel: "Choose a writable directory"
+          fixLabel: "Choose a writable directory",
         });
       } else if (outputFolderVerifyStatus === "browser_preview" || !isElectron) {
         list.push({
@@ -809,7 +821,7 @@ export default function ClassicConsole({
           label: "Browser preview output folder",
           severity: "required",
           source: "output",
-          fixLabel: "Use native select in Electron build"
+          fixLabel: "Use native select in Electron build",
         });
       }
     }
@@ -820,28 +832,34 @@ export default function ClassicConsole({
         label: "Selected model missing",
         severity: "required",
         source: "model",
-        fixLabel: "Please download or choose a valid model"
+        fixLabel: "Please download or choose a valid model",
       });
     } else {
-      const installedLike = modelFileStatus === "hash_verified" || modelFileStatus === "exists_hash_not_checked" || modelFileStatus === "hash_unavailable" || modelFileStatus === "hash_mismatch";
+      const installedLike =
+        modelFileStatus === "hash_verified" ||
+        modelFileStatus === "exists_hash_not_checked" ||
+        modelFileStatus === "hash_unavailable" ||
+        modelFileStatus === "hash_mismatch";
       if (!activeModel.downloaded && !installedLike) {
         list.push({
           id: "model_not_installed",
           label: "Selected model file not installed",
           severity: "required",
           source: "model",
-          fixLabel: "Download model weights via Model Downloader"
+          fixLabel: "Download model weights via Model Downloader",
         });
       }
 
-      const isModelSupported = ['VR', 'MDX-Net', 'Demucs', 'RoFormer', 'MDXC', 'Custom', 'Ensemble'].includes(activeModel.architecture || '');
+      const isModelSupported = ["VR", "MDX-Net", "Demucs", "RoFormer", "MDXC", "Custom", "Ensemble"].includes(
+        activeModel.architecture || "",
+      );
       if (!isModelSupported) {
         list.push({
           id: "unsupported_architecture",
           label: `Unsupported model architecture: ${activeModel.architecture}`,
           severity: "required",
           source: "model",
-          fixLabel: "Switch model method"
+          fixLabel: "Switch model method",
         });
       }
 
@@ -851,7 +869,7 @@ export default function ClassicConsole({
           label: "Selected model weight checksum mismatch",
           severity: "required",
           source: "model",
-          fixLabel: "Redownload or reimport the model file"
+          fixLabel: "Redownload or reimport the model file",
         });
       } else if (!modelProofEligibility.proofEligible) {
         list.push({
@@ -859,7 +877,7 @@ export default function ClassicConsole({
           label: modelProofEligibility.displayMessage,
           severity: "required",
           source: "model",
-          fixLabel: "Use a model with verified source integrity and matching SHA-256"
+          fixLabel: "Use a model with verified source integrity and matching SHA-256",
         });
       }
     }
@@ -870,17 +888,19 @@ export default function ClassicConsole({
         label: "Ensemble requires at least 2 inputs or model outputs",
         severity: "required",
         source: "model",
-        fixLabel: "Add more input tracks to queue"
+        fixLabel: "Add more input tracks to queue",
       });
     }
 
     if (ffmpegStatus !== "ready" && isElectron) {
       list.push({
         id: "ffmpeg_missing",
-        label: "FFmpeg missing on native host path",
+        label: customFFmpegPath
+          ? "Selected FFmpeg executable is invalid or not runnable"
+          : "FFmpeg missing on native host PATH",
         severity: "required",
         source: "ffmpeg",
-        fixLabel: "Install FFmpeg or check PATH environment variables"
+        fixLabel: "Select a valid FFmpeg executable or install FFmpeg on PATH",
       });
     }
 
@@ -891,7 +911,7 @@ export default function ClassicConsole({
           label: "Python missing for AI mode",
           severity: "required",
           source: "python",
-          fixLabel: "Install Python 3.10+ and add to custom path"
+          fixLabel: "Install Python 3.10+ and add to custom path",
         });
       }
       if (backendSpecs?.pythonFound && !backendSpecs?.audioSeparatorInstalled) {
@@ -900,16 +920,20 @@ export default function ClassicConsole({
           label: "audio-separator missing for AI mode",
           severity: "required",
           source: "backend",
-          fixLabel: "Run pip install audio-separator"
+          fixLabel: "Run pip install audio-separator",
         });
       }
-      if (backendSpecs?.pythonFound && backendSpecs?.audioSeparatorInstalled && backendSpecs?.audioSeparatorCliReady === false) {
+      if (
+        backendSpecs?.pythonFound &&
+        backendSpecs?.audioSeparatorInstalled &&
+        backendSpecs?.audioSeparatorCliReady === false
+      ) {
         list.push({
           id: "audio_separator_cli_missing",
           label: "audio-separator CLI help could not be inspected",
           severity: "required",
           source: "backend",
-          fixLabel: "Repair or reinstall audio-separator in the selected Python environment"
+          fixLabel: "Repair or reinstall audio-separator in the selected Python environment",
         });
       }
       if (backendSpecs?.pythonFound && !backendSpecs?.torchInstalled) {
@@ -918,7 +942,7 @@ export default function ClassicConsole({
           label: "PyTorch missing for AI mode",
           severity: "required",
           source: "backend",
-          fixLabel: "Install torch via python pip installer"
+          fixLabel: "Install torch via python pip installer",
         });
       }
     }
@@ -931,7 +955,7 @@ export default function ClassicConsole({
           label: "CPU mode is required for the first local AI proof slice",
           severity: "required",
           source: "device",
-          fixLabel: "Switch execution device to CPU"
+          fixLabel: "Switch execution device to CPU",
         });
       }
       if (dev === "cuda" && backendSpecs && !backendSpecs.cudaAvailable) {
@@ -940,7 +964,7 @@ export default function ClassicConsole({
           label: "CUDA requested but not available, PyTorch is using CPU",
           severity: "required",
           source: "device",
-          fixLabel: "Install CUDA toolkit or switch target device to CPU"
+          fixLabel: "Install CUDA toolkit or switch target device to CPU",
         });
       }
       if (dev === "mps" && backendSpecs && !backendSpecs.mpsAvailable) {
@@ -949,17 +973,21 @@ export default function ClassicConsole({
           label: "MPS requested but not available on this chipset hardware",
           severity: "required",
           source: "device",
-          fixLabel: "Use CPU or auto device selection mode"
+          fixLabel: "Use CPU or auto device selection mode",
         });
       }
     }
 
-    if (userSelectedMode === "ai" && appState.dropdownSettings.executionDevice === "cuda" && backendSpecs?.cudaAvailable) {
+    if (
+      userSelectedMode === "ai" &&
+      appState.dropdownSettings.executionDevice === "cuda" &&
+      backendSpecs?.cudaAvailable
+    ) {
       list.push({
         id: "cuda_not_proven",
         label: "CUDA not locally proven with dynamic end-to-end split benchmark",
         severity: "warning",
-        source: "device"
+        source: "device",
       });
     }
 
@@ -968,7 +996,7 @@ export default function ClassicConsole({
         id: "directml_experimental",
         label: "DirectML selected: DirectML is experimental, delegated, and not locally proven",
         severity: "warning",
-        source: "device"
+        source: "device",
       });
     }
 
@@ -977,7 +1005,7 @@ export default function ClassicConsole({
         id: "gpu_unused",
         label: "CUDA is available on host but CPU threads are selected for execution",
         severity: "warning",
-        source: "device"
+        source: "device",
       });
     }
 
@@ -986,7 +1014,7 @@ export default function ClassicConsole({
         id: "ffmpeg_fallback_blocked",
         label: "FFmpeg fallback is non-AI and cannot satisfy CPU AI proof",
         severity: "required",
-        source: "mode"
+        source: "mode",
       });
     }
 
@@ -995,19 +1023,36 @@ export default function ClassicConsole({
         id: "browser_preview_mode",
         label: "Running in browser preview mode - UI testing available only",
         severity: "warning",
-        source: "mode"
+        source: "mode",
       });
     }
 
-    return list;
-  }, [appState.selectedInputs, appState.selectedOutputFolder, appState.checkboxSettings.sameAsInputFolder, appState.dropdownSettings.executionDevice, appState.processMethodId, selectedInputFiles, activeModel, ffmpegStatus, backendSpecs, userSelectedMode, outputFolderVerifyStatus, modelFileStatus, modelProofEligibility]);
+    return list.map((item) => ({
+      ...item,
+      diagnosticCode: item.diagnosticCode || getDiagnosticCodeForLegacyBlocker(item.id),
+    }));
+  }, [
+    appState.selectedInputs,
+    appState.selectedOutputFolder,
+    appState.checkboxSettings.sameAsInputFolder,
+    appState.dropdownSettings.executionDevice,
+    appState.processMethodId,
+    selectedInputFiles,
+    activeModel,
+    ffmpegStatus,
+    backendSpecs,
+    userSelectedMode,
+    outputFolderVerifyStatus,
+    modelFileStatus,
+    modelProofEligibility,
+  ]);
 
   const requiredBlockers = useMemo(() => {
-    return blockersAndWarnings.filter(item => item.severity === "required");
+    return blockersAndWarnings.filter((item) => item.severity === "required");
   }, [blockersAndWarnings]);
 
   const warningBlockers = useMemo(() => {
-    return blockersAndWarnings.filter(item => item.severity === "warning");
+    return blockersAndWarnings.filter((item) => item.severity === "warning");
   }, [blockersAndWarnings]);
 
   const blockedReason = useMemo(() => {
@@ -1034,6 +1079,176 @@ export default function ClassicConsole({
 
     return "ffmpeg_fallback_blocked" as const;
   }, [requiredBlockers, userSelectedMode]);
+
+  const isModelVerifiedForRun = useMemo(() => {
+    return !!verifiedModelLocalPath && modelProofEligibility.proofEligible && modelFileStatus === "hash_verified";
+  }, [modelFileStatus, modelProofEligibility.proofEligible, verifiedModelLocalPath]);
+
+  const primaryWorkflowBlockers = useMemo(() => {
+    const labels = new Set<string>();
+
+    requiredBlockers.forEach((blocker) => {
+      switch (blocker.id) {
+        case "no_inputs":
+        case "inputs_not_verified":
+          labels.add("Input missing");
+          break;
+        case "output_missing":
+        case "output_not_exists":
+        case "output_not_writable":
+        case "output_browser_preview":
+        case "same_as_input_requires_native":
+          labels.add("Output folder missing");
+          break;
+        case "model_hash_mismatch":
+          labels.add("Model hash mismatch");
+          break;
+        case "model_missing":
+        case "model_not_installed":
+        case "model_proof_not_eligible":
+        case "unsupported_architecture":
+          if (activeModel?.verifiedStatus === "auth_required") {
+            labels.add("Model source requires authentication");
+          } else {
+            labels.add("Verified model missing");
+          }
+          break;
+        case "browser_sandbox":
+          labels.add("Browser preview cannot run native separation");
+          break;
+        case "ffmpeg_missing":
+          labels.add("FFmpeg missing");
+          break;
+        case "python_missing":
+          labels.add("Python missing");
+          break;
+        case "audio_separator_missing":
+        case "audio_separator_cli_missing":
+          labels.add("audio-separator missing");
+          break;
+        case "torch_missing":
+          labels.add("PyTorch missing");
+          break;
+        case "ffmpeg_fallback_blocked":
+        case "cpu_mode_required":
+        case "cuda_missing":
+        case "mps_missing":
+        case "ensemble_insufficient_inputs":
+          labels.add("Backend missing");
+          break;
+        default:
+          labels.add(blocker.label);
+      }
+    });
+
+    return Array.from(labels);
+  }, [activeModel?.verifiedStatus, requiredBlockers]);
+
+  const primaryWorkflowWarnings = useMemo(() => {
+    const labels = new Set<string>();
+
+    warningBlockers.forEach((warning) => {
+      switch (warning.id) {
+        case "gpu_unused":
+          labels.add("GPU recommended");
+          break;
+        case "directml_experimental":
+          labels.add("DirectML not locally proven");
+          break;
+        case "cuda_not_proven":
+          labels.add("Experimental backend");
+          break;
+        case "browser_preview_mode":
+          labels.add("Browser preview cannot run native separation");
+          break;
+        default:
+          labels.add(warning.label);
+      }
+    });
+
+    if (modelFileStatus === "hash_unavailable" || modelFileStatus === "exists_hash_not_checked") {
+      labels.add("Hash unavailable");
+    }
+
+    if (activeModel?.memoryRisk === "high") {
+      labels.add("Large model may be slow");
+    }
+
+    if (appState.dropdownSettings.executionDevice && appState.dropdownSettings.executionDevice !== "cpu") {
+      labels.add("Static VRAM estimate");
+    }
+
+    return Array.from(labels);
+  }, [activeModel?.memoryRisk, appState.dropdownSettings.executionDevice, modelFileStatus, warningBlockers]);
+
+  const primaryReadinessSteps = useMemo(() => {
+    const isElectron = !!(window as any).uvr;
+    const hasInputs = appState.selectedInputs.length > 0;
+    const inputsVerified = hasInputs && !selectedInputFiles.some((file) => file.source !== "electron_path");
+    const outputReady = appState.checkboxSettings.sameAsInputFolder
+      ? inputsVerified
+      : outputFolderVerifyStatus === "verified_writable";
+    const backendReady = isElectron && ffmpegStatus === "ready" && backendSpecs?.canRunAISeparation === true;
+
+    return [
+      {
+        label: "Input",
+        status: inputsVerified ? `${appState.selectedInputs.length} input ready` : "Input needed",
+        ready: inputsVerified,
+        detail: inputsVerified ? "Local file path verified." : "Select a local audio file with the native picker.",
+      },
+      {
+        label: "Output",
+        status: outputReady ? "Output folder ready" : "Output folder needed",
+        ready: outputReady,
+        detail: outputReady ? "Write target is ready." : "Select a writable output folder.",
+      },
+      {
+        label: "Model",
+        status: isModelVerifiedForRun ? "Verified model ready" : "Verified model needed",
+        ready: isModelVerifiedForRun,
+        detail: isModelVerifiedForRun
+          ? "Local SHA-256 matches proof metadata."
+          : "Open Model Manager to add or verify a model.",
+      },
+      {
+        label: "Backend",
+        status: backendReady
+          ? "Backend ready"
+          : isElectron
+            ? "Backend missing"
+            : "Browser preview cannot run native separation",
+        ready: backendReady,
+        detail: backendReady
+          ? "Python, audio-separator, PyTorch, and FFmpeg are available."
+          : "Use Host Setup and diagnostics to repair the local runtime.",
+      },
+      {
+        label: "Run status",
+        status:
+          computedPipelineMode === "ai_backend_ready"
+            ? "Ready for local run"
+            : isModelVerifiedForRun
+              ? `Blocked: ${primaryWorkflowBlockers.length} requirements missing`
+              : "Proof blocked: verified model missing",
+        ready: computedPipelineMode === "ai_backend_ready",
+        detail:
+          computedPipelineMode === "ai_backend_ready"
+            ? "Run will start a native local separation and verify real outputs."
+            : "Resolve the blockers before starting AI separation.",
+      },
+    ];
+  }, [
+    appState.checkboxSettings.sameAsInputFolder,
+    appState.selectedInputs.length,
+    backendSpecs?.canRunAISeparation,
+    computedPipelineMode,
+    ffmpegStatus,
+    isModelVerifiedForRun,
+    outputFolderVerifyStatus,
+    primaryWorkflowBlockers.length,
+    selectedInputFiles,
+  ]);
 
   // Dynamic model file verification hook (Rule 17)
   useEffect(() => {
@@ -1063,9 +1278,9 @@ export default function ClassicConsole({
             setModelRegistryState((currentList) =>
               currentList.map((m) =>
                 m.id === activeModel.id
-                  ? (m.downloaded && (!res.localPath || m.filePath === res.localPath)
+                  ? m.downloaded && (!res.localPath || m.filePath === res.localPath)
                     ? m
-                    : { ...m, downloaded: true, filePath: res.localPath || m.filePath })
+                    : { ...m, downloaded: true, filePath: res.localPath || m.filePath }
                   : m,
               ),
             );
@@ -1184,14 +1399,10 @@ export default function ClassicConsole({
 
   // Generate dynamic live output filename predictions (Rule 11)
   const predictedOutputNames = useMemo(() => {
-    const activeMethodOpt =
-      PROCESS_METHODS.find((m) => m.id === appState.processMethodId) ||
-      PROCESS_METHODS[0];
+    const activeMethodOpt = PROCESS_METHODS.find((m) => m.id === appState.processMethodId) || PROCESS_METHODS[0];
     const dummyReq: ProcessingRequest = {
       inputs: appState.selectedInputs,
-      outputFolder: appState.checkboxSettings.sameAsInputFolder
-        ? "(Same as Input)"
-        : appState.selectedOutputFolder,
+      outputFolder: appState.checkboxSettings.sameAsInputFolder ? "(Same as Input)" : appState.selectedOutputFolder,
       format: appState.outputFormat,
       model: activeModel,
       verifiedModelLocalPath,
@@ -1199,6 +1410,7 @@ export default function ClassicConsole({
       processMethod: activeMethodOpt.id,
       selectedDevice: "cpu",
       customPythonPath: customPythonPath,
+      customFFmpegPath: customFFmpegPath,
       parameters: appState.dropdownSettings,
       options: {
         ttaActive: appState.checkboxSettings.ttaActive,
@@ -1219,6 +1431,8 @@ export default function ClassicConsole({
     appState.processMethodId,
     activeModel,
     verifiedModelLocalPath,
+    customPythonPath,
+    customFFmpegPath,
     appState.outputFormat,
     appState.checkboxSettings,
   ]);
@@ -1245,9 +1459,7 @@ export default function ClassicConsole({
         consoleLogs: [
           `[preflight-diag] INITIALIZING CRITICAL VALIDATION CHECK...`,
           `[error] PRECONDITION BLOCKED! Validation failed with following issues:`,
-          ...validationErrors.map(
-            (e) => `  -> Error field: [${e.field}] message: "${e.message}"`,
-          ),
+          ...validationErrors.map((e) => `  -> Error field: [${e.field}] message: "${e.message}"`),
           `[error] Separation aborted. Correct setting parameters to release lock.`,
           ...prev.consoleLogs,
         ],
@@ -1289,7 +1501,9 @@ export default function ClassicConsole({
         processingStatus: "validating",
         consoleLogs: [
           `[diagnostics] Spawning platform integrity checks...`,
-          `[ffmpeg] Querying native OS for FFmpeg system paths...`,
+          customFFmpegPath
+            ? `[ffmpeg] Checking selected FFmpeg executable path...`
+            : `[ffmpeg] Querying native OS for FFmpeg on PATH...`,
           ...prev.consoleLogs,
         ],
       }));
@@ -1299,12 +1513,14 @@ export default function ClassicConsole({
       ]);
 
       try {
-        const res = await uvr.checkFFmpegReady();
+        const res = await uvr.checkFFmpegReady(customFFmpegPath || undefined);
         if (res.ready) {
           setFfmpegStatus("ready");
           setSimulationLog((prevLog) => [
             ...prevLog,
-            `[ffmpeg] OK: Resolved native FFmpeg binary in system path. Dynamic decoding codecs supported.`,
+            customFFmpegPath
+              ? `[ffmpeg] OK: Resolved native FFmpeg from selected executable. This resolves only the FFmpeg runtime blocker.`
+              : `[ffmpeg] OK: Resolved native FFmpeg binary on PATH. Dynamic decoding codecs are FFmpeg-build-dependent.`,
           ]);
         } else {
           setFfmpegStatus("missing");
@@ -1312,14 +1528,14 @@ export default function ClassicConsole({
             ...prev,
             processingStatus: "error",
             consoleLogs: [
-              `[ffmpeg] FAILED: Could not locate FFmpeg in path.`,
-              `[error] FFmpeg is missing! Please install or add "ffmpeg" to path variables.`,
+              `[ffmpeg] FAILED: ${res.userMessage || "Could not run FFmpeg."}`,
+              `[error] FFmpeg is missing or invalid. Select a local FFmpeg executable or install FFmpeg on PATH.`,
               ...prev.consoleLogs,
             ],
           }));
           setSimulationLog([
-            `[error] BLOCKED: FFmpeg system binary is missing!`,
-            `✖ FFmpeg must be installed and added to your system PATH to run local audio separation decode/encode formats.`,
+            `[error] BLOCKED: FFmpeg runtime is missing or invalid.`,
+            `Select a local ffmpeg executable or install FFmpeg on PATH. FFmpeg readiness does not verify model weights.`,
           ]);
           return;
         }
@@ -1328,22 +1544,20 @@ export default function ClassicConsole({
         setAppState((prev) => ({
           ...prev,
           processingStatus: "error",
-          consoleLogs: [
-            `[ffmpeg] FAILED checking pathway: ${e.message}`,
-            ...prev.consoleLogs,
-          ],
+          consoleLogs: [`[ffmpeg] FAILED checking pathway: ${e.message}`, ...prev.consoleLogs],
         }));
         return;
       }
 
       try {
-        const specs = await uvr.checkBackendDetails(customPythonPath || undefined);
+        const specs = await uvr.checkBackendDetails(customPythonPath || undefined, customFFmpegPath || undefined);
         setBackendSpecs(specs);
         if (!specs.canRunAISeparation) {
           setBackendStatus("missing_env");
-          const nativeBlockers = Array.isArray(specs.blockers) && specs.blockers.length > 0
-            ? specs.blockers.map((b: any) => `${b.id}: ${b.label}`)
-            : ["Python, audio-separator CLI, or PyTorch is not ready."];
+          const nativeBlockers =
+            Array.isArray(specs.blockers) && specs.blockers.length > 0
+              ? specs.blockers.map((b: any) => `${b.id}: ${b.label}`)
+              : ["Python, audio-separator CLI, or PyTorch is not ready."];
           setAppState((prev) => ({
             ...prev,
             processingStatus: "error",
@@ -1365,10 +1579,7 @@ export default function ClassicConsole({
         setAppState((prev) => ({
           ...prev,
           processingStatus: "error",
-          consoleLogs: [
-            `[backend_adapter] FAILED checking backend details: ${e.message}`,
-            ...prev.consoleLogs,
-          ],
+          consoleLogs: [`[backend_adapter] FAILED checking backend details: ${e.message}`, ...prev.consoleLogs],
         }));
         return;
       }
@@ -1411,10 +1622,7 @@ export default function ClassicConsole({
       setAppState((prev) => ({
         ...prev,
         processingStatus: "error",
-        consoleLogs: [
-          `[preflight-diag] BLOCKED: ${modelProofEligibility.displayMessage}`,
-          ...prev.consoleLogs,
-        ],
+        consoleLogs: [`[preflight-diag] BLOCKED: ${modelProofEligibility.displayMessage}`, ...prev.consoleLogs],
       }));
       setSimulationLog([
         `[error] BLOCKED: CPU AI proof requires a model with matching local SHA-256.`,
@@ -1423,14 +1631,10 @@ export default function ClassicConsole({
       return;
     }
 
-    const activeMethodOpt =
-      PROCESS_METHODS.find((m) => m.id === appState.processMethodId) ||
-      PROCESS_METHODS[0];
+    const activeMethodOpt = PROCESS_METHODS.find((m) => m.id === appState.processMethodId) || PROCESS_METHODS[0];
     const procRequest: ProcessingRequest = {
       inputs: appState.selectedInputs,
-      outputFolder: appState.checkboxSettings.sameAsInputFolder
-        ? "(Same as Input)"
-        : appState.selectedOutputFolder,
+      outputFolder: appState.checkboxSettings.sameAsInputFolder ? "(Same as Input)" : appState.selectedOutputFolder,
       format: appState.outputFormat,
       model: activeModel,
       verifiedModelLocalPath,
@@ -1439,6 +1643,7 @@ export default function ClassicConsole({
       userSelectedMode: userSelectedMode,
       selectedDevice: "cpu",
       customPythonPath: customPythonPath,
+      customFFmpegPath: customFFmpegPath,
       parameters: {
         ...appState.dropdownSettings,
         executionDevice: "cpu",
@@ -1470,10 +1675,7 @@ export default function ClassicConsole({
       ],
     }));
 
-    setSimulationLog([
-      `[adapter] Routing weight targets to ${adapter.id}`,
-      `[command] ${generatedCLI}`,
-    ]);
+    setSimulationLog([`[adapter] Routing weight targets to ${adapter.id}`, `[command] ${generatedCLI}`]);
 
     const uvr = (window as any).uvr;
     if (uvr && typeof uvr.startProcessing === "function") {
@@ -1491,25 +1693,16 @@ export default function ClassicConsole({
               ...prev.consoleLogs,
             ],
           }));
-          setSimulationLog((current) => [
-            ...current,
-            `[error] Separation failed: ${res.error}`,
-          ]);
+          setSimulationLog((current) => [...current, `[error] Separation failed: ${res.error}`]);
         }
       } catch (e: any) {
         setIsSimulating(false);
         setAppState((prev) => ({
           ...prev,
           processingStatus: "error",
-          consoleLogs: [
-            `[error] Local executing trigger exception: ${e.message}`,
-            ...prev.consoleLogs,
-          ],
+          consoleLogs: [`[error] Local executing trigger exception: ${e.message}`, ...prev.consoleLogs],
         }));
-        setSimulationLog((current) => [
-          ...current,
-          `[error] Execution trigger error: ${e.message}`,
-        ]);
+        setSimulationLog((current) => [...current, `[error] Execution trigger error: ${e.message}`]);
       }
       return;
     }
@@ -1526,10 +1719,7 @@ export default function ClassicConsole({
         ...prev.consoleLogs,
       ],
     }));
-    setSimulationLog((current) => [
-      ...current,
-      `[error] Native backend Unavailable. Browser simulation is blocked.`,
-    ]);
+    setSimulationLog((current) => [...current, `[error] Native backend Unavailable. Browser simulation is blocked.`]);
   };
 
   // --- 3. CONFIRMED PROCESSING SHUTDOWN SWITCHS (Rule 13) ---
@@ -1616,7 +1806,12 @@ export default function ClassicConsole({
     ]);
 
     try {
-      const res = await uvr.downloadModel(targetModel.id, targetModel.downloadUrl, targetModel.architecture, targetModel.name);
+      const res = await uvr.downloadModel(
+        targetModel.id,
+        targetModel.downloadUrl,
+        targetModel.architecture,
+        targetModel.name,
+      );
       if (!res?.success) {
         appendLogs([`[model_downloader] Download failed: ${res?.error || "Unknown downloader error."}`]);
         return;
@@ -1639,7 +1834,9 @@ export default function ClassicConsole({
 
       setModelRegistryState((currentList) =>
         currentList.map((m) =>
-          m.id === modelId ? { ...m, downloaded: true, filePath: verification.localPath || res.absolutePath || m.filePath } : m,
+          m.id === modelId
+            ? { ...m, downloaded: true, filePath: verification.localPath || res.absolutePath || m.filePath }
+            : m,
         ),
       );
       setModelFileStatus("hash_verified");
@@ -1665,10 +1862,7 @@ export default function ClassicConsole({
           setAppState((prev) => ({
             ...prev,
             selectedInputs: [...prev.selectedInputs, ...filePaths],
-            consoleLogs: [
-              `[filesystem] Imported native file tracks: ${filePaths.join(", ")}`,
-              ...prev.consoleLogs,
-            ],
+            consoleLogs: [`[filesystem] Imported native file tracks: ${filePaths.join(", ")}`, ...prev.consoleLogs],
           }));
           setSimulationLog((current) => [
             ...current,
@@ -1694,10 +1888,7 @@ export default function ClassicConsole({
           setAppState((prev) => ({
             ...prev,
             selectedInputs: [...prev.selectedInputs, ...fileNames],
-            consoleLogs: [
-              `[filesystem] Imported local audio tracks: ${fileNames.join(", ")}`,
-              ...prev.consoleLogs,
-            ],
+            consoleLogs: [`[filesystem] Imported local audio tracks: ${fileNames.join(", ")}`, ...prev.consoleLogs],
           }));
           setSimulationLog((current) => [
             ...current,
@@ -1714,25 +1905,16 @@ export default function ClassicConsole({
         "studio_live_drums.flac",
         "synths_arpeggios_mono.wav",
       ];
-      const item =
-        defaultTrackSuggestions[
-          Math.floor(Math.random() * defaultTrackSuggestions.length)
-        ];
+      const item = defaultTrackSuggestions[Math.floor(Math.random() * defaultTrackSuggestions.length)];
       const uniqueName = `${item.split(".")[0]}_${Math.floor(Math.random() * 1000)}.${item.split(".")[1]}`;
 
       setAppState((prev) => ({
         ...prev,
         selectedInputs: [...prev.selectedInputs, uniqueName],
-        consoleLogs: [
-          `[filesystem] Added custom file queue track: "${uniqueName}"`,
-          ...prev.consoleLogs,
-        ],
+        consoleLogs: [`[filesystem] Added custom file queue track: "${uniqueName}"`, ...prev.consoleLogs],
       }));
 
-      setSimulationLog((current) => [
-        ...current,
-        `[filesystem] Added input track to ensembler heap: "${uniqueName}"`,
-      ]);
+      setSimulationLog((current) => [...current, `[filesystem] Added input track to ensembler heap: "${uniqueName}"`]);
     }
   };
 
@@ -1743,10 +1925,7 @@ export default function ClassicConsole({
       return {
         ...prev,
         selectedInputs: copy,
-        consoleLogs: [
-          `[filesystem] Removed input index target: "${removed[0]}"`,
-          ...prev.consoleLogs,
-        ],
+        consoleLogs: [`[filesystem] Removed input index target: "${removed[0]}"`, ...prev.consoleLogs],
       };
     });
   };
@@ -1819,6 +1998,114 @@ export default function ClassicConsole({
               text="Help: Drag and drop files or folders directly into the window, configure your preferred audio-separation model constraints, choose your execution backend, and click 'Run Stem Extraction'."
             />
 
+            <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.04] p-4 space-y-4 shadow-[0_0_24px_rgba(16,185,129,0.08)]">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-emerald-500/15 pb-3">
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-mono font-extrabold uppercase tracking-widest text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5">
+                      Main Audio Separator Workflow
+                    </span>
+                    <span
+                      className={`text-[10px] font-mono font-extrabold uppercase rounded px-2 py-0.5 border ${
+                        computedPipelineMode === "ai_backend_ready"
+                          ? "text-emerald-300 bg-emerald-500/10 border-emerald-500/25"
+                          : "text-rose-300 bg-rose-500/10 border-rose-500/20"
+                      }`}
+                    >
+                      {computedPipelineMode === "ai_backend_ready"
+                        ? "Ready for local run"
+                        : `Blocked: ${primaryWorkflowBlockers.length} requirements missing`}
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-display font-bold text-white">Run Readiness</h3>
+                  <p className="text-xs text-slate-400">
+                    Select input - select output - choose model - check readiness - run - show progress - show real
+                    outputs.
+                  </p>
+                </div>
+                {!isModelVerifiedForRun && (
+                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200 font-mono max-w-xl">
+                    Proof blocked: verified model missing. Open Model Manager to add or verify a model.
+                  </div>
+                )}
+                <div
+                  className={`rounded-lg border px-3 py-2 text-xs font-mono max-w-xl ${
+                    isModelVerifiedForRun
+                      ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
+                      : "border-slate-700 bg-slate-950/60 text-slate-400"
+                  }`}
+                >
+                  {isModelVerifiedForRun ? "Verified proof model available" : "Verified proof model missing"}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-2.5">
+                {primaryReadinessSteps.map((step, index) => (
+                  <div
+                    key={step.label}
+                    className={`rounded-lg border p-3 min-h-[120px] flex flex-col justify-between ${
+                      step.ready ? "bg-emerald-500/[0.06] border-emerald-500/25" : "bg-slate-950/55 border-slate-800"
+                    }`}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-mono font-bold uppercase text-slate-500">
+                          {index + 1}. {step.label}
+                        </span>
+                        {step.ready ? (
+                          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                        ) : (
+                          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                        )}
+                      </div>
+                      <div
+                        className={`text-xs font-bold leading-snug ${step.ready ? "text-emerald-300" : "text-slate-200"}`}
+                      >
+                        {step.status}
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-slate-500 leading-snug pt-3">{step.detail}</div>
+                  </div>
+                ))}
+              </div>
+
+              {(primaryWorkflowBlockers.length > 0 || primaryWorkflowWarnings.length > 0) && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 border-t border-emerald-500/10 pt-3">
+                  {primaryWorkflowBlockers.length > 0 && (
+                    <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.04] p-3">
+                      <div className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-rose-300 mb-2">
+                        Blocked: {primaryWorkflowBlockers.length} requirements missing
+                      </div>
+                      <ul className="space-y-1 text-[11px] text-rose-200 font-mono">
+                        {primaryWorkflowBlockers.map((label) => (
+                          <li key={label} className="flex items-start gap-2">
+                            <Lock className="w-3 h-3 mt-0.5 shrink-0 text-rose-400" />
+                            <span>{label}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {primaryWorkflowWarnings.length > 0 && (
+                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-3">
+                      <div className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-amber-300 mb-2">
+                        Warnings
+                      </div>
+                      <ul className="space-y-1 text-[11px] text-amber-100 font-mono">
+                        {primaryWorkflowWarnings.map((label) => (
+                          <li key={label} className="flex items-start gap-2">
+                            <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0 text-amber-400" />
+                            <span>{label}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="space-y-4">
               {/* FILE QUEUE ZONE: MULTIPLE FILES HANDLING */}
               <div className="space-y-2">
@@ -1840,8 +2127,7 @@ export default function ClassicConsole({
                       >
                         <label className="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-mono flex items-center gap-1.5 cursor-help">
                           <Music className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-                          Selected Input Tracks Queue (
-                          {appState.selectedInputs.length})
+                          Selected Input Tracks Queue ({appState.selectedInputs.length})
                         </label>
                       </InteractiveTooltip>
                       <span className="text-[8px] font-mono text-cyan-500 uppercase font-extrabold bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-500/10">
@@ -1899,40 +2185,36 @@ export default function ClassicConsole({
                           </span>
                         </InteractiveTooltip>
                         <div className="flex bg-[#070913] p-1 rounded-xl border border-white/10 font-sans relative w-48">
-                          {(["WAV", "FLAC", "MP3"] as OutputFormat[]).map(
-                            (fmt) => {
-                              const isSelected = appState.outputFormat === fmt;
-                              return (
-                                <button
-                                  key={fmt}
-                                  onClick={() =>
-                                    setAppState((prev) => ({
-                                      ...prev,
-                                      outputFormat: fmt,
-                                    }))
-                                  }
-                                  className={`flex-grow relative py-1 rounded-lg text-[10px] font-bold select-none transition-all duration-300 cursor-pointer text-center outline-none ${
-                                    isSelected
-                                      ? "text-white"
-                                      : "text-slate-500 hover:text-slate-300"
-                                  }`}
-                                >
-                                  {isSelected && (
-                                    <motion.div
-                                      layoutId="activeFormatPill"
-                                      className="absolute inset-0 bg-white/10 shadow-[inset_0_1px_0_1px_rgba(255,255,255,0.08),0_2px_4px_rgba(0,0,0,0.5)] rounded-lg border border-white/10"
-                                      transition={{
-                                        type: "spring",
-                                        stiffness: 380,
-                                        damping: 28,
-                                      }}
-                                    />
-                                  )}
-                                  <span className="relative z-10">{fmt}</span>
-                                </button>
-                              );
-                            },
-                          )}
+                          {(["WAV", "FLAC", "MP3"] as OutputFormat[]).map((fmt) => {
+                            const isSelected = appState.outputFormat === fmt;
+                            return (
+                              <button
+                                key={fmt}
+                                onClick={() =>
+                                  setAppState((prev) => ({
+                                    ...prev,
+                                    outputFormat: fmt,
+                                  }))
+                                }
+                                className={`flex-grow relative py-1 rounded-lg text-[10px] font-bold select-none transition-all duration-300 cursor-pointer text-center outline-none ${
+                                  isSelected ? "text-white" : "text-slate-500 hover:text-slate-300"
+                                }`}
+                              >
+                                {isSelected && (
+                                  <motion.div
+                                    layoutId="activeFormatPill"
+                                    className="absolute inset-0 bg-white/10 shadow-[inset_0_1px_0_1px_rgba(255,255,255,0.08),0_2px_4px_rgba(0,0,0,0.5)] rounded-lg border border-white/10"
+                                    transition={{
+                                      type: "spring",
+                                      stiffness: 380,
+                                      damping: 28,
+                                    }}
+                                  />
+                                )}
+                                <span className="relative z-10">{fmt}</span>
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>
@@ -1960,10 +2242,7 @@ export default function ClassicConsole({
                       >
                         <input
                           type="checkbox"
-                          checked={
-                            appState.checkboxSettings.createFolderPerTrack ||
-                            false
-                          }
+                          checked={appState.checkboxSettings.createFolderPerTrack || false}
                           onChange={(e) =>
                             setAppState((prev) => ({
                               ...prev,
@@ -1980,9 +2259,7 @@ export default function ClassicConsole({
                       <label className="flex items-center gap-1.5 cursor-pointer text-[10px] font-mono text-slate-400 hover:text-white transition-colors">
                         <input
                           type="checkbox"
-                          checked={
-                            appState.checkboxSettings.sameAsInputFolder || false
-                          }
+                          checked={appState.checkboxSettings.sameAsInputFolder || false}
                           onChange={(e) =>
                             setAppState((prev) => ({
                               ...prev,
@@ -2051,7 +2328,7 @@ export default function ClassicConsole({
                               const firstFile = files[0];
                               const relativePath = firstFile.webkitRelativePath;
                               // Approximate folder name
-                              const folderName = relativePath ? relativePath.split('/')[0] : "Selected Folder";
+                              const folderName = relativePath ? relativePath.split("/")[0] : "Selected Folder";
                               setAppState((prev) => ({
                                 ...prev,
                                 selectedOutputFolder: `[Browser Directory: ${folderName}]`,
@@ -2087,7 +2364,10 @@ export default function ClassicConsole({
               {/* PROCESS METHODS SELECT GRID */}
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 bg-white/[0.02] p-4.5 rounded-xl border border-white/5 shadow-inner">
                 {/* Process Method / Options Section */}
-                <div className="grid gap-4 xl:col-span-2 min-w-0 w-full box-border" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))' }}>
+                <div
+                  className="grid gap-4 xl:col-span-2 min-w-0 w-full box-border"
+                  style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))" }}
+                >
                   {/* Choose Process Category Options (Rule 3 & 7) */}
                   <div className="space-y-1.5 flex flex-col font-medium">
                     <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-mono inline-block min-h-[32px] flex items-end pb-1">
@@ -2111,45 +2391,36 @@ export default function ClassicConsole({
                           className="w-full bg-[#0a0c14]/40 border border-[#ffffff]/10 hover:border-white/20 rounded-lg pl-3 pr-8 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500/20 cursor-pointer uppercase font-mono font-bold transition-all appearance-none truncate"
                         >
                           {PROCESS_METHODS.map((m) => (
-                            <option
-                              key={m.id}
-                              value={m.id}
-                              className="bg-[#0e111d] text-slate-200"
-                            >
+                            <option key={m.id} value={m.id} className="bg-[#0e111d] text-slate-200">
                               {m.name}
                             </option>
                           ))}
                         </select>
-                        <div className="absolute right-3 top-2.5 pointer-events-none text-slate-500 text-[10px]">
-                          ▼
-                        </div>
+                        <div className="absolute right-3 top-2.5 pointer-events-none text-slate-500 text-[10px]">▼</div>
                       </div>
                     </InteractiveTooltip>
                   </div>
 
                   {/* Dynamic Settings Fields (Rule 18) - Render BOTH options next to each other */}
-                  <div className="grid gap-3 min-w-0 w-full box-border" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))' }}>
+                  <div
+                    className="grid gap-3 min-w-0 w-full box-border"
+                    style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))" }}
+                  >
                     {(() => {
-                      const firstOptionSetting =
-                        SETTINGS_SCHEMAS[appState.processMethodId]?.[0];
-                      const secondOptionSetting =
-                        SETTINGS_SCHEMAS[appState.processMethodId]?.[1];
+                      const firstOptionSetting = SETTINGS_SCHEMAS[appState.processMethodId]?.[0];
+                      const secondOptionSetting = SETTINGS_SCHEMAS[appState.processMethodId]?.[1];
 
                       const renderSetting = (setting: any) => {
                         if (!setting) return null;
                         const isDisabled =
-                          setting.utilityRule === "split_mode_dependent" &&
-                          appState.checkboxSettings.splitMode;
+                          setting.utilityRule === "split_mode_dependent" && appState.checkboxSettings.splitMode;
                         const stateValue =
                           setting.key === "noiseReduction"
                             ? appState.dropdownSettings.noiseReduction
                             : appState.dropdownSettings.chunks;
 
                         return (
-                          <div
-                            className="space-y-1.5 flex flex-col font-medium"
-                            key={setting.key}
-                          >
+                          <div className="space-y-1.5 flex flex-col font-medium" key={setting.key}>
                             <span className="text-[10px] uppercase font-bold tracking-wider text-green-500/80 font-mono block whitespace-normal break-words min-h-[32px] flex items-end pb-1 leading-tight">
                               {setting.label}
                             </span>
@@ -2179,17 +2450,11 @@ export default function ClassicConsole({
                                         : "text-slate-200"
                                     }`}
                                   >
-                                    {setting.allowedValues?.map(
-                                      (val: string) => (
-                                        <option
-                                          key={val}
-                                          value={val}
-                                          className="bg-[#0e111d] text-slate-200"
-                                        >
-                                          {val}
-                                        </option>
-                                      ),
-                                    )}
+                                    {setting.allowedValues?.map((val: string) => (
+                                      <option key={val} value={val} className="bg-[#0e111d] text-slate-200">
+                                        {val}
+                                      </option>
+                                    ))}
                                   </select>
                                 ) : (
                                   <div className="flex gap-2 items-center px-1">
@@ -2264,44 +2529,28 @@ export default function ClassicConsole({
                       >
                         {modelRegistryState
                           .filter((m) => {
-                            const method = PROCESS_METHODS.find(
-                              (pr) => pr.id === appState.processMethodId,
-                            );
+                            const method = PROCESS_METHODS.find((pr) => pr.id === appState.processMethodId);
                             if (!method) return false;
-                            if (method.id === "ensemble")
-                              return m.architecture === "Ensemble";
-                            if (method.id === "bs_roformer")
-                              return m.architecture === "RoFormer";
-                            if (method.id === "vr")
-                              return m.architecture === "VR";
-                            if (method.id === "mdx")
-                              return m.architecture === "MDX-Net";
-                            if (method.id === "demucs")
-                              return m.architecture === "Demucs";
-                            if (method.id === "custom")
-                              return m.architecture === "Custom";
+                            if (method.id === "ensemble") return m.architecture === "Ensemble";
+                            if (method.id === "bs_roformer") return m.architecture === "RoFormer";
+                            if (method.id === "vr") return m.architecture === "VR";
+                            if (method.id === "mdx") return m.architecture === "MDX-Net";
+                            if (method.id === "demucs") return m.architecture === "Demucs";
+                            if (method.id === "custom") return m.architecture === "Custom";
                             return false;
                           })
                           .map((m) => (
-                            <option
-                              key={m.id}
-                              value={m.id}
-                              className="bg-[#0e111d] text-slate-200 font-mono"
-                            >
+                            <option key={m.id} value={m.id} className="bg-[#0e111d] text-slate-200 font-mono">
                               {m.name} {!m.downloaded ? " (Unavailable)" : ""}
                             </option>
                           ))}
                       </select>
-                      <div className="absolute right-3 top-2.5 pointer-events-none text-slate-500 text-[10px]">
-                        ▼
-                      </div>
+                      <div className="absolute right-3 top-2.5 pointer-events-none text-slate-500 text-[10px]">▼</div>
 
                       {/* Quick Cache Status download trigger trigger button (Rule 17) */}
                       {!activeModel.downloaded && (
                         <button
-                          onClick={() =>
-                            handleTriggerModelDownload(activeModel.id)
-                          }
+                          onClick={() => handleTriggerModelDownload(activeModel.id)}
                           disabled={downloadingModelId !== null}
                           className="px-3.5 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-bold transition-all flex items-center justify-center cursor-pointer min-w-[130px]"
                           title="Download model weights to safe local cache folder"
@@ -2322,7 +2571,10 @@ export default function ClassicConsole({
                     </div>
                   </InteractiveTooltip>
                   {activeModel?.description && (
-                    <div className="mt-1 text-xs text-slate-400 bg-white/5 border border-white/5 p-2 rounded line-clamp-2" title={activeModel.description}>
+                    <div
+                      className="mt-1 text-xs text-slate-400 bg-white/5 border border-white/5 p-2 rounded line-clamp-2"
+                      title={activeModel.description}
+                    >
                       {activeModel.description}
                     </div>
                   )}
@@ -2340,7 +2592,10 @@ export default function ClassicConsole({
                   </span>
                 </div>
 
-                <div className="grid gap-3.5 text-xs min-w-0" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))' }}>
+                <div
+                  className="grid gap-3.5 text-xs min-w-0"
+                  style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))" }}
+                >
                   {/* Common GPU/CPU Mapping */}
                   <div className="flex flex-col gap-2 p-3.5 bg-black/30 rounded-xl border border-white/5 col-span-full">
                     <div className="flex justify-between items-center pb-1.5 border-b border-white/5">
@@ -2351,11 +2606,13 @@ export default function ClassicConsole({
                         Diagnostics Active
                       </span>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mt-1.5">
                       {/* Left: Device selection select */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wider">Device Mode</label>
+                        <label className="text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wider">
+                          Device Mode
+                        </label>
                         <select
                           value={appState.dropdownSettings.executionDevice || "cpu"}
                           onChange={(e) =>
@@ -2369,24 +2626,36 @@ export default function ClassicConsole({
                           }
                           className="w-full bg-[#0a0c14]/40 border border-[#ffffff]/10 hover:border-white/20 rounded-lg pl-3 pr-8 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 cursor-pointer uppercase font-mono font-bold transition-all appearance-none truncate"
                         >
-                          <option value="auto" className="bg-[#0e111d] text-slate-200">Auto Detect</option>
-                          <option value="cpu" className="bg-[#0e111d] text-slate-200">CPU Only</option>
-                          <option value="cuda" className="bg-[#0e111d] text-slate-200">NVIDIA CUDA</option>
-                          <option value="mps" className="bg-[#0e111d] text-slate-200">Apple MPS</option>
-                          <option value="dml" className="bg-[#0e111d] text-slate-200">DirectML (Experimental / Delegated / Not locally proven)</option>
+                          <option value="auto" className="bg-[#0e111d] text-slate-200">
+                            Auto Detect
+                          </option>
+                          <option value="cpu" className="bg-[#0e111d] text-slate-200">
+                            CPU Only
+                          </option>
+                          <option value="cuda" className="bg-[#0e111d] text-slate-200">
+                            NVIDIA CUDA
+                          </option>
+                          <option value="mps" className="bg-[#0e111d] text-slate-200">
+                            Apple MPS
+                          </option>
+                          <option value="directml" className="bg-[#0e111d] text-slate-200">
+                            DirectML (Experimental / Delegated / Not locally proven)
+                          </option>
                         </select>
                       </div>
 
                       {/* Right: Device status badge */}
                       <div className="space-y-1.5 flex flex-col justify-end">
-                        <label className="text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wider">Device Status</label>
+                        <label className="text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wider">
+                          Device Status
+                        </label>
                         <div className="p-2 rounded-lg bg-black/50 border border-white/10 flex flex-col justify-center min-h-[34px]">
                           {(() => {
                             const devMode = appState.dropdownSettings.executionDevice || "cpu";
-                            
+
                             // Check compatibility map
                             const capability = BACKEND_COMPATIBILITY_MAP[activeModel?.architecture || "VR"];
-                            
+
                             if (!(window as any).uvr) {
                               return (
                                 <span className="text-yellow-400 text-xs font-mono font-bold uppercase truncate">
@@ -2394,7 +2663,7 @@ export default function ClassicConsole({
                                 </span>
                               );
                             }
-                            
+
                             if (!backendSpecs) {
                               return (
                                 <span className="text-slate-400 text-xs font-mono font-bold uppercase animate-pulse truncate">
@@ -2406,7 +2675,10 @@ export default function ClassicConsole({
                             // Model capability override check
                             if (devMode !== "cpu" && capability && capability.gpuExecutionState === "missing") {
                               return (
-                                <span className="text-red-400 text-xs font-mono font-bold uppercase truncate" title="Model architecture does not support GPU acceleration.">
+                                <span
+                                  className="text-red-400 text-xs font-mono font-bold uppercase truncate"
+                                  title="Model architecture does not support GPU acceleration."
+                                >
                                   ● Backend Does Not Support Selected Device
                                 </span>
                               );
@@ -2423,14 +2695,20 @@ export default function ClassicConsole({
                             if (devMode === "cuda") {
                               if (!backendSpecs.torchInstalled) {
                                 return (
-                                  <span className="text-red-400 text-xs font-mono font-bold uppercase truncate" title="NVIDIA driver may be present, but PyTorch and compatible Python backend are not fully installed.">
+                                  <span
+                                    className="text-red-400 text-xs font-mono font-bold uppercase truncate"
+                                    title="NVIDIA driver may be present, but PyTorch and compatible Python backend are not fully installed."
+                                  >
                                     ● GPU Blocked: Missing compatible backend
                                   </span>
                                 );
                               }
                               if (!backendSpecs.cudaAvailable) {
                                 return (
-                                  <span className="text-orange-400 text-xs font-mono font-bold uppercase truncate" title="NVIDIA CUDA toolkit or CUDA-enabled PyTorch build is missing.">
+                                  <span
+                                    className="text-orange-400 text-xs font-mono font-bold uppercase truncate"
+                                    title="NVIDIA CUDA toolkit or CUDA-enabled PyTorch build is missing."
+                                  >
                                     ● GPU Blocked: Missing CUDA PyTorch
                                   </span>
                                 );
@@ -2442,7 +2720,8 @@ export default function ClassicConsole({
                                   </span>
                                   {backendSpecs.gpuDeviceName && backendSpecs.gpuDeviceName !== "None" && (
                                     <span className="text-[9px] text-slate-400 uppercase font-mono truncate">
-                                      {backendSpecs.gpuDeviceName} {backendSpecs.vramDisplay !== 'None' ? `(${backendSpecs.vramDisplay})` : ''}
+                                      {backendSpecs.gpuDeviceName}{" "}
+                                      {backendSpecs.vramDisplay !== "None" ? `(${backendSpecs.vramDisplay})` : ""}
                                     </span>
                                   )}
                                 </div>
@@ -2452,7 +2731,10 @@ export default function ClassicConsole({
                             if (devMode === "mps") {
                               if (!backendSpecs.mpsAvailable) {
                                 return (
-                                  <span className="text-orange-400 text-xs font-mono font-bold uppercase truncate" title="Apple Metal Performance Shaders are not available on this platform.">
+                                  <span
+                                    className="text-orange-400 text-xs font-mono font-bold uppercase truncate"
+                                    title="Apple Metal Performance Shaders are not available on this platform."
+                                  >
                                     ● MPS Not Available
                                   </span>
                                 );
@@ -2464,9 +2746,12 @@ export default function ClassicConsole({
                               );
                             }
 
-                            if (devMode === "dml") {
+                            if (devMode === "directml" || devMode === "dml") {
                               return (
-                                <span className="text-cyan-400 text-[10px] font-mono font-bold uppercase truncate" title="DirectML conversion mode will be dispatched.">
+                                <span
+                                  className="text-cyan-400 text-[10px] font-mono font-bold uppercase truncate"
+                                  title="DirectML conversion mode will be dispatched."
+                                >
                                   ● GPU (DML - Delegated / Not proven)
                                 </span>
                               );
@@ -2513,8 +2798,7 @@ export default function ClassicConsole({
                   </div>
 
                   {/* Mutually exclusive stem selectors (Rule 10) */}
-                  {(appState.processMethodId === "vr" ||
-                    appState.processMethodId === "mdx") && (
+                  {(appState.processMethodId === "vr" || appState.processMethodId === "mdx") && (
                     <>
                       <InteractiveTooltip
                         enabled={showTooltips}
@@ -2530,9 +2814,7 @@ export default function ClassicConsole({
                         >
                           <input
                             type="checkbox"
-                            disabled={
-                              appState.checkboxSettings.saveInstrumentalOnly
-                            }
+                            disabled={appState.checkboxSettings.saveInstrumentalOnly}
                             checked={appState.checkboxSettings.saveVocalsOnly}
                             onChange={(e) =>
                               setAppState((prev) => ({
@@ -2564,9 +2846,7 @@ export default function ClassicConsole({
                           <input
                             type="checkbox"
                             disabled={appState.checkboxSettings.saveVocalsOnly}
-                            checked={
-                              appState.checkboxSettings.saveInstrumentalOnly
-                            }
+                            checked={appState.checkboxSettings.saveInstrumentalOnly}
                             onChange={(e) =>
                               setAppState((prev) => ({
                                 ...prev,
@@ -2684,9 +2964,7 @@ export default function ClassicConsole({
                           }
                           className="w-4 h-4 rounded border-slate-600 bg-black text-cyan-500 focus:ring-0 focus:ring-offset-0"
                         />
-                        <span className="text-[#60a5fa] font-bold">
-                          Save All Intermediate Outputs
-                        </span>
+                        <span className="text-[#60a5fa] font-bold">Save All Intermediate Outputs</span>
                       </label>
                     )}
 
@@ -2733,10 +3011,7 @@ export default function ClassicConsole({
 
                 <div className="space-y-1 text-[11px] font-mono text-slate-300 bg-black/35 px-3.5 py-2.5 rounded-lg border border-white/5 max-h-24 overflow-y-auto">
                   {predictedOutputNames.map((name, idx) => (
-                    <div
-                      key={idx}
-                      className="flex gap-2 items-center text-slate-300"
-                    >
+                    <div key={idx} className="flex gap-2 items-center text-slate-300">
                       <span className="text-[#38bdf8]">•</span>
                       <span>{name}</span>
                     </div>
@@ -2749,10 +3024,15 @@ export default function ClassicConsole({
                 const hasInputs = appState.selectedInputs && appState.selectedInputs.length > 0;
                 const hasOutput = appState.checkboxSettings.sameAsInputFolder || !!appState.selectedOutputFolder;
                 const hasModel = !!activeModel;
-                const isModelVerified = !!verifiedModelLocalPath && modelProofEligibility.proofEligible && modelFileStatus === "hash_verified";
-                const isModelSupported = ['VR', 'MDX-Net', 'Demucs', 'RoFormer', 'MDXC', 'Custom', 'Ensemble'].includes(activeModel?.architecture || '');
+                const isModelVerified =
+                  !!verifiedModelLocalPath &&
+                  modelProofEligibility.proofEligible &&
+                  modelFileStatus === "hash_verified";
+                const isModelSupported = ["VR", "MDX-Net", "Demucs", "RoFormer", "MDXC", "Custom", "Ensemble"].includes(
+                  activeModel?.architecture || "",
+                );
                 const isFFmpegReady = ffmpegStatus === "ready";
-                const hasAIEnvironment = !!(backendSpecs?.canRunAISeparation);
+                const hasAIEnvironment = !!backendSpecs?.canRunAISeparation;
 
                 const aiBlockers: string[] = [];
                 if (!hasInputs) aiBlockers.push("Track selection queue is empty");
@@ -2761,19 +3041,24 @@ export default function ClassicConsole({
                   aiBlockers.push("No model selected");
                 } else {
                   if (!isModelVerified) aiBlockers.push(modelProofEligibility.displayMessage);
-                  if (!isModelSupported) aiBlockers.push(`Selected model architecture (${activeModel?.architecture || 'Unknown'}) is not supported`);
+                  if (!isModelSupported)
+                    aiBlockers.push(
+                      `Selected model architecture (${activeModel?.architecture || "Unknown"}) is not supported`,
+                    );
                 }
                 if (!backendSpecs?.pythonFound) aiBlockers.push("Host Python interpreter environment is missing");
                 else {
-                  if (!backendSpecs?.audioSeparatorInstalled) aiBlockers.push("Package Dependency `audio-separator` not found in current environment");
-                  if (!backendSpecs?.torchInstalled) aiBlockers.push("Library Bundle `PyTorch` is missing from environment");
+                  if (!backendSpecs?.audioSeparatorInstalled)
+                    aiBlockers.push("Package Dependency `audio-separator` not found in current environment");
+                  if (!backendSpecs?.torchInstalled)
+                    aiBlockers.push("Library Bundle `PyTorch` is missing from environment");
                 }
-                if (!isFFmpegReady) aiBlockers.push("System FFmpeg binary encoder not found on PATH");
+                if (!isFFmpegReady) aiBlockers.push("FFmpeg runtime not verified from selected executable or PATH");
 
                 const ffmpegBlockers: string[] = [];
                 if (!hasInputs) ffmpegBlockers.push("Track selection queue is empty");
                 if (!hasOutput) ffmpegBlockers.push("Output folder has not been configured");
-                if (!isFFmpegReady) ffmpegBlockers.push("System FFmpeg binary encoder not found on PATH");
+                if (!isFFmpegReady) ffmpegBlockers.push("FFmpeg runtime not verified from selected executable or PATH");
 
                 // Check pipeline status label description
                 let pipelineStateBadgeLabel = "Execution Blocked";
@@ -2784,7 +3069,8 @@ export default function ClassicConsole({
                 } else if (userSelectedMode === "ai") {
                   if (computedPipelineMode === "ai_backend_ready") {
                     pipelineStateBadgeLabel = "Ready for Local Run";
-                    pipelineBadgeColorClasses = "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 animate-pulse";
+                    pipelineBadgeColorClasses =
+                      "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 animate-pulse";
                   } else {
                     pipelineStateBadgeLabel = "Blocked — AI Requirements Unmet";
                     pipelineBadgeColorClasses = "bg-rose-500/10 text-rose-400 border border-rose-500/20";
@@ -2801,11 +3087,13 @@ export default function ClassicConsole({
                       <div className="flex flex-wrap justify-between items-center gap-2 border-b border-white/5 pb-2.5">
                         <h5 className="text-[10px] font-mono font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 mt-0.5">
                           <Sliders className="w-4 h-4 text-purple-400" />
-                          Run Mode & Readiness
+                          Advanced Run Mode Details
                         </h5>
                         <div className="flex items-center gap-1.5">
                           <span className="text-[9px] text-slate-500 font-mono font-bold uppercase">Status:</span>
-                          <span className={`text-[9px] font-mono font-extrabold uppercase px-2 py-0.5 rounded ${pipelineBadgeColorClasses}`}>
+                          <span
+                            className={`text-[9px] font-mono font-extrabold uppercase px-2 py-0.5 rounded ${pipelineBadgeColorClasses}`}
+                          >
                             {pipelineStateBadgeLabel}
                           </span>
                         </div>
@@ -2818,39 +3106,57 @@ export default function ClassicConsole({
                           type="button"
                           onClick={() => setUserSelectedMode("ai")}
                           className={`p-3.5 rounded-xl border text-left flex flex-col gap-2 cursor-pointer transition-all duration-300 relative overflow-hidden group
-                            ${userSelectedMode === "ai"
-                              ? "bg-[#0b0c16] border-purple-500/50 text-purple-100 shadow-md shadow-purple-950/25"
-                              : "bg-black/25 border-white/5 text-slate-500 hover:text-slate-300 hover:bg-black/35"
+                            ${
+                              userSelectedMode === "ai"
+                                ? "bg-[#0b0c16] border-purple-500/50 text-purple-100 shadow-md shadow-purple-950/25"
+                                : "bg-black/25 border-white/5 text-slate-500 hover:text-slate-300 hover:bg-black/35"
                             }`}
                         >
                           <div className="flex justify-between items-center w-full">
                             <span className="text-xs font-mono font-bold flex items-center gap-1.5 text-purple-200">
                               🧠 AI Model Backend
                             </span>
-                            <span className={`text-[8px] font-mono font-extrabold uppercase px-1.5 py-0.5 rounded-md border
-                              ${hasAIEnvironment && isModelVerified
-                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                : "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                            <span
+                              className={`text-[8px] font-mono font-extrabold uppercase px-1.5 py-0.5 rounded-md border
+                              ${
+                                hasAIEnvironment && isModelVerified
+                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                  : "bg-rose-500/10 text-rose-400 border-rose-500/20"
                               }`}
                             >
                               {hasAIEnvironment && isModelVerified ? "Available" : "Blocked"}
                             </span>
                           </div>
 
-                          <p className={`text-[11px] leading-snug font-sans ${userSelectedMode === "ai" ? "text-slate-300" : "text-slate-500"}`}>
-                            Local audio-separator run using a proof-eligible model. Requires verified SHA-256, Python, PyTorch, FFmpeg, and non-empty output stems.
+                          <p
+                            className={`text-[11px] leading-snug font-sans ${userSelectedMode === "ai" ? "text-slate-300" : "text-slate-500"}`}
+                          >
+                            Local audio-separator run using a proof-eligible model. Requires verified SHA-256, Python,
+                            PyTorch, FFmpeg, and non-empty output stems.
                           </p>
 
-                          <div className={`space-y-1 text-[9px] font-mono pt-1.5 border-t ${userSelectedMode === "ai" ? "border-purple-500/10" : "border-white/5"}`}>
-                            <div className="text-[8px] text-slate-500 uppercase tracking-widest font-bold">Prerequisites Checklist:</div>
+                          <div
+                            className={`space-y-1 text-[9px] font-mono pt-1.5 border-t ${userSelectedMode === "ai" ? "border-purple-500/10" : "border-white/5"}`}
+                          >
+                            <div className="text-[8px] text-slate-500 uppercase tracking-widest font-bold">
+                              Prerequisites Checklist:
+                            </div>
                             <div className="flex flex-wrap gap-2 text-[8px]">
-                              <span className={`flex items-center gap-1 ${hasAIEnvironment ? "text-emerald-400" : "text-slate-500"}`}>
-                                <span>{hasAIEnvironment ? "●" : "○"}</span> Python & Deps {hasAIEnvironment ? "✓" : "Missing"}
+                              <span
+                                className={`flex items-center gap-1 ${hasAIEnvironment ? "text-emerald-400" : "text-slate-500"}`}
+                              >
+                                <span>{hasAIEnvironment ? "●" : "○"}</span> Python & Deps{" "}
+                                {hasAIEnvironment ? "✓" : "Missing"}
                               </span>
-                              <span className={`flex items-center gap-1 ${isModelVerified ? "text-emerald-400" : "text-slate-500"}`}>
-                                <span>{isModelVerified ? "●" : "○"}</span> Model File {isModelVerified ? "Verified" : "Proof Blocked"}
+                              <span
+                                className={`flex items-center gap-1 ${isModelVerified ? "text-emerald-400" : "text-slate-500"}`}
+                              >
+                                <span>{isModelVerified ? "●" : "○"}</span> Model File{" "}
+                                {isModelVerified ? "Verified" : "Proof Blocked"}
                               </span>
-                              <span className={`flex items-center gap-1 ${isFFmpegReady ? "text-emerald-400" : "text-slate-500"}`}>
+                              <span
+                                className={`flex items-center gap-1 ${isFFmpegReady ? "text-emerald-400" : "text-slate-500"}`}
+                              >
                                 <span>{isFFmpegReady ? "●" : "○"}</span> FFmpeg {isFFmpegReady ? "✓" : "Missing"}
                               </span>
                             </div>
@@ -2858,13 +3164,15 @@ export default function ClassicConsole({
 
                           {(!hasAIEnvironment || !isModelVerified || !isFFmpegReady) && (
                             <div className="text-[9px] font-mono text-amber-400 leading-snug pt-1 px-2.5 py-1.5 rounded bg-amber-500/5 border border-amber-500/10 w-full mt-1.5 font-sans">
-                              <strong className="text-amber-300 uppercase text-[8px] block tracking-wide font-mono mb-0.5">Blocker reason:</strong>
+                              <strong className="text-amber-300 uppercase text-[8px] block tracking-wide font-mono mb-0.5">
+                                Blocker reason:
+                              </strong>
                               <span className="text-slate-400 leading-snug font-sans">
-                                {!hasAIEnvironment 
-                                  ? "Host Python environment / audio-separator is missing." 
-                                  : !isModelVerified 
+                                {!hasAIEnvironment
+                                  ? "Host Python environment / audio-separator is missing."
+                                  : !isModelVerified
                                     ? modelProofEligibility.displayMessage
-                                    : "FFmpeg binary is not registered on system PATH."}
+                                    : "FFmpeg runtime is not verified from selected executable or PATH."}
                               </span>
                             </div>
                           )}
@@ -2875,33 +3183,45 @@ export default function ClassicConsole({
                           type="button"
                           onClick={() => setUserSelectedMode("ffmpeg")}
                           className={`p-3.5 rounded-xl border text-left flex flex-col gap-2 cursor-pointer transition-all duration-300 relative overflow-hidden group
-                            ${userSelectedMode === "ffmpeg"
-                              ? "bg-[#0b141f] border-cyan-500/50 text-cyan-100 shadow-md shadow-cyan-950/25"
-                              : "bg-black/25 border-white/5 text-slate-500 hover:text-slate-300 hover:bg-black/35"
+                            ${
+                              userSelectedMode === "ffmpeg"
+                                ? "bg-[#0b141f] border-cyan-500/50 text-cyan-100 shadow-md shadow-cyan-950/25"
+                                : "bg-black/25 border-white/5 text-slate-500 hover:text-slate-300 hover:bg-black/35"
                             }`}
                         >
                           <div className="flex justify-between items-center w-full">
                             <span className="text-xs font-mono font-bold flex items-center gap-1.5 text-cyan-200">
                               ⚡ FFmpeg DSP Fallback
                             </span>
-                            <span className={`text-[8px] font-mono font-extrabold uppercase px-1.5 py-0.5 rounded-md border
-                              ${isFFmpegReady
-                                ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/20"
-                                : "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                            <span
+                              className={`text-[8px] font-mono font-extrabold uppercase px-1.5 py-0.5 rounded-md border
+                              ${
+                                isFFmpegReady
+                                  ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/20"
+                                  : "bg-rose-500/10 text-rose-400 border-rose-500/20"
                               }`}
                             >
                               {isFFmpegReady ? "Available" : "Blocked"}
                             </span>
                           </div>
 
-                          <p className={`text-[11px] leading-snug font-sans ${userSelectedMode === "ffmpeg" ? "text-slate-300" : "text-slate-500"}`}>
-                            <strong>FFmpeg DSP Fallback</strong> (Non-AI static DSP filtering / Not AI model separation) - Frequency-filter output designed for quick fallback baseline testing.
+                          <p
+                            className={`text-[11px] leading-snug font-sans ${userSelectedMode === "ffmpeg" ? "text-slate-300" : "text-slate-500"}`}
+                          >
+                            <strong>FFmpeg DSP Fallback</strong> (Non-AI static DSP filtering / Not AI model separation)
+                            - Frequency-filter output designed for quick fallback baseline testing.
                           </p>
 
-                          <div className={`space-y-1 text-[9px] font-mono pt-1.5 border-t ${userSelectedMode === "ffmpeg" ? "border-cyan-500/10" : "border-white/5"}`}>
-                            <div className="text-[8px] text-slate-500 uppercase tracking-widest font-bold">Prerequisites Checklist:</div>
+                          <div
+                            className={`space-y-1 text-[9px] font-mono pt-1.5 border-t ${userSelectedMode === "ffmpeg" ? "border-cyan-500/10" : "border-white/5"}`}
+                          >
+                            <div className="text-[8px] text-slate-500 uppercase tracking-widest font-bold">
+                              Prerequisites Checklist:
+                            </div>
                             <div className="flex flex-wrap gap-2 text-[8px]">
-                              <span className={`flex items-center gap-1 ${isFFmpegReady ? "text-cyan-400" : "text-slate-500"}`}>
+                              <span
+                                className={`flex items-center gap-1 ${isFFmpegReady ? "text-cyan-400" : "text-slate-500"}`}
+                              >
                                 <span>{isFFmpegReady ? "●" : "○"}</span> FFmpeg Binary {isFFmpegReady ? "✓" : "Missing"}
                               </span>
                             </div>
@@ -2909,8 +3229,12 @@ export default function ClassicConsole({
 
                           {!isFFmpegReady && (
                             <div className="text-[9px] font-mono text-[#fb7185] leading-snug pt-1 px-2.5 py-1.5 rounded bg-rose-500/5 border border-rose-500/10 w-full mt-1.5 font-sans">
-                              <strong className="text-rose-300 uppercase text-[8px] block tracking-wide font-mono mb-0.5">Blocker reason:</strong>
-                              <span className="text-slate-400 font-sans">FFmpeg statically compiled binary was not found. Please register bin paths globally.</span>
+                              <strong className="text-rose-300 uppercase text-[8px] block tracking-wide font-mono mb-0.5">
+                                Blocker reason:
+                              </strong>
+                              <span className="text-slate-400 font-sans">
+                                FFmpeg was not verified. Select a local executable or install FFmpeg on PATH.
+                              </span>
                             </div>
                           )}
                         </button>
@@ -2936,19 +3260,23 @@ export default function ClassicConsole({
                       {showSetupGuide && (
                         <div className="p-4 space-y-4 text-[11px] font-normal text-slate-300 leading-relaxed font-sans bg-[#0c0d15]/50">
                           <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                            <span className="text-[10px] font-mono uppercase text-slate-400">Setup Guide Help Controls</span>
+                            <span className="text-[10px] font-mono uppercase text-slate-400">
+                              Setup Guide Help Controls
+                            </span>
                             <HelpToggle sectionId="backend_setup_guide" label="Section Help" className="px-2 py-0.5" />
                           </div>
                           <HelpText
                             sectionId="backend_setup_guide"
                             text="Help: This section allows specifying custom parameters for local machine learning model configurations. Customize the host Python path override or trigger backend environment compatibility diagnostics."
                           />
-                          
+
                           {/* PYTHON ENVIRONMENT OVERRIDE */}
                           <div className="p-3.5 bg-slate-950/60 rounded-xl border border-slate-800/85 space-y-2">
                             <div className="flex flex-wrap justify-between items-center gap-2 text-[10px] font-mono font-bold text-slate-200 uppercase tracking-wide">
                               <span>📁 Host Python Environment Path Override</span>
-                              <span className={`text-[9px] px-1.5 py-0.5 rounded ${customPythonPath ? "bg-purple-500/15 text-purple-300 border border-purple-500/10" : "text-slate-500 font-normal"}`}>
+                              <span
+                                className={`text-[9px] px-1.5 py-0.5 rounded ${customPythonPath ? "bg-purple-500/15 text-purple-300 border border-purple-500/10" : "text-slate-500 font-normal"}`}
+                              >
                                 {customPythonPath ? "Custom Override Cached" : "Using System Environment Default"}
                               </span>
                             </div>
@@ -2988,18 +3316,65 @@ export default function ClassicConsole({
                             </div>
                             <div className="flex justify-between items-center text-[9px] text-slate-500 font-mono pt-1">
                               <span>Auto-scans dependencies on key input change events</span>
-                              <span className={`font-bold px-1 py-0.5 rounded text-[8px]
-                                ${backendSpecs?.pythonFound 
-                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25" 
-                                  : customPythonPath 
-                                    ? "bg-rose-500/10 text-rose-400 border border-rose-500/25" 
-                                    : "bg-slate-800 text-slate-500"}`}>
-                                Validation: {backendSpecs?.pythonFound 
-                                  ? "VALID" 
-                                  : customPythonPath 
-                                    ? "INVALID (Path not verified)" 
+                              <span
+                                className={`font-bold px-1 py-0.5 rounded text-[8px]
+                                ${
+                                  backendSpecs?.pythonFound
+                                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25"
+                                    : customPythonPath
+                                      ? "bg-rose-500/10 text-rose-400 border border-rose-500/25"
+                                      : "bg-slate-800 text-slate-500"
+                                }`}
+                              >
+                                Validation:{" "}
+                                {backendSpecs?.pythonFound
+                                  ? "VALID"
+                                  : customPythonPath
+                                    ? "INVALID (Path not verified)"
                                     : "NOT CHECKED / SYSTEM DEFAULT"}
                               </span>
+                            </div>
+                          </div>
+
+                          {/* FFMPEG EXECUTABLE OVERRIDE */}
+                          <div className="p-3.5 bg-slate-950/60 rounded-xl border border-slate-800/85 space-y-2">
+                            <div className="flex flex-wrap justify-between items-center gap-2 text-[10px] font-mono font-bold text-slate-200 uppercase tracking-wide">
+                              <span>FFmpeg Executable Path</span>
+                              <span
+                                className={`text-[9px] px-1.5 py-0.5 rounded ${customFFmpegPath ? "bg-cyan-500/15 text-cyan-300 border border-cyan-500/10" : "text-slate-500 font-normal"}`}
+                              >
+                                {customFFmpegPath ? "Selected Path Cached" : "Using PATH Discovery"}
+                              </span>
+                            </div>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                placeholder="e.g. C:\ffmpeg\bin\ffmpeg.exe or /usr/local/bin/ffmpeg"
+                                value={customFFmpegPath}
+                                onChange={(e) => updateCustomFFmpegPath(e.target.value)}
+                                className="bg-slate-900 border border-slate-700/60 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-cyan-500/50 flex-grow"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleBrowseFFmpegPath}
+                                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-cyan-500/20 rounded-lg transition cursor-pointer text-[10px] font-mono font-bold leading-tight"
+                              >
+                                Browse...
+                              </button>
+                              {customFFmpegPath && (
+                                <button
+                                  type="button"
+                                  onClick={() => updateCustomFFmpegPath("")}
+                                  className="px-2.5 py-1 bg-red-950/20 hover:bg-rose-900/30 text-rose-400 border border-rose-900/30 rounded-lg transition cursor-pointer text-[10px] font-mono"
+                                  title="Reset to PATH discovery"
+                                >
+                                  Reset
+                                </button>
+                              )}
+                            </div>
+                            <div className="text-[9px] text-slate-500 font-mono pt-1 leading-snug">
+                              FFmpeg readiness unlocks decoding/encoding checks only. A verified model hash and
+                              non-empty stem output are still required for AI proof.
                             </div>
                           </div>
 
@@ -3013,11 +3388,20 @@ export default function ClassicConsole({
                               <div className="p-2.5 bg-black/40 rounded-lg border border-white/5 space-y-0.5">
                                 <div className="flex justify-between text-slate-500 text-[9px] font-bold uppercase">
                                   <span>Python Path:</span>
-                                  <span className={backendSpecs?.pythonFound ? "text-emerald-400 font-extrabold" : "text-rose-400 font-bold"}>
+                                  <span
+                                    className={
+                                      backendSpecs?.pythonFound
+                                        ? "text-emerald-400 font-extrabold"
+                                        : "text-rose-400 font-bold"
+                                    }
+                                  >
                                     {backendSpecs?.pythonFound ? "Detected" : "Missing / None"}
                                   </span>
                                 </div>
-                                <div className="text-[10px] font-mono text-slate-200 truncate animate-pulse" title={customPythonPath || "Using System environment default"}>
+                                <div
+                                  className="text-[10px] font-mono text-slate-200 truncate animate-pulse"
+                                  title={customPythonPath || "Using System environment default"}
+                                >
                                   {customPythonPath ? `Custom: ${customPythonPath}` : "Using System PATH default"}
                                 </div>
                                 <div className="text-[8px] text-slate-500">
@@ -3029,12 +3413,20 @@ export default function ClassicConsole({
                               <div className="p-2.5 bg-black/40 rounded-lg border border-white/5 space-y-0.5">
                                 <div className="flex justify-between text-slate-500 text-[9px] font-bold uppercase">
                                   <span>Python Version:</span>
-                                  <span className={backendSpecs?.pythonFound ? "text-emerald-400 font-extrabold" : "text-rose-400 font-bold"}>
+                                  <span
+                                    className={
+                                      backendSpecs?.pythonFound
+                                        ? "text-emerald-400 font-extrabold"
+                                        : "text-rose-400 font-bold"
+                                    }
+                                  >
                                     {backendSpecs?.pythonFound ? "Compatible" : "Missing / None"}
                                   </span>
                                 </div>
                                 <div className="text-[10px] font-mono text-slate-200">
-                                  {backendSpecs?.pythonFound ? `${backendSpecs.pythonVersion}` : "Requirements: Python 3.10 / 3.11"}
+                                  {backendSpecs?.pythonFound
+                                    ? `${backendSpecs.pythonVersion}`
+                                    : "Requirements: Python 3.10 / 3.11"}
                                 </div>
                                 <div className="text-[8px] text-slate-500">
                                   Action if Missing: Setup python installer natively.
@@ -3045,12 +3437,20 @@ export default function ClassicConsole({
                               <div className="p-2.5 bg-black/40 rounded-lg border border-white/5 space-y-0.5">
                                 <div className="flex justify-between text-slate-500 text-[9px] font-bold uppercase">
                                   <span>audio-separator:</span>
-                                  <span className={backendSpecs?.audioSeparatorInstalled ? "text-emerald-400 font-extrabold" : "text-rose-400 font-bold"}>
+                                  <span
+                                    className={
+                                      backendSpecs?.audioSeparatorInstalled
+                                        ? "text-emerald-400 font-extrabold"
+                                        : "text-rose-400 font-bold"
+                                    }
+                                  >
                                     {backendSpecs?.audioSeparatorInstalled ? "Installed" : "Missing"}
                                   </span>
                                 </div>
                                 <div className="text-[10px] text-slate-200">
-                                  {backendSpecs?.audioSeparatorInstalled ? "Framework is ready for loading models" : "Package required for execution subprocess wrapper."}
+                                  {backendSpecs?.audioSeparatorInstalled
+                                    ? "Framework is ready for loading models"
+                                    : "Package required for execution subprocess wrapper."}
                                 </div>
                                 <div className="text-[8px] text-slate-500">
                                   Action if Missing: `pip install audio-separator` in environment context.
@@ -3061,12 +3461,20 @@ export default function ClassicConsole({
                               <div className="p-2.5 bg-black/40 rounded-lg border border-white/5 space-y-0.5">
                                 <div className="flex justify-between text-slate-500 text-[9px] font-bold uppercase">
                                   <span>PyTorch Module:</span>
-                                  <span className={backendSpecs?.torchInstalled ? "text-emerald-400 font-extrabold" : "text-rose-400 font-bold"}>
+                                  <span
+                                    className={
+                                      backendSpecs?.torchInstalled
+                                        ? "text-emerald-400 font-extrabold"
+                                        : "text-rose-400 font-bold"
+                                    }
+                                  >
                                     {backendSpecs?.torchInstalled ? "Detected" : "Missing"}
                                   </span>
                                 </div>
                                 <div className="text-[10px] text-slate-200">
-                                  {backendSpecs?.torchInstalled ? `Installed (${backendSpecs.torchVersion || 'PyTorch Core'})` : "Core Deep Learning execution model library missing."}
+                                  {backendSpecs?.torchInstalled
+                                    ? `Installed (${backendSpecs.torchVersion || "PyTorch Core"})`
+                                    : "Core Deep Learning execution model library missing."}
                                 </div>
                                 <div className="text-[8px] text-slate-500">
                                   Action if Missing: Run torch installation setup.
@@ -3078,18 +3486,18 @@ export default function ClassicConsole({
                                 <div className="flex justify-between text-slate-500 text-[9px] font-bold uppercase">
                                   <span>CUDA / MPS Accel:</span>
                                   <span className="text-indigo-300 font-bold">
-                                    {backendSpecs?.cudaAvailable 
-                                      ? "CUDA Active" 
-                                      : backendSpecs?.mpsAvailable 
-                                        ? "MPS Active" 
+                                    {backendSpecs?.cudaAvailable
+                                      ? "CUDA Active"
+                                      : backendSpecs?.mpsAvailable
+                                        ? "MPS Active"
                                         : "CPU Only Fallback"}
                                   </span>
                                 </div>
                                 <div className="text-[10px] text-slate-200 truncate">
-                                  {backendSpecs?.cudaAvailable 
-                                    ? `NVIDIA CUDA Device: ${backendSpecs.gpuDeviceName}` 
-                                    : backendSpecs?.mpsAvailable 
-                                      ? "Apple CoreML Graphics Accelerator Active" 
+                                  {backendSpecs?.cudaAvailable
+                                    ? `NVIDIA CUDA Device: ${backendSpecs.gpuDeviceName}`
+                                    : backendSpecs?.mpsAvailable
+                                      ? "Apple CoreML Graphics Accelerator Active"
                                       : "No graphics acceleration - Fallback CPU processing"}
                                 </div>
                                 <div className="text-[8px] text-slate-500">
@@ -3106,10 +3514,14 @@ export default function ClassicConsole({
                                   </span>
                                 </div>
                                 <div className="text-[10px] text-slate-200">
-                                  {isFFmpegReady ? "FFmpeg statically compiled encoder found" : "Required to process dynamic frequency-band extraction."}
+                                  {isFFmpegReady
+                                    ? customFFmpegPath
+                                      ? "FFmpeg ready from selected executable"
+                                      : "FFmpeg ready from PATH"
+                                    : "Required for audio decode/encode before local AI separation can run."}
                                 </div>
                                 <div className="text-[8px] text-slate-500">
-                                  Action if Missing: Ensure FFmpeg folders are assigned to PATH.
+                                  Action if Missing: select ffmpeg executable above or install FFmpeg on PATH.
                                 </div>
                               </div>
 
@@ -3117,12 +3529,16 @@ export default function ClassicConsole({
                               <div className="p-2.5 bg-black/40 rounded-lg border border-white/5 space-y-0.5">
                                 <div className="flex justify-between text-slate-500 text-[9px] font-bold uppercase">
                                   <span>Model File:</span>
-                                  <span className={isModelVerified ? "text-emerald-400 font-extrabold" : "text-rose-400"}>
+                                  <span
+                                    className={isModelVerified ? "text-emerald-400 font-extrabold" : "text-rose-400"}
+                                  >
                                     {isModelVerified ? "Verified" : "Proof Blocked"}
                                   </span>
                                 </div>
                                 <div className="text-[10px] text-slate-200 truncate font-mono">
-                                  {isModelVerified ? `Weights: ${activeModel?.name}` : modelProofEligibility.displayMessage}
+                                  {isModelVerified
+                                    ? `Weights: ${activeModel?.name}`
+                                    : modelProofEligibility.displayMessage}
                                 </div>
                                 <div className="text-[8px] text-slate-500">
                                   Action if Missing: Download model weights in Downloader.
@@ -3133,12 +3549,16 @@ export default function ClassicConsole({
                               <div className="p-2.5 bg-black/40 rounded-lg border border-white/5 space-y-0.5">
                                 <div className="flex justify-between text-slate-500 text-[9px] font-bold uppercase">
                                   <span>Architecture Support:</span>
-                                  <span className={isModelSupported ? "text-emerald-400 font-extrabold" : "text-rose-400"}>
+                                  <span
+                                    className={isModelSupported ? "text-emerald-400 font-extrabold" : "text-rose-400"}
+                                  >
                                     {isModelSupported ? "Supported" : "Unsupported"}
                                   </span>
                                 </div>
                                 <div className="text-[10px] text-slate-200 truncate">
-                                  {isModelSupported ? `Supported (${activeModel?.architecture})` : "Unsupported custom shape / profile metadata structure."}
+                                  {isModelSupported
+                                    ? `Supported (${activeModel?.architecture})`
+                                    : "Unsupported custom shape / profile metadata structure."}
                                 </div>
                                 <div className="text-[8px] text-slate-500">
                                   Explanation: Backend supports configuration but model weight is needed.
@@ -3158,31 +3578,49 @@ export default function ClassicConsole({
                             <ol className="list-decimal pl-4 space-y-1.5 text-[10px] leading-snug">
                               {!backendSpecs?.pythonFound && (
                                 <li>
-                                  <strong className="text-slate-105 font-bold">Select or install Python:</strong> Install Python 3.10 / 3.11 from the official portal and select <code className="bg-black/35 px-1 rounded text-[9px]">Add Python to PATH</code> option.
+                                  <strong className="text-slate-105 font-bold">Select or install Python:</strong>{" "}
+                                  Install Python 3.10 / 3.11 from the official portal and select{" "}
+                                  <code className="bg-black/35 px-1 rounded text-[9px]">Add Python to PATH</code>{" "}
+                                  option.
                                 </li>
                               )}
-                              {backendSpecs?.pythonFound && (!backendSpecs?.audioSeparatorInstalled) && (
+                              {backendSpecs?.pythonFound && !backendSpecs?.audioSeparatorInstalled && (
                                 <li>
-                                  <strong className="text-slate-105 font-bold">Install audio-separator in target Python environment:</strong> Run the copyable CLI instructions in the setup terminal guide bottom card inside your environment session.
+                                  <strong className="text-slate-105 font-bold">
+                                    Install audio-separator in target Python environment:
+                                  </strong>{" "}
+                                  Run the copyable CLI instructions in the setup terminal guide bottom card inside your
+                                  environment session.
                                 </li>
                               )}
-                              {backendSpecs?.pythonFound && (!backendSpecs?.torchInstalled) && (
+                              {backendSpecs?.pythonFound && !backendSpecs?.torchInstalled && (
                                 <li>
-                                  <strong className="text-slate-105 font-bold">Install PyTorch CPU or CUDA build versions:</strong> Deep learning libraries require compilation bindings to map neural graphs.
+                                  <strong className="text-slate-105 font-bold">
+                                    Install PyTorch CPU or CUDA build versions:
+                                  </strong>{" "}
+                                  Deep learning libraries require compilation bindings to map neural graphs.
                                 </li>
                               )}
                               {!isFFmpegReady && (
                                 <li>
-                                  <strong className="text-slate-105 font-bold">Ensure FFmpeg is available on process environments:</strong> Download ffmpeg binaries and declare bin paths inside environment PATH variables.
+                                  <strong className="text-slate-105 font-bold">Configure FFmpeg:</strong> Select a local
+                                  ffmpeg executable above or install FFmpeg system-wide on PATH. This resolves only the
+                                  FFmpeg runtime blocker.
                                 </li>
                               )}
                               {!isModelVerified && (
                                 <li>
-                                  <strong className="text-slate-105 font-bold">Download or sideload verified model weights:</strong> Open Model Manager and use a model with verified source integrity and a matching local SHA-256.
+                                  <strong className="text-slate-105 font-bold">
+                                    Download or sideload verified model weights:
+                                  </strong>{" "}
+                                  Open Model Manager and use a model with verified source integrity and a matching local
+                                  SHA-256.
                                 </li>
                               )}
                               <li>
-                                <strong className="text-slate-105 font-bold">Select & Refresh Diagnostics:</strong> After installing missing features, click the refresh checks button above to verify readiness.
+                                <strong className="text-slate-105 font-bold">Select & Refresh Diagnostics:</strong>{" "}
+                                After installing missing features, click the refresh checks button above to verify
+                                readiness.
                               </li>
                             </ol>
                           </div>
@@ -3252,19 +3690,19 @@ export default function ClassicConsole({
                           ) : isBlocked ? (
                             <>
                               <Lock className="w-4 h-4 text-slate-600" />
-                              {blockedReason || "Blocked: Missing Prerequisites"}
+                              {`Blocked: ${primaryWorkflowBlockers.length} requirements missing`}
                             </>
                           ) : computedPipelineMode === "ai_backend_ready" ? (
-                        <>
-                          <Play className="w-4 h-4 text-violet-100 fill-current" />
-                          Run AI Separation
-                        </>
-                      ) : (
-                        <>
-                          <Lock className="w-4 h-4 text-slate-500" />
-                          CPU AI Proof Blocked
-                        </>
-                      )}
+                            <>
+                              <Play className="w-4 h-4 text-violet-100 fill-current" />
+                              Run AI Separation
+                            </>
+                          ) : (
+                            <>
+                              <Lock className="w-4 h-4 text-slate-500" />
+                              CPU AI Proof Blocked
+                            </>
+                          )}
                         </motion.button>
                       );
                     })()}
@@ -3285,10 +3723,7 @@ export default function ClassicConsole({
                         } else {
                           clearLogsAndState();
                           setAppState((prev) => ({ ...prev, consoleLogs: [] }));
-                          setSimulationLog((prev) => [
-                            ...prev,
-                            "[diagnostics] Logs buffer reset requested by user.",
-                          ]);
+                          setSimulationLog((prev) => [...prev, "[diagnostics] Logs buffer reset requested by user."]);
                         }
                       }}
                       className="w-12 h-12 rounded-xl bg-rose-950/30 hover:bg-rose-900/40 border border-rose-500/20 text-rose-400 hover:text-rose-300 flex items-center justify-center transition-all duration-200 cursor-help shadow-glass-inset shrink-0"
@@ -3303,15 +3738,17 @@ export default function ClassicConsole({
                   <div className="flex justify-between items-center border-b border-white/5 pb-2">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 animate-pulse">
                       <Activity className="w-3.5 h-3.5 text-indigo-400" />
-                      Dynamic Status HUD & Verification Checklist
+                      Detailed Verification Checklist
                     </span>
                     <div className="flex gap-2">
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase border
-                        ${requiredBlockers.length > 0 
-                          ? "bg-rose-500/10 text-rose-400 border-rose-500/20" 
-                          : warningBlockers.length > 0
-                            ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                            : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                      <span
+                        className={`text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase border
+                        ${
+                          requiredBlockers.length > 0
+                            ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                            : warningBlockers.length > 0
+                              ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                              : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                         }`}
                       >
                         {requiredBlockers.length > 0 ? "BLOCKED" : warningBlockers.length > 0 ? "WARNINGS" : "READY"}
@@ -3324,18 +3761,41 @@ export default function ClassicConsole({
                     <div>
                       <div className="text-[9px] text-slate-500 uppercase font-bold">Checks Met</div>
                       <div className="text-sm font-bold text-emerald-400">
-                        {5 - requiredBlockers.filter(b => ["no_inputs", "inputs_not_verified", "output_missing", "output_not_exists", "output_not_writable", "output_browser_preview", "model_missing", "model_not_installed", "model_hash_mismatch", "model_proof_not_eligible", "ffmpeg_missing", "python_missing", "audio_separator_missing", "torch_missing"].includes(b.id)).length} / 5
+                        {5 -
+                          requiredBlockers.filter((b) =>
+                            [
+                              "no_inputs",
+                              "inputs_not_verified",
+                              "output_missing",
+                              "output_not_exists",
+                              "output_not_writable",
+                              "output_browser_preview",
+                              "model_missing",
+                              "model_not_installed",
+                              "model_hash_mismatch",
+                              "model_proof_not_eligible",
+                              "ffmpeg_missing",
+                              "python_missing",
+                              "audio_separator_missing",
+                              "torch_missing",
+                            ].includes(b.id),
+                          ).length}{" "}
+                        / 5
                       </div>
                     </div>
                     <div>
                       <div className="text-[9px] text-slate-500 uppercase font-bold">Blockers</div>
-                      <div className={`text-sm font-bold ${requiredBlockers.length > 0 ? "text-rose-400" : "text-slate-400"}`}>
+                      <div
+                        className={`text-sm font-bold ${requiredBlockers.length > 0 ? "text-rose-400" : "text-slate-400"}`}
+                      >
                         {requiredBlockers.length}
                       </div>
                     </div>
                     <div>
                       <div className="text-[9px] text-slate-500 uppercase font-bold">Warnings</div>
-                      <div className={`text-sm font-bold ${warningBlockers.length > 0 ? "text-amber-400" : "text-slate-400"}`}>
+                      <div
+                        className={`text-sm font-bold ${warningBlockers.length > 0 ? "text-amber-400" : "text-slate-400"}`}
+                      >
                         {warningBlockers.length}
                       </div>
                     </div>
@@ -3348,10 +3808,12 @@ export default function ClassicConsole({
                       <span className="text-slate-400 flex items-center gap-1.5">
                         <span>{appState.selectedInputs.length > 0 ? "●" : "○"}</span> Input Track Queue
                       </span>
-                      <span className={`text-[10px] ${appState.selectedInputs.length > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                      <span
+                        className={`text-[10px] ${appState.selectedInputs.length > 0 ? "text-emerald-400" : "text-rose-400"}`}
+                      >
                         {appState.selectedInputs.length === 0
                           ? "missing files"
-                          : selectedInputFiles.some(f => f.source !== "electron_path")
+                          : selectedInputFiles.some((f) => f.source !== "electron_path")
                             ? "browser preview only"
                             : `${appState.selectedInputs.length} files verified`}
                       </span>
@@ -3360,18 +3822,23 @@ export default function ClassicConsole({
                     {/* 2. Output folder write path */}
                     <div className="flex justify-between items-center">
                       <span className="text-slate-400 flex items-center gap-1.5">
-                        <span>{appState.checkboxSettings.sameAsInputFolder || appState.selectedOutputFolder ? "●" : "○"}</span> Writing Destination
+                        <span>
+                          {appState.checkboxSettings.sameAsInputFolder || appState.selectedOutputFolder ? "●" : "○"}
+                        </span>{" "}
+                        Writing Destination
                       </span>
-                      <span className={`text-[10px] 
-                        ${appState.checkboxSettings.sameAsInputFolder 
-                          ? "text-indigo-400" 
-                          : outputFolderVerifyStatus === "verified_writable" 
-                            ? "text-emerald-400" 
-                            : "text-rose-400"
+                      <span
+                        className={`text-[10px]
+                        ${
+                          appState.checkboxSettings.sameAsInputFolder
+                            ? "text-indigo-400"
+                            : outputFolderVerifyStatus === "verified_writable"
+                              ? "text-emerald-400"
+                              : "text-rose-400"
                         }`}
                       >
-                        {appState.checkboxSettings.sameAsInputFolder 
-                          ? "delegated to input" 
+                        {appState.checkboxSettings.sameAsInputFolder
+                          ? "delegated to input"
                           : outputFolderVerifyStatus === "verified_writable"
                             ? "verified writable"
                             : outputFolderVerifyStatus === "browser_preview"
@@ -3389,12 +3856,14 @@ export default function ClassicConsole({
                       <span className="text-slate-400 flex items-center gap-1.5">
                         <span>{activeModel ? "●" : "○"}</span> Core Weights File
                       </span>
-                      <span className={`text-[10px] 
-                        ${modelFileStatus === "hash_verified"
-                          ? "text-emerald-400"
-                          : modelFileStatus === "exists_hash_not_checked" || modelFileStatus === "hash_unavailable"
-                            ? "text-amber-400"
-                            : "text-rose-400"
+                      <span
+                        className={`text-[10px]
+                        ${
+                          modelFileStatus === "hash_verified"
+                            ? "text-emerald-400"
+                            : modelFileStatus === "exists_hash_not_checked" || modelFileStatus === "hash_unavailable"
+                              ? "text-amber-400"
+                              : "text-rose-400"
                         }`}
                       >
                         {modelFileStatus === "hash_verified"
@@ -3414,10 +3883,12 @@ export default function ClassicConsole({
                       <span className="text-slate-400 flex items-center gap-1.5">
                         <span>{ffmpegStatus === "ready" ? "●" : "○"}</span> Backend Dependencies
                       </span>
-                      <span className={`text-[10px] 
-                        ${ffmpegStatus === "ready" && userSelectedMode === "ai" && backendSpecs?.canRunAISeparation
-                          ? "text-emerald-400"
-                          : "text-rose-400"
+                      <span
+                        className={`text-[10px]
+                        ${
+                          ffmpegStatus === "ready" && userSelectedMode === "ai" && backendSpecs?.canRunAISeparation
+                            ? "text-emerald-400"
+                            : "text-rose-400"
                         }`}
                       >
                         {ffmpegStatus !== "ready"
@@ -3436,9 +3907,13 @@ export default function ClassicConsole({
                         <span>●</span> Execution Processor
                       </span>
                       <span className="text-[10px] text-pink-450 uppercase font-bold">
-                        {appState.dropdownSettings.executionDevice} 
-                        {backendSpecs?.cudaAvailable && appState.dropdownSettings.executionDevice === "cuda" ? " (gpu)" : ""}
-                        {backendSpecs?.mpsAvailable && appState.dropdownSettings.executionDevice === "mps" ? " (apple silicon)" : ""}
+                        {appState.dropdownSettings.executionDevice}
+                        {backendSpecs?.cudaAvailable && appState.dropdownSettings.executionDevice === "cuda"
+                          ? " (gpu)"
+                          : ""}
+                        {backendSpecs?.mpsAvailable && appState.dropdownSettings.executionDevice === "mps"
+                          ? " (apple silicon)"
+                          : ""}
                       </span>
                     </div>
                   </div>
@@ -3446,16 +3921,26 @@ export default function ClassicConsole({
                   {/* Dynamic actionable warnings list */}
                   {(requiredBlockers.length > 0 || warningBlockers.length > 0) && (
                     <div className="border-t border-white/5 pt-2 space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
-                      {requiredBlockers.map(b => (
+                      {requiredBlockers.map((b) => (
                         <div key={b.id} className="text-rose-400 text-[10px] leading-snug flex items-start gap-1">
-                          <span className="text-[9px] bg-rose-500/10 px-1 py-0.2 rounded border border-rose-500/20 font-bold shrink-0">BLOCKER</span>
-                          <span className="pt-0.5">{b.label} <span className="text-slate-500 font-sans italic">({b.fixLabel})</span></span>
+                          <span className="text-[9px] bg-rose-500/10 px-1 py-0.2 rounded border border-rose-500/20 font-bold shrink-0">
+                            BLOCKER
+                          </span>
+                          <span className="pt-0.5">
+                            {b.label} <span className="text-slate-500 font-sans italic">({b.fixLabel})</span>
+                            <span className="block text-slate-500 font-mono">Code: {b.diagnosticCode}</span>
+                          </span>
                         </div>
                       ))}
-                      {warningBlockers.map(w => (
+                      {warningBlockers.map((w) => (
                         <div key={w.id} className="text-amber-400 text-[10px] leading-snug flex items-start gap-1">
-                          <span className="text-[9px] bg-amber-500/10 px-1 py-0.2 rounded border border-amber-500/20 font-bold shrink-0">WARNING</span>
-                          <span className="pt-0.5">{w.label}</span>
+                          <span className="text-[9px] bg-amber-500/10 px-1 py-0.2 rounded border border-amber-500/20 font-bold shrink-0">
+                            WARNING
+                          </span>
+                          <span className="pt-0.5">
+                            {w.label}
+                            <span className="block text-slate-500 font-mono">Code: {w.diagnosticCode}</span>
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -3488,7 +3973,8 @@ export default function ClassicConsole({
                   {simulationLog.length === 0 ? (
                     <div className="space-y-4 py-3 font-sans text-xs text-green-500/60 leading-normal">
                       <div className="text-center italic text-green-500/40 font-mono text-[11px] pb-2 border-b border-green-500/10">
-                        No run logs yet. Select input, output folder, backend, and verified model before starting local separation.
+                        No run logs yet. Select input, output folder, backend, and verified model before starting local
+                        separation.
                       </div>
 
                       {blockedReason && (
@@ -3500,11 +3986,12 @@ export default function ClassicConsole({
                             Current Blocker: <span className="font-bold underline">{blockedReason}</span>
                           </div>
                           <p className="text-[9.5px] text-red-400/70 leading-snug">
-                            Local execution is paused until required setup is verified. Check the blockers above before starting a run.
+                            Local execution is paused until required setup is verified. Check the blockers above before
+                            starting a run.
                           </p>
                         </div>
                       )}
-                      
+
                       <div className="space-y-2 bg-[#031503]/40 p-3 rounded-lg border border-green-500/10">
                         <span className="font-mono text-[9px] uppercase tracking-wider text-green-400 font-bold block mb-1">
                           📋 Target Subprocess Parameter Settings:
@@ -3512,20 +3999,36 @@ export default function ClassicConsole({
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-[10px] font-mono">
                           <div>
                             <span className="text-green-500/40">Model Filename:</span>{" "}
-                            <span className="text-green-400 font-bold">{activeModel ? activeModel.name : "No model loaded"}</span>
+                            <span className="text-green-400 font-bold">
+                              {activeModel ? activeModel.name : "No model loaded"}
+                            </span>
                           </div>
                           <div>
                             <span className="text-green-500/40">Architecture:</span>{" "}
-                            <span className="text-green-400 font-bold">{activeModel ? activeModel.architecture : "None"}</span>
+                            <span className="text-green-400 font-bold">
+                              {activeModel ? activeModel.architecture : "None"}
+                            </span>
                           </div>
                           <div>
                             <span className="text-green-500/40">Neural Accelerator:</span>{" "}
-                            <span className="text-green-400 font-bold uppercase">{appState.dropdownSettings?.executionDevice || "Auto-Detect"}</span>
+                            <span className="text-green-400 font-bold uppercase">
+                              {appState.dropdownSettings?.executionDevice || "Auto-Detect"}
+                            </span>
                           </div>
                           <div>
                             <span className="text-green-500/40">Destination Path:</span>{" "}
-                            <span className="text-green-400 font-bold truncate block" title={appState.selectedOutputFolder || (appState.checkboxSettings.sameAsInputFolder ? "Same as input folder" : "Default Output")}>
-                              {appState.checkboxSettings.sameAsInputFolder ? "Same as input folder" : (appState.selectedOutputFolder || "Not specified")}
+                            <span
+                              className="text-green-400 font-bold truncate block"
+                              title={
+                                appState.selectedOutputFolder ||
+                                (appState.checkboxSettings.sameAsInputFolder
+                                  ? "Same as input folder"
+                                  : "Default Output")
+                              }
+                            >
+                              {appState.checkboxSettings.sameAsInputFolder
+                                ? "Same as input folder"
+                                : appState.selectedOutputFolder || "Not specified"}
                             </span>
                           </div>
                         </div>
@@ -3534,7 +4037,9 @@ export default function ClassicConsole({
                       <div className="text-[10px] text-green-500/50 bg-[#061e06]/35 p-2 rounded border border-green-500/5 font-mono flex items-start gap-1.5 leading-relaxed">
                         <span className="text-green-400">ℹ</span>
                         <span>
-                          <strong>Windows Standalone Service Rule:</strong> When executed on absolute Windows host systems, live subprocess stderr streams and stdout logs will write synchronously to a secure, permanent `.log` file inside the local app installation directory.
+                          <strong>Windows Standalone Service Rule:</strong> When executed on absolute Windows host
+                          systems, live subprocess stderr streams and stdout logs will write synchronously to a secure,
+                          permanent `.log` file inside the local app installation directory.
                         </span>
                       </div>
                     </div>
@@ -3602,7 +4107,11 @@ export default function ClassicConsole({
                   📦 Standalone Package NSIS Target
                 </span>
                 <p className="text-slate-400 leading-relaxed text-[11px] font-sans mt-2">
-                  Compiled and modular for native installation via <code className="bg-black/40 text-indigo-400 px-1 py-0.2 rounded font-mono text-[9px]">NSIS Installers</code> (under 60MB base engine). External weights file targets are stored securely outside the bundle.
+                  Compiled and modular for native installation via{" "}
+                  <code className="bg-black/40 text-indigo-400 px-1 py-0.2 rounded font-mono text-[9px]">
+                    NSIS Installers
+                  </code>{" "}
+                  (under 60MB base engine). External weights file targets are stored securely outside the bundle.
                 </p>
               </div>
 
@@ -3611,7 +4120,8 @@ export default function ClassicConsole({
                   🔌 Sideloadable ONNX Adapters
                 </span>
                 <p className="text-slate-400 leading-relaxed text-[11px] font-sans mt-2">
-                  Register path models immediately by depositing weights files to your standalone directory without needing manual layout re-compilation or interface updates.
+                  Register path models immediately by depositing weights files to your standalone directory without
+                  needing manual layout re-compilation or interface updates.
                 </p>
               </div>
 
@@ -3620,7 +4130,8 @@ export default function ClassicConsole({
                   🛡️ Thread-Isolated Environment
                 </span>
                 <p className="text-slate-400 leading-relaxed text-[11px] font-sans mt-2">
-                  Auto-discovers static binary dependencies and environment runtimes, preventing environment variable pollution and keeping your operating system setup clean.
+                  Auto-discovers static binary dependencies and environment runtimes, preventing environment variable
+                  pollution and keeping your operating system setup clean.
                 </p>
               </div>
             </div>
@@ -3650,67 +4161,75 @@ export default function ClassicConsole({
               {backendSpecs ? (
                 <>
                   <div className="p-2.5 bg-black/40 rounded-lg border border-[#ffffff]/5 flex items-center justify-between">
-                    <span className="text-slate-400 uppercase font-bold text-[10px]">
-                      Python Environment
-                    </span>
+                    <span className="text-slate-400 uppercase font-bold text-[10px]">Python Environment</span>
                     <span className={`font-bold ${backendSpecs.pythonFound ? "text-emerald-400" : "text-amber-500"}`}>
                       {backendSpecs.pythonFound ? `DETECTED (${backendSpecs.pythonVersion})` : "MISSING (No AI Mode)"}
                     </span>
                   </div>
 
                   <div className="p-2.5 bg-black/40 rounded-lg border border-[#ffffff]/5 flex items-center justify-between">
-                    <span className="text-slate-400 uppercase font-bold text-[10px]">
-                      Audio-Separator CLI
-                    </span>
-                    <span className={`font-bold ${backendSpecs.audioSeparatorInstalled && backendSpecs.audioSeparatorCliReady !== false ? "text-emerald-400" : "text-slate-500"}`}>
-                      {backendSpecs.audioSeparatorInstalled && backendSpecs.audioSeparatorCliReady !== false ? "READY" : "NOT READY"}
+                    <span className="text-slate-400 uppercase font-bold text-[10px]">Audio-Separator CLI</span>
+                    <span
+                      className={`font-bold ${backendSpecs.audioSeparatorInstalled && backendSpecs.audioSeparatorCliReady !== false ? "text-emerald-400" : "text-slate-500"}`}
+                    >
+                      {backendSpecs.audioSeparatorInstalled && backendSpecs.audioSeparatorCliReady !== false
+                        ? "READY"
+                        : "NOT READY"}
                     </span>
                   </div>
 
                   <div className="p-2.5 bg-black/40 rounded-lg border border-[#ffffff]/5 flex items-center justify-between">
-                    <span className="text-slate-400 uppercase font-bold text-[10px]">
-                      PyTorch & Engines
-                    </span>
-                    <span className={`font-bold ${backendSpecs.torchInstalled ? "text-emerald-400" : "text-slate-500"}`}>
+                    <span className="text-slate-400 uppercase font-bold text-[10px]">PyTorch & Engines</span>
+                    <span
+                      className={`font-bold ${backendSpecs.torchInstalled ? "text-emerald-400" : "text-slate-500"}`}
+                    >
                       {backendSpecs.torchInstalled ? "INSTALLED" : "NOT FOUND"}
                     </span>
                   </div>
 
                   <div className="p-2.5 bg-black/40 rounded-lg border border-[#ffffff]/5 flex items-center justify-between">
-                    <span className="text-slate-400 uppercase font-bold text-[10px]">
-                      Hardware Acceleration
-                    </span>
+                    <span className="text-slate-400 uppercase font-bold text-[10px]">Hardware Acceleration</span>
                     <span className="font-bold text-indigo-300">
-                      {backendSpecs.cudaAvailable ? "CUDA (GPU) ACTIVE" : backendSpecs.mpsAvailable ? "MPS (Apple Silicon)" : "CPU ONLY"}
+                      {backendSpecs.cudaAvailable
+                        ? "CUDA (GPU) ACTIVE"
+                        : backendSpecs.mpsAvailable
+                          ? "MPS (Apple Silicon)"
+                          : "CPU ONLY"}
                     </span>
                   </div>
 
                   <div className="p-2.5 bg-[#0b0f19] rounded-lg border border-indigo-500/10 flex items-center justify-between font-extrabold text-xs">
-                    <span className="text-slate-400 uppercase font-bold text-[10px]">
-                      Active Subprocess
-                    </span>
-                    <span className={`font-bold uppercase ${backendSpecs.canRunAISeparation ? "text-violet-400 animate-pulse font-extrabold" : "text-amber-400"}`}>
+                    <span className="text-slate-400 uppercase font-bold text-[10px]">Active Subprocess</span>
+                    <span
+                      className={`font-bold uppercase ${backendSpecs.canRunAISeparation ? "text-violet-400 animate-pulse font-extrabold" : "text-amber-400"}`}
+                    >
                       {backendSpecs.canRunAISeparation ? "AI Model (audio-separator)" : "AI Backend Blocked"}
                     </span>
                   </div>
 
                   {(() => {
-                    const activeModel = modelRegistryState.find(m => m.id === appState.selectedModelId);
-                    const isModelVerified = !!activeModel && !!verifiedModelLocalPath && modelProofEligibility.proofEligible && modelFileStatus === "hash_verified";
+                    const activeModel = modelRegistryState.find((m) => m.id === appState.selectedModelId);
+                    const isModelVerified =
+                      !!activeModel &&
+                      !!verifiedModelLocalPath &&
+                      modelProofEligibility.proofEligible &&
+                      modelFileStatus === "hash_verified";
                     return (
                       <div className="p-2.5 bg-black/40 rounded-lg border border-white/5 space-y-1">
                         <div className="flex items-center justify-between">
                           <span className="text-slate-400 uppercase font-bold text-[10px]">
                             Model Validation Status
                           </span>
-                          <span className={`font-bold uppercase ${isModelVerified ? "text-emerald-400" : "text-rose-400 animate-pulse"}`}>
+                          <span
+                            className={`font-bold uppercase ${isModelVerified ? "text-emerald-400" : "text-rose-400 animate-pulse"}`}
+                          >
                             {activeModel ? (isModelVerified ? "VERIFIED" : "PROOF BLOCKED") : "NO MODEL"}
                           </span>
                         </div>
                         {activeModel && (
                           <div className="text-[9px] text-slate-500 leading-normal">
                             Model: <span className="text-slate-300 font-bold">{activeModel.id}</span>
-                            {activeModel.verifiedStatus !== 'verified' && (
+                            {activeModel.verifiedStatus !== "verified" && (
                               <span className="text-rose-400 block font-bold mt-0.5">
                                 Refused: {modelProofEligibility.displayMessage}
                               </span>
@@ -3723,18 +4242,23 @@ export default function ClassicConsole({
 
                   <div className="p-2.5 bg-black/40 rounded-lg border border-white/5 space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-400 uppercase font-bold text-[10px]">
-                        Input File Validation
-                      </span>
-                      <span className={`font-bold uppercase ${appState.selectedInputs.length > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                      <span className="text-slate-400 uppercase font-bold text-[10px]">Input File Validation</span>
+                      <span
+                        className={`font-bold uppercase ${appState.selectedInputs.length > 0 ? "text-emerald-400" : "text-rose-400"}`}
+                      >
                         {appState.selectedInputs.length > 0 ? `VALID` : "EMPTY (MISSING INPUT)"}
                       </span>
                     </div>
                     <div className="text-[9px] text-slate-500 leading-normal">
                       {appState.selectedInputs.length > 0 ? (
-                        <>Sequence Loaded: <span className="text-slate-300 font-bold">{appState.selectedInputs.join(", ")}</span></>
+                        <>
+                          Sequence Loaded:{" "}
+                          <span className="text-slate-300 font-bold">{appState.selectedInputs.join(", ")}</span>
+                        </>
                       ) : (
-                        <span className="text-slate-400">✖ Please select/drag-and-drop a file to start processing.</span>
+                        <span className="text-slate-400">
+                          ✖ Please select/drag-and-drop a file to start processing.
+                        </span>
                       )}
                     </div>
                   </div>
@@ -3742,54 +4266,44 @@ export default function ClassicConsole({
               ) : (
                 <>
                   <div className="p-2.5 bg-black/40 rounded-lg border border-[#ffffff]/5 flex items-center justify-between">
-                    <span className="text-slate-400 uppercase font-bold text-[10px]">
-                      Active OS Target
-                    </span>
+                    <span className="text-slate-400 uppercase font-bold text-[10px]">Active OS Target</span>
                     <span className="font-bold text-indigo-400">
                       {(window as any).uvr ? "Detecting..." : "Browser Sandbox"}
                     </span>
                   </div>
 
                   <div className="p-2.5 bg-black/40 rounded-lg border border-[#ffffff]/5 flex items-center justify-between">
-                    <span className="text-slate-400 uppercase font-bold text-[10px]">
-                      GPU Context
-                    </span>
+                    <span className="text-slate-400 uppercase font-bold text-[10px]">GPU Context</span>
                     <span
                       className={`font-bold uppercase ${appState.dropdownSettings.executionDevice === "cpu" ? "text-slate-500" : "text-cyan-400 font-extrabold"}`}
                     >
-                      {appState.dropdownSettings.executionDevice.toUpperCase()}{" "}
-                      PROVIDER
+                      {appState.dropdownSettings.executionDevice.toUpperCase()} PROVIDER
                     </span>
                   </div>
 
                   <div className="p-2.5 bg-black/40 rounded-lg border border-[#ffffff]/5 flex items-center justify-between">
-                    <span className="text-slate-400 uppercase font-bold text-[10px]">
-                      RAM Conservancy Switch
-                    </span>
-                    <span className="font-bold text-purple-300">
-                      SAFE ONCO-SWEEP
-                    </span>
+                    <span className="text-slate-400 uppercase font-bold text-[10px]">RAM Conservancy Switch</span>
+                    <span className="font-bold text-purple-300">SAFE ONCO-SWEEP</span>
                   </div>
 
                   <div className="p-2.5 bg-black/40 rounded-lg border border-[#ffffff]/5 flex items-center justify-between">
-                    <span className="text-slate-400 uppercase font-bold text-[10px]">
-                      Sandbox Space Guard
-                    </span>
-                    <span className="text-[#60a5fa] font-bold">
-                      ACTIVE FILTER ISOLATION
-                    </span>
+                    <span className="text-slate-400 uppercase font-bold text-[10px]">Sandbox Space Guard</span>
+                    <span className="text-[#60a5fa] font-bold">ACTIVE FILTER ISOLATION</span>
                   </div>
                 </>
               )}
             </div>
-            
+
             {backendSpecs && !backendSpecs.canRunAISeparation && (
               <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl leading-relaxed text-[11px] text-amber-300 font-sans space-y-1">
                 <p className="font-bold">⚠️ Host Setup Required for True AI Separation</p>
                 <p>
-                  To unlock deep-learning AI separation, verify Python 3.10+, PyTorch, and `audio-separator` are installed on your host OS.
+                  To unlock deep-learning AI separation, verify Python 3.10+, PyTorch, and `audio-separator` are
+                  installed on your host OS.
                 </p>
-                <p className="font-mono text-[10px] text-slate-400 select-all p-1 bg-black/55 rounded border border-white/5">$ pip install audio-separator[cpu]</p>
+                <p className="font-mono text-[10px] text-slate-400 select-all p-1 bg-black/55 rounded border border-white/5">
+                  $ pip install audio-separator[cpu]
+                </p>
               </div>
             )}
           </div>
@@ -3806,12 +4320,8 @@ export default function ClassicConsole({
           className="pt-4"
         >
           <FourTrackMixer
-            inputFileName={
-              appState.selectedInputs[0] || "bounce_vocal_remover.wav"
-            }
-            separationGoal={
-              activeModel.stemType === "4stem" ? "4stem" : "vocals"
-            }
+            inputFileName={appState.selectedInputs[0] || "bounce_vocal_remover.wav"}
+            separationGoal={activeModel.stemType === "4stem" ? "4stem" : "vocals"}
             selectedCategory={appState.processMethodId}
             selectedModelName={activeModel.name}
             parameters={`Sizing: Chunks=${appState.dropdownSettings.chunks}, Precision=Float32, Method=${appState.processMethodId.toUpperCase()}`}
@@ -3855,35 +4365,58 @@ export default function ClassicConsole({
                           <span className="text-cyan-400 uppercase font-extrabold flex items-center gap-1">
                             <Layers className="w-3.5 h-3.5" />
                             Additional Settings for:{" "}
-                            {
-                              PROCESS_METHODS.find(
-                                (m) => m.id === appState.processMethodId,
-                              )?.name
-                            }
+                            {PROCESS_METHODS.find((m) => m.id === appState.processMethodId)?.name}
                           </span>
                         </div>
 
                         <div className="space-y-3">
-                          {SETTINGS_SCHEMAS[appState.processMethodId]?.map(
-                            (setting) => {
-                              return (
-                                <div
-                                  key={setting.key}
-                                  className="space-y-1.5 bg-black/40 p-3 rounded-lg border border-white/5"
-                                >
-                                  <label className="text-[10px] font-mono text-slate-300 font-bold uppercase block">
-                                    {setting.label}
-                                  </label>
-                                  <p className="text-[9px] text-slate-500 font-sans leading-relaxed">
-                                    {setting.helpText}
-                                  </p>
+                          {SETTINGS_SCHEMAS[appState.processMethodId]?.map((setting) => {
+                            return (
+                              <div
+                                key={setting.key}
+                                className="space-y-1.5 bg-black/40 p-3 rounded-lg border border-white/5"
+                              >
+                                <label className="text-[10px] font-mono text-slate-300 font-bold uppercase block">
+                                  {setting.label}
+                                </label>
+                                <p className="text-[9px] text-slate-500 font-sans leading-relaxed">
+                                  {setting.helpText}
+                                </p>
 
-                                  {setting.type === "select" ? (
-                                    <select
+                                {setting.type === "select" ? (
+                                  <select
+                                    value={
+                                      setting.key === "noiseReduction"
+                                        ? appState.dropdownSettings.noiseReduction
+                                        : appState.dropdownSettings.chunks
+                                    }
+                                    onChange={(e) =>
+                                      setAppState((prev) => ({
+                                        ...prev,
+                                        dropdownSettings: {
+                                          ...prev.dropdownSettings,
+                                          [setting.key]: e.target.value,
+                                        },
+                                      }))
+                                    }
+                                    className="w-full bg-[#0a0c14]/40 border border-[#ffffff]/10 hover:border-white/20 rounded pl-2.5 pr-8 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500/20 font-mono transition-all aspect-none truncate"
+                                  >
+                                    {setting.allowedValues?.map((opt) => (
+                                      <option key={opt} value={opt} className="bg-[#0e111d] text-slate-200">
+                                        {opt}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <div className="flex gap-3 items-center">
+                                    <input
+                                      type="range"
+                                      min={setting.min || 1}
+                                      max={setting.max || 10}
+                                      step={setting.step || 1}
                                       value={
                                         setting.key === "noiseReduction"
-                                          ? appState.dropdownSettings
-                                              .noiseReduction
+                                          ? appState.dropdownSettings.noiseReduction
                                           : appState.dropdownSettings.chunks
                                       }
                                       onChange={(e) =>
@@ -3895,61 +4428,25 @@ export default function ClassicConsole({
                                           },
                                         }))
                                       }
-                                      className="w-full bg-[#0a0c14]/40 border border-[#ffffff]/10 hover:border-white/20 rounded pl-2.5 pr-8 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500/20 font-mono transition-all aspect-none truncate"
-                                    >
-                                      {setting.allowedValues?.map((opt) => (
-                                        <option
-                                          key={opt}
-                                          value={opt}
-                                          className="bg-[#0e111d] text-slate-200"
-                                        >
-                                          {opt}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  ) : (
-                                    <div className="flex gap-3 items-center">
-                                      <input
-                                        type="range"
-                                        min={setting.min || 1}
-                                        max={setting.max || 10}
-                                        step={setting.step || 1}
-                                        value={
-                                          setting.key === "noiseReduction"
-                                            ? appState.dropdownSettings
-                                                .noiseReduction
-                                            : appState.dropdownSettings.chunks
-                                        }
-                                        onChange={(e) =>
-                                          setAppState((prev) => ({
-                                            ...prev,
-                                            dropdownSettings: {
-                                              ...prev.dropdownSettings,
-                                              [setting.key]: e.target.value,
-                                            },
-                                          }))
-                                        }
-                                        className="flex-grow h-1 accent-cyan-500 cursor-pointer"
-                                      />
-                                      <span className="text-xs font-mono text-cyan-400 font-bold min-w-8 text-right">
-                                        {setting.key === "noiseReduction"
-                                          ? appState.dropdownSettings
-                                              .noiseReduction
-                                          : appState.dropdownSettings.chunks}
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            },
-                          )}
+                                      className="flex-grow h-1 accent-cyan-500 cursor-pointer"
+                                    />
+                                    <span className="text-xs font-mono text-cyan-400 font-bold min-w-8 text-right">
+                                      {setting.key === "noiseReduction"
+                                        ? appState.dropdownSettings.noiseReduction
+                                        : appState.dropdownSettings.chunks}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
 
                       {/* Custom Registry downloader repository config url input */}
                       <div className="space-y-1.5">
                         <span className="text-[10px] font-mono text-indigo-300 font-bold uppercase block">
-                          Futureproof Custom Model Repository Source Mappings:
+                          Future Model Catalog Manifest Source:
                         </span>
                         <div className="flex gap-2">
                           <input
@@ -3962,10 +4459,10 @@ export default function ClassicConsole({
                             onClick={() => {
                               setSimulationLog((prev) => [
                                 ...prev,
-                                `[model_downloader] Updated custom registry mappings fetch URL: "${customRepoUrl}"`,
+                                `[model_downloader] Recorded custom model catalog manifest URL for reference: "${customRepoUrl}"`,
                               ]);
                               alert(
-                              `Dynamic repository endpoint recorded for reference only. Model weights are not loaded or verified until a native download/import and SHA-256 check succeeds.`,
+                                `Catalog manifest endpoint recorded for reference only. OpenStem will not refresh catalog metadata, download weights, or mark models verified until a trusted manifest and SHA-256 workflow are implemented.`,
                               );
                             }}
                             className="px-3.5 py-2 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 text-indigo-400 font-bold rounded-lg cursor-pointer"
@@ -3974,14 +4471,16 @@ export default function ClassicConsole({
                           </button>
                         </div>
                         <span className="text-[9px] text-slate-500 font-sans">
-                          Allows instant updates of model weights listings
-                          schemas without reinstalls of the GUI framework
-                          package.
+                          Reference-only future update lane. No catalog refresh, model download, or verification state
+                          changes occur from this field.
                         </span>
                       </div>
 
                       {/* Hardware core CPU limit ranges */}
-                      <div className="grid gap-4 pt-1 min-w-0" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))' }}>
+                      <div
+                        className="grid gap-4 pt-1 min-w-0"
+                        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))" }}
+                      >
                         <div className="space-y-2 p-3 bg-black/25 rounded-l border border-white/5">
                           <div className="flex justify-between font-mono text-[10px]">
                             <span className="text-slate-400 font-bold uppercase animate-pulse">
@@ -4009,8 +4508,7 @@ export default function ClassicConsole({
                             className="w-full h-1 cursor-pointer accent-cyan-500"
                           />
                           <span className="text-[8px] text-slate-500 block">
-                            Sets absolute processor allocation limits for local
-                            ONNX inference pipelines.
+                            Sets absolute processor allocation limits for local ONNX inference pipelines.
                           </span>
                         </div>
 
@@ -4022,16 +4520,13 @@ export default function ClassicConsole({
                             <input
                               type="checkbox"
                               checked={conserveVram}
-                              onChange={(e) =>
-                                setConserveVram(e.target.checked)
-                              }
+                              onChange={(e) => setConserveVram(e.target.checked)}
                               className="w-4 h-4 rounded border-slate-600 bg-black text-cyan-500 focus:ring-0 focus:ring-offset-0"
                             />
                             <span>Conserve VRAM / Memory limits</span>
                           </label>
                           <span className="text-[8px] text-slate-500 block mt-1">
-                            Clears GPU cache registries dynamically after every
-                            active tensor block conversion.
+                            Clears GPU cache registries dynamically after every active tensor block conversion.
                           </span>
                         </div>
                       </div>
@@ -4047,40 +4542,28 @@ export default function ClassicConsole({
                             <input
                               type="checkbox"
                               checked={sha256Strict}
-                              onChange={(e) =>
-                                setSha256Strict(e.target.checked)
-                              }
+                              onChange={(e) => setSha256Strict(e.target.checked)}
                               className="w-4 h-4 rounded border-slate-600 bg-black text-cyan-500 focus:ring-0 focus:ring-offset-0"
                             />
-                            <span>
-                              Strict SHA-256 Model Integrity Verification Check
-                              (Enforced)
-                            </span>
+                            <span>Strict SHA-256 Model Integrity Verification Check (Enforced)</span>
                           </label>
                           <p className="text-[9px] text-slate-500 pl-6.5 leading-relaxed font-sans">
-                            Verify signature hashes of caches registries files
-                            against global database lock before launching
-                            interpreter threads, blocking corrupted weights.
+                            Verify signature hashes of caches registries files against global database lock before
+                            launching interpreter threads, blocking corrupted weights.
                           </p>
 
                           <label className="flex items-center gap-2.5 select-none cursor-pointer text-slate-400 hover:text-slate-200 transition-colors mt-2">
                             <input
                               type="checkbox"
                               checked={doubleQuotePaths}
-                              onChange={(e) =>
-                                setDoubleQuotePaths(e.target.checked)
-                              }
+                              onChange={(e) => setDoubleQuotePaths(e.target.checked)}
                               className="w-4 h-4 rounded border-slate-600 bg-black text-cyan-500 focus:ring-0 focus:ring-offset-0"
                             />
-                            <span>
-                              Enforce double-quoted paths split-avoidance
-                              (Anti-Space Bug)
-                            </span>
+                            <span>Enforce double-quoted paths split-avoidance (Anti-Space Bug)</span>
                           </label>
                           <p className="text-[9px] text-slate-500 pl-6.5 leading-relaxed font-sans">
-                            Auto-wraps folders paths variables in literal double
-                            quotations to block thread split bounds crashes.
-                            Enforces security isolation.
+                            Auto-wraps folders paths variables in literal double quotations to block thread split bounds
+                            crashes. Enforces security isolation.
                           </p>
                         </div>
                       </div>
@@ -4089,10 +4572,7 @@ export default function ClassicConsole({
                     <div className="flex gap-2.5 text-xs font-bold pt-4 border-t border-white/5 justify-end">
                       <button
                         onClick={() => {
-                          setSimulationLog((prev) => [
-                            ...prev,
-                            `[settings] Application settings saved.`,
-                          ]);
+                          setSimulationLog((prev) => [...prev, `[settings] Application settings saved.`]);
                           setShowSettingsDrawer(false);
                         }}
                         className="px-6 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors cursor-pointer"
@@ -4120,9 +4600,7 @@ export default function ClassicConsole({
                         <AlertTriangle className="w-5 h-5 animate-pulse" />
                       </div>
                       <div>
-                        <h4 className="font-bold text-slate-100 font-display">
-                          Confirm Process Halt Instruction
-                        </h4>
+                        <h4 className="font-bold text-slate-100 font-display">Confirm Process Halt Instruction</h4>
                         <p className="text-[10px] text-rose-400 font-mono uppercase tracking-wider font-extrabold1">
                           Halting active subprocess thread
                         </p>
@@ -4130,15 +4608,13 @@ export default function ClassicConsole({
                     </div>
 
                     <p className="text-xs text-slate-300 leading-relaxed font-sans">
-                      You are requesting cancellation of the active background
-                      vocal remover subprocess. The native bridge will report
-                      whether a process was active and whether cancellation was requested.
+                      You are requesting cancellation of the active background vocal remover subprocess. The native
+                      bridge will report whether a process was active and whether cancellation was requested.
                     </p>
 
                     <div className="bg-black/35 p-3.5 rounded-lg border border-white/5 text-[11px] text-slate-400 leading-relaxed font-mono">
-                      Native response: <code>cancel_requested</code>,{" "}
-                      <code>cancelled</code>, <code>no_active_process</code>, or{" "}
-                      <code>error</code>.
+                      Native response: <code>cancel_requested</code>, <code>cancelled</code>,{" "}
+                      <code>no_active_process</code>, or <code>error</code>.
                     </div>
 
                     <div className="flex gap-2.5 text-xs font-bold pt-2.5">
@@ -4175,9 +4651,7 @@ export default function ClassicConsole({
                         <Shield className="w-5 h-5 animate-pulse" />
                       </div>
                       <div>
-                        <h4 className="font-bold text-slate-100 font-display">
-                          Confirm Dynamic Operational Plan
-                        </h4>
+                        <h4 className="font-bold text-slate-100 font-display">Confirm Dynamic Operational Plan</h4>
                         <p className="text-[10px] text-cyan-400 font-mono uppercase tracking-wider font-extrabold">
                           Locking settings to dispatcher
                         </p>
@@ -4186,18 +4660,14 @@ export default function ClassicConsole({
 
                     <div className="space-y-3.5 text-xs">
                       <p className="text-slate-300 leading-relaxed font-sans">
-                        The system formulated the following execution target
-                        mappings based on model registry constraints:
+                        The system formulated the following execution target mappings based on model registry
+                        constraints:
                       </p>
 
                       <div className="space-y-2.5 bg-black/45 p-4 rounded-xl border border-white/5 font-mono text-[11px] text-slate-300">
                         <div>
-                          <span className="text-slate-500 font-bold p-1">
-                            Inputs:
-                          </span>
-                          <span className="text-cyan-400">
-                            ({appState.selectedInputs.length} files queued)
-                          </span>
+                          <span className="text-slate-500 font-bold p-1">Inputs:</span>
+                          <span className="text-cyan-400">({appState.selectedInputs.length} files queued)</span>
                           <ul className="pl-4 text-[10px] text-slate-400 list-disc pt-1 font-mono">
                             {appState.selectedInputs.map((f, i) => (
                               <li key={i}>{f}</li>
@@ -4206,38 +4676,28 @@ export default function ClassicConsole({
                         </div>
 
                         <div>
-                          <span className="text-slate-500 font-bold p-1">
-                            Active Model ID:
-                          </span>
+                          <span className="text-slate-500 font-bold p-1">Active Model ID:</span>
                           <span className="text-slate-200">
                             {activeModel.name} [{activeModel.architecture}]
                           </span>
                         </div>
 
                         <div>
-                          <span className="text-slate-500 font-bold p-1">
-                            Target Adapter:
-                          </span>
-                          <span className="text-slate-200">
-                            {getAdapterForModel(activeModel).name}
-                          </span>
+                          <span className="text-slate-500 font-bold p-1">Target Adapter:</span>
+                          <span className="text-slate-200">{getAdapterForModel(activeModel).name}</span>
                         </div>
 
                         <div>
-                          <span className="text-slate-500 font-bold p-1">
-                            Format / Suffixes:
-                          </span>
+                          <span className="text-slate-500 font-bold p-1">Format / Suffixes:</span>
                           <span className="text-indigo-400">
-                            {appState.outputFormat} (
-                            {predictedOutputNames.join(", ")})
+                            {appState.outputFormat} ({predictedOutputNames.join(", ")})
                           </span>
                         </div>
                       </div>
 
                       <div className="p-3 bg-[#10b981]/15 border border-[#10b981]/20 text-[#10b981] rounded-lg text-[10px] font-mono leading-relaxed leading-5">
-                        <strong>Ready Status:</strong> ALL system validations
-                        (FFmpeg check, Sandbox cache validation, SHA-256
-                        signature confirmation) passed. OK to run thread safely.
+                        <strong>Ready Status:</strong> ALL system validations (FFmpeg check, Sandbox cache validation,
+                        SHA-256 signature confirmation) passed. OK to run thread safely.
                       </div>
                     </div>
 

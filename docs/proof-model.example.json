@@ -1,0 +1,22 @@
+{
+  "proof_model_id": "golden_cpu_proof_model",
+  "display_name": "",
+  "model_family": "",
+  "filename": "",
+  "architecture": "",
+  "backend": "",
+  "source_project": "",
+  "source_url": "",
+  "license": "",
+  "expected_sha256": "",
+  "expected_size_bytes": null,
+  "expected_size_min_bytes": null,
+  "expected_size_max_bytes": null,
+  "local_path": "",
+  "backend_compatibility": "",
+  "cpu_compatibility": false,
+  "expected_output_stems": [],
+  "supported_proof_command": "node electron-shell/test-ai-e2e.cjs --python \"<python>\" --model \"<local_path>\" --expected-sha256 \"<sha256>\" --expected-size-bytes \"<bytes>\" --expected-stems \"Vocals,Instrumental\" --input \"<proof_input.wav>\" --output \"<proof_output_folder>\" --device cpu",
+  "manual_placement_note": "",
+  "notes": ""
+}

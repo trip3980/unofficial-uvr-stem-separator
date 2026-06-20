@@ -24,4 +24,4 @@ Use this skill to preserve the OpenStem and UVR-style workflow.
 - Generative tools are experimental or connector-dependent.
 - Global Settings define defaults for new jobs, not active running jobs unless explicitly designed.
 
-Host Setup and release-gate UI must keep reporting the verified-model blocker until a proof-eligible model exists.
+Host Setup and release-gate UI must report the current proof state honestly: missing model, ready-but-not-run, completed local CPU proof, or final-review pending.

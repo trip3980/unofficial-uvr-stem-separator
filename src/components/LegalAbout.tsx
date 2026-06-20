@@ -1,6 +1,6 @@
 // src/components/LegalAbout.tsx
 import React, { useState } from "react";
-import { AlertTriangle, Book, FileText, Code2, Copyright, ChevronDown, ChevronUp, Info, User, ShieldCheck, Box, MicOff, Settings2, Activity } from "lucide-react";
+import { AlertTriangle, Book, FileText, Code2, Copyright, ChevronDown, ChevronUp, Info, User, ShieldCheck, Box, MicOff, Settings2, Activity, FileCheck } from "lucide-react";
 
 export default function LegalAbout() {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -11,6 +11,8 @@ export default function LegalAbout() {
     proof: false,
     integrity: false,
     disclaimers: false,
+    featureBoundaries: false,
+    affiliations: false,
     unavailable: false,
     modules: false,
     credits: false,
@@ -166,7 +168,7 @@ export default function LegalAbout() {
           
           {openSections.proof && (
             <div className="p-5 border-t border-white/5 space-y-4 text-sm text-slate-300">
-              <p className="font-bold text-blue-300 bg-blue-900/20 p-2 rounded-lg border border-blue-500/20">Beta Candidate remains blocked until verified local AI E2E stem-separation proof passes.</p>
+              <p className="font-bold text-blue-300 bg-blue-900/20 p-2 rounded-lg border border-blue-500/20">One verified local CPU E2E stem-separation proof lane has completed; Beta Candidate still requires final release checklist review and user approval.</p>
               
               <p>A valid AI E2E proof requires:</p>
               <ul className="list-disc pl-5 space-y-1 text-slate-400 text-xs">
@@ -185,6 +187,7 @@ export default function LegalAbout() {
                 <p><strong>Never assume local success until verification status reads Verified.</strong></p>
                 <p>FFmpeg fallback is useful for DSP, encoding, probing, filtering, and conversion, but it is not neural source separation.</p>
                 <p>Models are treated as unverified unless local checksum parity is proven.</p>
+                <p>A single golden proof model may validate one CPU E2E vertical slice only. It does not prove the full catalog, GPU acceleration, every OS, or all model architectures.</p>
               </div>
             </div>
           )}
@@ -280,6 +283,102 @@ export default function LegalAbout() {
           )}
         </div>
 
+        {/* New Feature Boundary Section */}
+        <div className="border border-white/5 bg-[#0c0f1d]/60 rounded-xl overflow-hidden hover:border-emerald-500/20 transition-colors">
+          <button
+            onClick={() => toggleSection("featureBoundaries")}
+            className="w-full flex items-center justify-between p-4 bg-slate-900/40 hover:bg-slate-800/60 transition-colors focus:outline-none"
+          >
+            <div className="flex items-center gap-3">
+              <FileCheck className="w-5 h-5 text-emerald-400" />
+              <span className="font-bold text-slate-200 uppercase tracking-widest text-sm font-mono">
+                Local Tools, Draft Workflows & Proof Boundaries
+              </span>
+            </div>
+            {openSections.featureBoundaries ? (
+              <ChevronUp className="w-5 h-5 text-emerald-500" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-slate-500" />
+            )}
+          </button>
+
+          {openSections.featureBoundaries && (
+            <div className="p-5 border-t border-white/5 space-y-4 text-xs text-slate-300 leading-relaxed">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <BoundaryCard
+                  title="Local Transcription"
+                  text="Speech-to-text workflows are separate from stem separation. Whisper-family readiness, VTT import, speaker rename, and transcript export do not verify separator model weights or approve Beta Candidate."
+                />
+                <BoundaryCard
+                  title="Transcript Workflow Builder"
+                  text="Prompt libraries, Deep Read, SubQ planning, evidence organization, and final text assembly are local-first workflow tools. They are draft outputs until reviewed and do not prove source separation."
+                />
+                <BoundaryCard
+                  title="Clinical Workflow"
+                  text="Clinical notes are draft-only and require qualified user review before EHR use. OpenStem uses HIPAA-aware language, but this is not automatic HIPAA compliance and does not claim formal approval or medical-device status."
+                />
+                <BoundaryCard
+                  title="Mastering Lab"
+                  text="Mastering finalizes audio only after real processing and native output verification. It does not promise pro-grade mastering results, replace a mastering engineer, or satisfy AI stem-separation proof."
+                />
+                <BoundaryCard
+                  title="Document Export"
+                  text="TXT, JSON, PDF, DOCX, VTT, SRT, and archive exports remain output-not-verified until a native writer confirms a real file with nonzero size at the approved path."
+                />
+                <BoundaryCard
+                  title="Updates"
+                  text="Automatic app or model updates are not enabled until signed manifests, trusted digests, user-visible prompts, and model SHA-256 verification policies are documented and implemented."
+                />
+              </div>
+              <p className="rounded-lg border border-amber-500/15 bg-amber-950/10 p-3 text-amber-100">
+                User audio, transcripts, prompt outputs, mastered exports, recordings, model weights, local caches,
+                auth tokens, and HAR captures must stay out of source control and release artifacts.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Affiliation and Reference Boundaries */}
+        <div className="border border-white/5 bg-[#0c0f1d]/60 rounded-xl overflow-hidden hover:border-cyan-500/20 transition-colors">
+          <button
+            onClick={() => toggleSection("affiliations")}
+            className="w-full flex items-center justify-between p-4 bg-slate-900/40 hover:bg-slate-800/60 transition-colors focus:outline-none"
+          >
+            <div className="flex items-center gap-3">
+              <Copyright className="w-5 h-5 text-cyan-400" />
+              <span className="font-bold text-slate-200 uppercase tracking-widest text-sm font-mono">
+                Reference Projects & Non-Affiliation Notice
+              </span>
+            </div>
+            {openSections.affiliations ? (
+              <ChevronUp className="w-5 h-5 text-cyan-500" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-slate-500" />
+            )}
+          </button>
+
+          {openSections.affiliations && (
+            <div className="p-5 border-t border-white/5 space-y-3 text-xs text-slate-300 leading-relaxed">
+              <p>
+                OpenStem is independent. It is not affiliated with, endorsed by, formally approved by, or maintained by
+                Ultimate Vocal Remover, TurboScribe, Voicebox, LANDR, DistroKid, Mixea, Audacity, Apache OpenOffice,
+                LibreOffice, GPT4All, Ollama, Whisper, Web-Audio-Mastering, Matchering, FFmpeg, PyTorch, Basic
+                Pitch, or other referenced projects unless an explicit license or authorization says otherwise.
+              </p>
+              <p>
+                Referenced projects are treated as inspiration, compatibility references, optional dependencies,
+                or local backend targets. OpenStem must not copy proprietary branding, imply official affiliation,
+                bypass service limits, hide source-license restrictions, or bundle weights/tools without a documented
+                release strategy.
+              </p>
+              <p>
+                Cloud features are disabled by default unless explicitly configured. No user audio, transcript text,
+                PHI, auth token, or private local path should be uploaded or logged by default.
+              </p>
+            </div>
+          )}
+        </div>
+
         {/* Unavailable or Deactivated Features Section */}
         <div className="border border-white/5 bg-[#0c0f1d]/60 rounded-xl overflow-hidden hover:border-red-500/20 transition-colors">
           <button 
@@ -304,6 +403,10 @@ export default function LegalAbout() {
                 <li><strong className="text-white">CUDA proof:</strong> not locally proven unless verified.</li>
                 <li><strong className="text-white">Mixer proof:</strong> does not count as AI separation proof.</li>
                 <li><strong className="text-white">Ensemble planner execution:</strong> planned/not active unless real backend exists.</li>
+                <li><strong className="text-white">Local transcription execution:</strong> native runner required; browser preview cannot write verified transcript files.</li>
+                <li><strong className="text-white">Prompt workflow execution:</strong> local LLM or reviewed external connector required; draft-only until configured.</li>
+                <li><strong className="text-white">Mastering export:</strong> planned/native-write-gated until real processing and output verification pass.</li>
+                <li><strong className="text-white">Automatic app/model updates:</strong> not enabled until signed manifest or trusted digest policy exists.</li>
               </ul>
             </div>
           )}
@@ -348,6 +451,22 @@ export default function LegalAbout() {
                 <div className="bg-black/30 p-3 rounded-lg border border-white/5">
                   <div className="font-bold text-teal-300 text-xs uppercase mb-1">Basic Pitch MIDI Lab</div>
                   <div className="text-slate-400 text-xs">Status: Optional / Audio-to-MIDI only</div>
+                </div>
+                <div className="bg-black/30 p-3 rounded-lg border border-white/5">
+                  <div className="font-bold text-teal-300 text-xs uppercase mb-1">Local Transcription</div>
+                  <div className="text-slate-400 text-xs">Status: Planned native runner / Not stem-separation proof</div>
+                </div>
+                <div className="bg-black/30 p-3 rounded-lg border border-white/5">
+                  <div className="font-bold text-teal-300 text-xs uppercase mb-1">Transcript Workflows</div>
+                  <div className="text-slate-400 text-xs">Status: Prompt library and draft workflow / Local model required</div>
+                </div>
+                <div className="bg-black/30 p-3 rounded-lg border border-white/5">
+                  <div className="font-bold text-teal-300 text-xs uppercase mb-1">Clinical Workflow</div>
+                  <div className="text-slate-400 text-xs">Status: Draft-only / Clinician review required</div>
+                </div>
+                <div className="bg-black/30 p-3 rounded-lg border border-white/5">
+                  <div className="font-bold text-teal-300 text-xs uppercase mb-1">Mastering Lab</div>
+                  <div className="text-slate-400 text-xs">Status: Planned processing / Native output verification required</div>
                 </div>
                 <div className="bg-black/30 p-3 rounded-lg border border-white/5">
                   <div className="font-bold text-teal-300 text-xs uppercase mb-1">Generative AI Music Lab</div>
@@ -472,6 +591,59 @@ export default function LegalAbout() {
                   license="Apache License 2.0" 
                   note="Basic Pitch is not stem separation and does not satisfy AI separation proof."
                 />
+                <CreditsCard
+                  name="Whisper / Whisper-family tools"
+                  purpose="Speech-to-text model family reference for planned local transcription workflows."
+                  status="Optional external/local backend family / weights not bundled"
+                  source="OpenAI Whisper and compatible local implementations"
+                  license="needs verification per selected package/model"
+                  note="Transcription is not stem separation proof."
+                />
+                <CreditsCard
+                  name="TurboScribe"
+                  purpose="Transcription workflow UX reference only."
+                  status="Referenced only"
+                  source="TurboScribe"
+                  license="proprietary / not copied"
+                  note="OpenStem does not use TurboScribe branding, endpoints, accounts, cookies, or cloud upload behavior."
+                />
+                <CreditsCard
+                  name="Voicebox"
+                  purpose="Local-first voice I/O workflow reference for captures, STT model selection, local LLM refinement, queue/retry/recovery, recording UX, and post-processing presets."
+                  status="Referenced only / concept-adapted"
+                  source="jamiepine / voicebox"
+                  license="MIT License"
+                  note="Voicebox was studied as a local-first voice I/O workflow reference. OpenStem is not affiliated with or endorsed by Voicebox."
+                />
+                <CreditsCard
+                  name="Web-Audio-Mastering"
+                  purpose="Mastering Lab workflow and DSP architecture reference."
+                  status="Referenced only / concept-adapted"
+                  source="entrepeneur4lyf / Web-Audio-Mastering"
+                  license="ISC License"
+                  note="No source files copied in the current Mastering Lab pass."
+                />
+                <CreditsCard
+                  name="GPT4All / Ollama"
+                  purpose="Local model library and local-chat workflow references."
+                  status="Referenced only / optional external tools"
+                  license="needs verification per selected runtime/model"
+                  note="Local chat readiness does not verify separator models."
+                />
+                <CreditsCard
+                  name="Apache OpenOffice / LibreOffice / Pandoc"
+                  purpose="Optional document conversion strategy references."
+                  status="Referenced only / user-configured external converters later"
+                  license="needs verification before bundling"
+                  note="No office suite or converter is bundled by default."
+                />
+                <CreditsCard
+                  name="LANDR / DistroKid Mixea"
+                  purpose="Commercial mastering UX reference only."
+                  status="Referenced only / proprietary branding not used"
+                  license="proprietary / not copied"
+                  note="Mastering Lab does not claim affiliation or equivalent professional results."
+                />
                 <CreditsCard name="Electron" purpose="Desktop application shell and native bridge." status="Project dependency" license="MIT License" />
                 <CreditsCard name="React" purpose="Frontend UI framework." status="Project dependency" license="MIT License" />
                 <CreditsCard name="Vite" purpose="Development/build tool." status="Project dependency" license="MIT License" />
@@ -512,6 +684,15 @@ function CreditsCard({ name, purpose, status, source, license, author, note }: {
         {license && <p><strong className="text-slate-300">License:</strong> {license}</p>}
         {note && <p className="text-amber-400/80 mt-1 italic">{note}</p>}
       </div>
+    </div>
+  );
+}
+
+function BoundaryCard({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="rounded-lg border border-white/5 bg-black/30 p-3">
+      <div className="font-mono text-[10px] font-bold uppercase tracking-wider text-emerald-300">{title}</div>
+      <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{text}</p>
     </div>
   );
 }

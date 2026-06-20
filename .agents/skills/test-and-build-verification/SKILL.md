@@ -23,7 +23,7 @@ Run the commands relevant to the task:
 ## Current Toolchain Status
 
 - `release:check` previously passed end-to-end, including fresh Electron build and artifact verification.
-- `proof:check` correctly reports BLOCKED with exit code 2 because no verified model asset exists.
+- `proof:check` reports missing model, ready-but-not-run, or completed proof based on real local evidence. It must not pass completed proof unless a durable E2E proof report and verified non-empty stems can be re-checked from disk.
 - `lint:strict` is intentionally non-blocking and exposes existing strict-mode type debt.
 - ESLint passes with warnings, not errors.
 - Model-source audit confirms no configured direct source is falsely marked verified.
@@ -31,4 +31,4 @@ Run the commands relevant to the task:
 
 ## Report Requirements
 
-Report commands run, pass/fail result, exact failures, large warnings that remain, whether packaged app was launched if relevant, whether `proof:check` is blocked or pass, and whether Beta remains blocked.
+Report commands run, pass/fail result, exact failures, large warnings that remain, whether packaged app was launched if relevant, whether `proof:check` is blocked, ready-but-not-run, or completed-proof pass, and whether Beta is approved or still pending final review.
